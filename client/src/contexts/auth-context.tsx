@@ -7,6 +7,7 @@ interface AuthUser {
   name: string;
   phone: string | null;
   role: string;
+  emailVerified: boolean;
   createdAt: string;
 }
 
@@ -39,9 +40,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const register = async (data: { email: string; password: string; name: string; phone?: string }) => {
-    const res = await apiRequest("POST", "/api/auth/register", data);
-    const userData = await res.json();
-    setUser(userData);
+    await apiRequest("POST", "/api/auth/register", data);
   };
 
   const logout = async () => {

@@ -1,9 +1,9 @@
 import {
-  users, events, eventResponses, polls, pollOptions, pollVotes,
+  users, emailVerificationTokens, events, eventResponses, polls, pollOptions, pollVotes,
   payments, bankTransactions, notificationSettings, appSettings,
 } from '@shared/schema';
 import type {
-  User, InsertUser,
+  User, InsertUser, EmailVerificationToken,
   Event, InsertEvent,
   EventResponse, InsertEventResponse,
   Poll, InsertPoll,
@@ -34,6 +34,7 @@ sqlite.exec(`
     name TEXT NOT NULL,
     phone TEXT,
     role TEXT NOT NULL DEFAULT 'player',
+    email_verified INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL
   );
 
@@ -53,6 +54,12 @@ sqlite.exec(`
     created_at TEXT NOT NULL
   );
 `);
+
+const userColumns = sqlite.prepare("PRAGMA table_info(users)").all() as Array<{ name: string }>;
+if (!userColumns.some(column => column.name === "email_verified")) {
+  sqlite.exec("ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 0");
+  sqlite.exec("UPDATE users SET email_verified = 1");
+}
 
 sqlite.exec(`
   PRAGMA table_info(events);
@@ -76,6 +83,14 @@ sqlite.exec(`
     note TEXT,
     created_at TEXT NOT NULL,
     UNIQUE(event_id, user_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS email_verification_tokens (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    token_hash TEXT NOT NULL UNIQUE,
+    expires_at TEXT NOT NULL,
+    created_at TEXT NOT NULL
   );
 
   CREATE TABLE IF NOT EXISTS polls (
@@ -149,7 +164,13 @@ export interface IStorage {
   getAllUsers(): User[];
   createUser(user: InsertUser): User;
   updateUserRole(id: number, role: string): User | undefined;
+  markUserEmailVerified(id: number): User | undefined;
   deleteUser(id: number): void;
+
+  // Email verification
+  createEmailVerificationToken(userId: number, tokenHash: string, expiresAt: string): EmailVerificationToken;
+  getEmailVerificationToken(tokenHash: string): EmailVerificationToken | undefined;
+  deleteEmailVerificationTokens(userId: number): void;
 
   // Events
   getEvent(id: number): Event | undefined;
@@ -245,8 +266,34 @@ export class DatabaseStorage implements IStorage {
     return db.update(users).set({ role }).where(eq(users.id, id)).returning().get();
   }
 
+  markUserEmailVerified(id: number): User | undefined {
+    return db.update(users).set({ emailVerified: true }).where(eq(users.id, id)).returning().get();
+  }
+
   deleteUser(id: number): void {
+    this.deleteEmailVerificationTokens(id);
     db.delete(users).where(eq(users.id, id)).run();
+  }
+
+  // ============ EMAIL VERIFICATION ============
+  createEmailVerificationToken(userId: number, tokenHash: string, expiresAt: string): EmailVerificationToken {
+    this.deleteEmailVerificationTokens(userId);
+    return db.insert(emailVerificationTokens)
+      .values({ userId, tokenHash, expiresAt })
+      .returning()
+      .get();
+  }
+
+  getEmailVerificationToken(tokenHash: string): EmailVerificationToken | undefined {
+    return db.select().from(emailVerificationTokens)
+      .where(eq(emailVerificationTokens.tokenHash, tokenHash))
+      .get();
+  }
+
+  deleteEmailVerificationTokens(userId: number): void {
+    db.delete(emailVerificationTokens)
+      .where(eq(emailVerificationTokens.userId, userId))
+      .run();
   }
 
   // ============ EVENTS ============

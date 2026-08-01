@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Link } from "wouter";
+import { apiRequest } from "@/lib/queryClient";
 
 export default function Login() {
   const { login } = useAuth();
@@ -20,6 +21,23 @@ export default function Login() {
     try {
       await login(email, password);
       toast({ title: "Vitaj späť!" });
+    } catch (err: any) {
+      toast({ title: "Chyba", description: err.message, variant: "destructive" });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const resendVerification = async () => {
+    if (!email) {
+      toast({ title: "Najprv zadaj email", variant: "destructive" });
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      await apiRequest("POST", "/api/auth/resend-verification", { email });
+      toast({ title: "Ak účet čaká na potvrdenie, poslali sme nový email" });
     } catch (err: any) {
       toast({ title: "Chyba", description: err.message, variant: "destructive" });
     } finally {
@@ -72,6 +90,15 @@ export default function Login() {
                 {isLoading ? "Prihlasujem..." : "Prihlásiť"}
               </Button>
             </form>
+            <Button
+              type="button"
+              variant="ghost"
+              className="w-full mt-2"
+              disabled={isLoading}
+              onClick={resendVerification}
+            >
+              Poslať potvrdzovací email znova
+            </Button>
             <p className="text-sm text-muted-foreground text-center mt-4">
               Nemáš účet?{" "}
               <Link href="/register" className="text-primary font-medium hover:underline">

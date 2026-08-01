@@ -1,104 +1,19 @@
 import type { Express } from "express";
 import type { Server } from "node:http";
-import session from "express-session";
-import Memorystore from "memorystore";
 import { storage } from "./storage";
-import { hashPassword, comparePassword, requireAuth, requireAdmin, getCurrentUser } from "./auth";
+import { requireAuth, requireAdmin } from "./auth";
+import { configureSession } from "./session";
+import { registerAuthRoutes } from "./routes/auth-routes";
 import { syncFioTransactions } from "./fio-api";
 import { createGoogleCalendarEvent, deleteGoogleCalendarEvent, syncGoogleCalendarEvents, updateGoogleCalendarEventAttendance } from "./google-calendar";
-import { insertUserSchema, insertEventSchema, insertPollSchema, insertPaymentSchema } from "@shared/schema";
-
-const MemoryStore = Memorystore(session);
+import { insertEventSchema, insertPollSchema, insertPaymentSchema } from "@shared/schema";
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  // Session middleware
-  app.set("trust proxy", 1);
-  app.use(
-    session({
-      secret: process.env.SESSION_SECRET || "futbal-app-secret-change-in-production",
-      resave: false,
-      saveUninitialized: false,
-      cookie: {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
-        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-      },
-      store: new MemoryStore({
-        checkPeriod: 86_400_000, // prune expired entries every 24h
-      }),
-    })
-  );
-
-  // ============ AUTH ============
-  app.post("/api/auth/register", async (req, res) => {
-    try {
-      const data = insertUserSchema.parse(req.body);
-      const existing = storage.getUserByEmail(data.email);
-      if (existing) {
-        return res.status(400).json({ message: "Email je už registrovaný" });
-      }
-      const hashedPassword = await hashPassword(data.password);
-      const user = storage.createUser({
-        ...data,
-        password: hashedPassword,
-        role: data.role || "player",
-      });
-      // Create default notification settings
-      storage.upsertNotificationSettings({ userId: user.id });
-
-      // First user becomes admin
-      const allUsers = storage.getAllUsers();
-      if (allUsers.length === 1) {
-        storage.updateUserRole(user.id, "admin");
-      }
-
-      req.session.userId = user.id;
-      const safeUser = getCurrentUser(req);
-      res.status(201).json(safeUser);
-    } catch (err: any) {
-      res.status(400).json({ message: err.message || "Registrácia zlyhala" });
-    }
-  });
-
-  app.post("/api/auth/login", async (req, res) => {
-    try {
-      const { email, password } = req.body;
-      if (!email || !password) {
-        return res.status(400).json({ message: "Email a heslo sú povinné" });
-      }
-      const user = storage.getUserByEmail(email);
-      if (!user) {
-        return res.status(401).json({ message: "Nesprávny email alebo heslo" });
-      }
-      const valid = await comparePassword(password, user.password);
-      if (!valid) {
-        return res.status(401).json({ message: "Nesprávny email alebo heslo" });
-      }
-      req.session.userId = user.id;
-      const safeUser = getCurrentUser(req);
-      res.json(safeUser);
-    } catch (err: any) {
-      res.status(400).json({ message: err.message || "Prihlásenie zlyhalo" });
-    }
-  });
-
-  app.post("/api/auth/logout", (req, res) => {
-    req.session.destroy(() => {
-      res.json({ message: "Odhlásené" });
-    });
-  });
-
-  app.get("/api/auth/me", (req, res) => {
-    const user = getCurrentUser(req);
-    if (!user) {
-      return res.status(401).json({ message: "Neprihlásený" });
-    }
-    res.json(user);
-  });
+  configureSession(app);
+  registerAuthRoutes(app);
 
   // ============ EVENTS ============
   app.get("/api/events", requireAuth, (_req, res) => {

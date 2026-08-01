@@ -6,6 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Link } from "wouter";
+import { MailCheck } from "lucide-react";
+import { apiRequest } from "@/lib/queryClient";
 
 export default function Register() {
   const { register } = useAuth();
@@ -15,6 +17,7 @@ export default function Register() {
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [registrationComplete, setRegistrationComplete] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,7 +28,19 @@ export default function Register() {
     setIsLoading(true);
     try {
       await register({ name, email, phone: phone || undefined, password });
-      toast({ title: "Vitaj v tíme!" });
+      setRegistrationComplete(true);
+    } catch (err: any) {
+      toast({ title: "Chyba", description: err.message, variant: "destructive" });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const resendVerification = async () => {
+    setIsLoading(true);
+    try {
+      await apiRequest("POST", "/api/auth/resend-verification", { email });
+      toast({ title: "Overovací email bol znovu odoslaný" });
     } catch (err: any) {
       toast({ title: "Chyba", description: err.message, variant: "destructive" });
     } finally {
@@ -50,6 +65,18 @@ export default function Register() {
             <CardTitle className="text-lg">Registrácia</CardTitle>
           </CardHeader>
           <CardContent>
+            {registrationComplete ? (
+              <div className="space-y-4 text-center">
+                <MailCheck className="mx-auto h-12 w-12 text-primary" />
+                <p>Na adresu <strong>{email}</strong> sme poslali potvrdzovací odkaz.</p>
+                <p className="text-sm text-muted-foreground">Odkaz platí 24 hodín.</p>
+                <Button type="button" variant="outline" className="w-full" onClick={resendVerification} disabled={isLoading}>
+                  {isLoading ? "Odosielam…" : "Poslať email znova"}
+                </Button>
+                <Button asChild className="w-full"><Link href="/login">Prejsť na prihlásenie</Link></Button>
+              </div>
+            ) : (
+            <>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="name">Meno a priezvisko</Label>
@@ -77,6 +104,8 @@ export default function Register() {
                 Prihlásiť
               </Link>
             </p>
+            </>
+            )}
           </CardContent>
         </Card>
       </div>

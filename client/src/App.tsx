@@ -9,6 +9,7 @@ import { Layout } from "@/components/layout";
 import NotFound from "@/pages/not-found";
 import Login from "@/pages/login";
 import Register from "@/pages/register";
+import VerifyEmail from "@/pages/verify-email";
 import Dashboard from "@/pages/dashboard";
 import CalendarPage from "@/pages/calendar";
 import EventDetailPage from "@/pages/event-detail";
@@ -20,32 +21,30 @@ import AdminPayments from "@/pages/admin-payments";
 import AdminBank from "@/pages/admin-bank";
 import Settings from "@/pages/settings";
 
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
+interface ProtectedRouteProps {
+  children: React.ReactNode;
+  requiredRole?: "admin";
+}
+
+function FullPageSpinner() {
+  return (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
+}
+
+function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) {
   const { user, isLoading } = useAuth();
   if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+    return <FullPageSpinner />;
   }
   if (!user) {
     return <Redirect to="/login" />;
   }
-  return <Layout>{children}</Layout>;
-}
-
-function AdminRoute({ children }: { children: React.ReactNode }) {
-  const { user, isLoading } = useAuth();
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+  if (requiredRole && user.role !== requiredRole) {
+    return <Redirect to="/" />;
   }
-  if (!user) return <Redirect to="/login" />;
-  if (user.role !== "admin") return <Redirect to="/" />;
   return <Layout>{children}</Layout>;
 }
 
@@ -53,11 +52,7 @@ function AppRouter() {
   const { user, isLoading } = useAuth();
 
   if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+    return <FullPageSpinner />;
   }
 
   return (
@@ -68,6 +63,9 @@ function AppRouter() {
       </Route>
       <Route path="/register">
         {user ? <Redirect to="/" /> : <Register />}
+      </Route>
+      <Route path="/verify-email">
+        {user ? <Redirect to="/" /> : <VerifyEmail />}
       </Route>
 
       {/* Protected routes */}
@@ -95,13 +93,13 @@ function AppRouter() {
 
       {/* Admin routes */}
       <Route path="/admin/members">
-        <AdminRoute><AdminMembers /></AdminRoute>
+        <ProtectedRoute requiredRole="admin"><AdminMembers /></ProtectedRoute>
       </Route>
       <Route path="/admin/payments">
-        <AdminRoute><AdminPayments /></AdminRoute>
+        <ProtectedRoute requiredRole="admin"><AdminPayments /></ProtectedRoute>
       </Route>
       <Route path="/admin/bank">
-        <AdminRoute><AdminBank /></AdminRoute>
+        <ProtectedRoute requiredRole="admin"><AdminBank /></ProtectedRoute>
       </Route>
 
       <Route component={NotFound} />

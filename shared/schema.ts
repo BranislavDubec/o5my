@@ -10,6 +10,7 @@ export const users = sqliteTable("users", {
   name: text("name").notNull(),
   phone: text("phone"),
   role: text("role").notNull().default("player"), // admin | player
+  emailVerified: integer("email_verified", { mode: "boolean" }).notNull().default(false),
   createdAt: text("created_at").notNull().$defaultFn(() => new Date().toISOString()),
 });
 
@@ -29,6 +30,17 @@ export const loginUserSchema = createInsertSchema(users).pick({
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type LoginUser = z.infer<typeof loginUserSchema>;
 export type User = typeof users.$inferSelect;
+
+// ============ EMAIL VERIFICATION TOKENS ============
+export const emailVerificationTokens = sqliteTable("email_verification_tokens", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: integer("user_id").notNull().references(() => users.id),
+  tokenHash: text("token_hash").notNull().unique(),
+  expiresAt: text("expires_at").notNull(),
+  createdAt: text("created_at").notNull().$defaultFn(() => new Date().toISOString()),
+});
+
+export type EmailVerificationToken = typeof emailVerificationTokens.$inferSelect;
 
 // ============ EVENTS ============
 export const events = sqliteTable("events", {
