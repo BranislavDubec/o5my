@@ -36,7 +36,7 @@ function Logo() {
         <path d="M16 6 L19 10 L17 15 L15 15 L13 10 Z" fill="white" fillOpacity="0.9" transform="rotate(216 16 16)" />
         <path d="M16 6 L19 10 L17 15 L15 15 L13 10 Z" fill="white" fillOpacity="0.9" transform="rotate(288 16 16)" />
       </svg>
-      <span className="font-serif font-bold text-lg tracking-tight hidden sm:block">Futbal</span>
+      <span className="font-serif font-bold text-lg tracking-tight hidden sm:block">O5MY</span>
     </Link>
   );
 }

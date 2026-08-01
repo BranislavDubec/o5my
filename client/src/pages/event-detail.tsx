@@ -22,6 +22,7 @@ interface EventDetail {
   endTime: string | null;
   opponent: string | null;
   homeAway: string | null;
+  source?: string | null;
 }
 
 interface EventResponse {
@@ -90,12 +91,15 @@ export default function EventDetailPage() {
       </Link>
 
       <div>
-        <div className="flex items-center gap-2 mb-2">
+        <div className="flex items-center gap-2 mb-2 flex-wrap">
           <Badge variant={event.type === "match" ? "default" : "secondary"}>
-            {event.type === "match" ? "⚽ Zápas" : "🏃 Tréning"}
+            {event.type === "match" ? "⚽ Zápas" : event.type === "teambuilding" ? "🎉 Team building" : "🏃 Tréning"}
           </Badge>
           {event.homeAway && (
             <Badge variant="outline">{event.homeAway === "home" ? "Domáci" : "Vypravení"}</Badge>
+          )}
+          {event.source === "google" && (
+            <Badge variant="outline">Google sync</Badge>
           )}
         </div>
         <h1 className="font-serif text-xl font-bold" data-testid="text-event-title">{event.title}</h1>

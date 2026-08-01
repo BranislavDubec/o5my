@@ -45,9 +45,26 @@ sqlite.exec(`
     end_time TEXT,
     opponent TEXT,
     home_away TEXT,
+    external_id TEXT,
+    source TEXT NOT NULL DEFAULT 'local',
     created_by INTEGER NOT NULL REFERENCES users(id),
     created_at TEXT NOT NULL
   );
+`);
+
+sqlite.exec(`
+  PRAGMA table_info(events);
+`);
+
+const eventColumns = sqlite.prepare("PRAGMA table_info(events)").all() as Array<{ name: string }>;
+if (!eventColumns.some(column => column.name === "external_id")) {
+  sqlite.exec("ALTER TABLE events ADD COLUMN external_id TEXT");
+}
+if (!eventColumns.some(column => column.name === "source")) {
+  sqlite.exec("ALTER TABLE events ADD COLUMN source TEXT NOT NULL DEFAULT 'local'");
+}
+
+sqlite.exec(`
 
   CREATE TABLE IF NOT EXISTS event_responses (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -134,6 +151,7 @@ export interface IStorage {
 
   // Events
   getEvent(id: number): Event | undefined;
+  getEventByExternalId(externalId: string, source: string): Event | undefined;
   getAllEvents(): Event[];
   getUpcomingEvents(limit?: number): Event[];
   createEvent(event: InsertEvent): Event;
@@ -185,6 +203,24 @@ export interface IStorage {
   setAppSetting(key: string, value: string): void;
 }
 
+function normalizeEventTime(value?: string | null) {
+  if (!value) return value ?? null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toISOString();
+}
+
+function normalizeEventData(event: Partial<InsertEvent>) {
+  const normalized: Partial<InsertEvent> = { ...event };
+  if (typeof normalized.startTime === "string") {
+    normalized.startTime = normalizeEventTime(normalized.startTime) as string;
+  }
+  if (typeof normalized.endTime === "string") {
+    normalized.endTime = normalizeEventTime(normalized.endTime) as string;
+  }
+  return normalized;
+}
+
 export class DatabaseStorage implements IStorage {
   // ============ USERS ============
   getUser(id: number): User | undefined {
@@ -216,28 +252,44 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(events).where(eq(events.id, id)).get();
   }
 
+  getEventByExternalId(externalId: string, source: string): Event | undefined {
+    return db.select().from(events)
+      .where(and(eq(events.externalId, externalId), eq(events.source, source)))
+      .get();
+  }
+
   getAllEvents(): Event[] {
-    return db.select().from(events).orderBy(desc(events.startTime)).all();
+    return db.select().from(events).all().sort((a, b) => {
+      const aTime = new Date(a.startTime).getTime();
+      const bTime = new Date(b.startTime).getTime();
+      return Number.isNaN(aTime) ? 1 : Number.isNaN(bTime) ? -1 : aTime - bTime;
+    });
   }
 
   getUpcomingEvents(limit = 10): Event[] {
-    const now = new Date().toISOString();
-    return db.select().from(events)
-      .where(gte(events.startTime, now))
-      .orderBy(asc(events.startTime))
-      .limit(limit)
-      .all();
+    const now = new Date().getTime();
+    return db.select().from(events).all()
+      .filter(event => new Date(event.startTime).getTime() >= now)
+      .sort((a, b) => {
+        const aTime = new Date(a.startTime).getTime();
+        const bTime = new Date(b.startTime).getTime();
+        return Number.isNaN(aTime) ? 1 : Number.isNaN(bTime) ? -1 : aTime - bTime;
+      })
+      .slice(0, limit);
   }
 
   createEvent(event: InsertEvent): Event {
-    return db.insert(events).values(event).returning().get();
+    const normalizedEvent = normalizeEventData(event);
+    return db.insert(events).values(normalizedEvent as InsertEvent).returning().get();
   }
 
   updateEvent(id: number, data: Partial<InsertEvent>): Event | undefined {
-    return db.update(events).set(data).where(eq(events.id, id)).returning().get();
+    const normalizedData = normalizeEventData(data);
+    return db.update(events).set(normalizedData).where(eq(events.id, id)).returning().get();
   }
 
   deleteEvent(id: number): void {
+    db.delete(eventResponses).where(eq(eventResponses.eventId, id)).run();
     db.delete(events).where(eq(events.id, id)).run();
   }
 

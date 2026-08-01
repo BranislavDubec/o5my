@@ -33,7 +33,7 @@ export type User = typeof users.$inferSelect;
 // ============ EVENTS ============
 export const events = sqliteTable("events", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  type: text("type").notNull(), // match | training
+  type: text("type").notNull(), // match | training | teambuilding
   title: text("title").notNull(),
   description: text("description"),
   location: text("location"),
@@ -41,6 +41,8 @@ export const events = sqliteTable("events", {
   endTime: text("end_time"),
   opponent: text("opponent"), // for matches
   homeAway: text("home_away"), // home | away (for matches)
+  externalId: text("external_id"),
+  source: text("source").notNull().default("local"),
   createdBy: integer("created_by").notNull().references(() => users.id),
   createdAt: text("created_at").notNull().$defaultFn(() => new Date().toISOString()),
 });
@@ -54,6 +56,8 @@ export const insertEventSchema = createInsertSchema(events).pick({
   endTime: true,
   opponent: true,
   homeAway: true,
+  externalId: true,
+  source: true,
   createdBy: true,
 });
 

@@ -5,6 +5,7 @@ import Memorystore from "memorystore";
 import { storage } from "./storage";
 import { hashPassword, comparePassword, requireAuth, requireAdmin, getCurrentUser } from "./auth";
 import { syncFioTransactions } from "./fio-api";
+import { createGoogleCalendarEvent, deleteGoogleCalendarEvent, syncGoogleCalendarEvents, updateGoogleCalendarEventAttendance } from "./google-calendar";
 import { insertUserSchema, insertEventSchema, insertPollSchema, insertPaymentSchema } from "@shared/schema";
 
 const MemoryStore = Memorystore(session);
@@ -117,13 +118,36 @@ export async function registerRoutes(
     res.json(event);
   });
 
-  app.post("/api/events", requireAdmin, (req, res) => {
+  app.post("/api/events", requireAdmin, async (req, res) => {
     try {
       const data = insertEventSchema.parse({
         ...req.body,
         createdBy: req.user!.id,
       });
       const event = storage.createEvent(data);
+
+      try {
+        const googleEvent = await createGoogleCalendarEvent({
+          type: event.type,
+          title: event.title,
+          description: event.description,
+          location: event.location,
+          startTime: event.startTime,
+          endTime: event.endTime,
+          opponent: event.opponent,
+          homeAway: event.homeAway,
+        });
+
+        if (googleEvent?.id) {
+          storage.updateEvent(event.id, {
+            externalId: googleEvent.id,
+            source: "local",
+          });
+        }
+      } catch (googleErr: any) {
+        console.error("Failed to create Google Calendar event", googleErr.message || googleErr);
+      }
+
       res.status(201).json(event);
     } catch (err: any) {
       res.status(400).json({ message: err.message });
@@ -136,8 +160,24 @@ export async function registerRoutes(
     res.json(event);
   });
 
-  app.delete("/api/events/:id", requireAdmin, (_req, res) => {
-    storage.deleteEvent(Number(_req.params.id));
+  app.delete("/api/events/:id", requireAuth, async (req, res) => {
+    if (req.user?.role !== "admin") {
+      return res.status(403).json({ message: "Vyžadované admin práva" });
+    }
+
+    const eventId = Number(req.params.id);
+    const event = storage.getEvent(eventId);
+    if (!event) return res.status(404).json({ message: "Event nenájdený" });
+
+    try {
+      if (event.externalId) {
+        await deleteGoogleCalendarEvent(event.externalId);
+      }
+    } catch (googleErr: any) {
+      console.error("Failed to delete Google Calendar event", googleErr.message || googleErr);
+    }
+
+    storage.deleteEvent(eventId);
     res.json({ message: "Event zmazaný" });
   });
 
@@ -147,19 +187,35 @@ export async function registerRoutes(
     res.json(responses);
   });
 
-  app.post("/api/events/:id/responses", requireAuth, (req, res) => {
+  app.post("/api/events/:id/responses", requireAuth, async (req, res) => {
     const eventId = Number(req.params.id);
     const { status, note } = req.body;
     if (!["going", "not_going", "maybe"].includes(status)) {
       return res.status(400).json({ message: "Neplatný status" });
     }
+
+    const event = storage.getEvent(eventId);
+    if (!event) {
+      return res.status(404).json({ message: "Event nenájdený" });
+    }
+
     storage.upsertEventResponse({
       eventId,
       userId: req.user!.id,
       status,
       note,
     });
+
     res.json({ message: "Účasť aktualizovaná" });
+
+    void (async () => {
+      try {
+        const responses = storage.getEventResponses(eventId);
+        await updateGoogleCalendarEventAttendance(event, responses);
+      } catch (googleErr: any) {
+        console.error("Failed to update Google Calendar attendance", googleErr.message || googleErr);
+      }
+    })();
   });
 
   // ============ POLLS ============
@@ -296,6 +352,18 @@ export async function registerRoutes(
       res.json(result);
     } catch (err: any) {
       res.status(500).json({ message: err.message || "Synchronizácia zlyhala" });
+    }
+  });
+
+  app.post("/api/calendar/sync", requireAdmin, async (req, res) => {
+    try {
+      const result = await syncGoogleCalendarEvents({
+        calendarId: req.body?.calendarId,
+        userId: req.user!.id,
+      });
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Synchronizácia kalendára zlyhala" });
     }
   });
 

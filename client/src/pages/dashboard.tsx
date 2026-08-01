@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Users, Calendar, Vote, ArrowRight, MapPin, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { EventAttendanceBadge } from "@/components/event-attendance-badge";
 import { format, parseISO } from "date-fns";
 import { sk } from "date-fns/locale";
 
@@ -85,9 +86,11 @@ export default function Dashboard() {
             upcomingEvents.map(event => (
               <Link key={event.id} href={`/events/${event.id}`}>
                 <div className="flex items-center gap-3 p-3 rounded-lg border border-border hover-elevate cursor-pointer" data-testid={`card-event-${event.id}`}>
-                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${event.type === "match" ? "bg-primary/15" : "bg-blue-500/15"}`}>
+                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${event.type === "match" ? "bg-primary/15" : event.type === "teambuilding" ? "bg-purple-500/15" : "bg-blue-500/15"}`}>
                     {event.type === "match" ? (
                       <span className="text-primary text-lg">⚽</span>
+                    ) : event.type === "teambuilding" ? (
+                      <span className="text-purple-500 text-lg">🎉</span>
                     ) : (
                       <span className="text-blue-500 text-lg">🏃</span>
                     )}
@@ -96,8 +99,9 @@ export default function Dashboard() {
                     <div className="flex items-center gap-2">
                       <p className="font-medium text-sm truncate">{event.title}</p>
                       <Badge variant={event.type === "match" ? "default" : "secondary"} className="text-xs shrink-0">
-                        {event.type === "match" ? "Zápas" : "Tréning"}
+                        {event.type === "match" ? "Zápas" : event.type === "teambuilding" ? "Team building" : "Tréning"}
                       </Badge>
+                      <EventAttendanceBadge eventId={event.id} />
                     </div>
                     <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
                       <span className="flex items-center gap-1">
