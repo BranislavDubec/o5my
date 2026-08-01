@@ -12,7 +12,7 @@ function getStatusLabel(status?: string) {
   switch (status) {
     case "going": return "Idem";
     case "maybe": return "Možno";
-    case "not_going": return "Neidem";
+    case "not_going": return "Nejdem";
     default: return "Nehlasoval";
   }
 }

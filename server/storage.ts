@@ -18,7 +18,9 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 import Database from "better-sqlite3";
 import { eq, and, desc, asc, gte } from "drizzle-orm";
 
-const sqlite = new Database("data.db");
+const sqlite = new Database(
+  process.env.DATABASE_PATH || "data.db"
+);
 sqlite.pragma("journal_mode = WAL");
 
 export const db = drizzle(sqlite);
