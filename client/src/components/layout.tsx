@@ -28,14 +28,11 @@ const navItems: NavItem[] = [
 function Logo() {
   return (
     <Link href="/" className="flex items-center gap-2.5 shrink-0">
-      <svg viewBox="0 0 32 32" className="w-8 h-8" fill="none" aria-label="Futbal App">
-        <circle cx="16" cy="16" r="14" fill="hsl(var(--primary))" />
-        <path d="M16 6 L19 10 L17 15 L15 15 L13 10 Z" fill="white" fillOpacity="0.9" />
-        <path d="M16 6 L19 10 L17 15 L15 15 L13 10 Z" fill="white" fillOpacity="0.9" transform="rotate(72 16 16)" />
-        <path d="M16 6 L19 10 L17 15 L15 15 L13 10 Z" fill="white" fillOpacity="0.9" transform="rotate(144 16 16)" />
-        <path d="M16 6 L19 10 L17 15 L15 15 L13 10 Z" fill="white" fillOpacity="0.9" transform="rotate(216 16 16)" />
-        <path d="M16 6 L19 10 L17 15 L15 15 L13 10 Z" fill="white" fillOpacity="0.9" transform="rotate(288 16 16)" />
-      </svg>
+     <img
+        src="/favicon.ico"
+        alt="Futbal App"
+        className="w-8 h-8"
+      />
       <span className="font-serif font-bold text-lg tracking-tight hidden sm:block">O5MY</span>
     </Link>
   );

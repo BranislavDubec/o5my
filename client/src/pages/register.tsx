@@ -37,14 +37,10 @@ export default function Register() {
     <div className="min-h-screen flex items-center justify-center p-4 bg-background">
       <div className="w-full max-w-sm space-y-6">
         <div className="flex flex-col items-center gap-3">
-          <svg viewBox="0 0 32 32" className="w-16 h-16" fill="none">
-            <circle cx="16" cy="16" r="14" fill="hsl(var(--primary))" />
-            <path d="M16 6 L19 10 L17 15 L15 15 L13 10 Z" fill="white" fillOpacity="0.9" />
-            <path d="M16 6 L19 10 L17 15 L15 15 L13 10 Z" fill="white" fillOpacity="0.9" transform="rotate(72 16 16)" />
-            <path d="M16 6 L19 10 L17 15 L15 15 L13 10 Z" fill="white" fillOpacity="0.9" transform="rotate(144 16 16)" />
-            <path d="M16 6 L19 10 L17 15 L15 15 L13 10 Z" fill="white" fillOpacity="0.9" transform="rotate(216 16 16)" />
-            <path d="M16 6 L19 10 L17 15 L15 15 L13 10 Z" fill="white" fillOpacity="0.9" transform="rotate(288 16 16)" />
-          </svg>
+          <img
+            src="/logo.jpg"
+            alt="Futbal App"
+          />
           <h1 className="font-serif text-2xl font-bold tracking-tight">Futbal Tím</h1>
           <p className="text-sm text-muted-foreground">Vytvor si účet</p>
         </div>
