@@ -1,0 +1,367 @@
+import type { Express } from "express";
+import type { Server } from "node:http";
+import session from "express-session";
+import Memorystore from "memorystore";
+import { storage } from "./storage";
+import { hashPassword, comparePassword, requireAuth, requireAdmin, getCurrentUser } from "./auth";
+import { syncFioTransactions } from "./fio-api";
+import { insertUserSchema, insertEventSchema, insertPollSchema, insertPaymentSchema } from "@shared/schema";
+
+const MemoryStore = Memorystore(session);
+
+export async function registerRoutes(
+  httpServer: Server,
+  app: Express
+): Promise<Server> {
+  // Session middleware
+  app.set("trust proxy", 1);
+  app.use(
+    session({
+      secret: process.env.SESSION_SECRET || "futbal-app-secret-change-in-production",
+      resave: false,
+      saveUninitialized: false,
+      cookie: {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      },
+      store: new MemoryStore({
+        checkPeriod: 86_400_000, // prune expired entries every 24h
+      }),
+    })
+  );
+
+  // ============ AUTH ============
+  app.post("/api/auth/register", async (req, res) => {
+    try {
+      const data = insertUserSchema.parse(req.body);
+      const existing = storage.getUserByEmail(data.email);
+      if (existing) {
+        return res.status(400).json({ message: "Email je už registrovaný" });
+      }
+      const hashedPassword = await hashPassword(data.password);
+      const user = storage.createUser({
+        ...data,
+        password: hashedPassword,
+        role: data.role || "player",
+      });
+      // Create default notification settings
+      storage.upsertNotificationSettings({ userId: user.id });
+
+      // First user becomes admin
+      const allUsers = storage.getAllUsers();
+      if (allUsers.length === 1) {
+        storage.updateUserRole(user.id, "admin");
+      }
+
+      req.session.userId = user.id;
+      const safeUser = getCurrentUser(req);
+      res.status(201).json(safeUser);
+    } catch (err: any) {
+      res.status(400).json({ message: err.message || "Registrácia zlyhala" });
+    }
+  });
+
+  app.post("/api/auth/login", async (req, res) => {
+    try {
+      const { email, password } = req.body;
+      if (!email || !password) {
+        return res.status(400).json({ message: "Email a heslo sú povinné" });
+      }
+      const user = storage.getUserByEmail(email);
+      if (!user) {
+        return res.status(401).json({ message: "Nesprávny email alebo heslo" });
+      }
+      const valid = await comparePassword(password, user.password);
+      if (!valid) {
+        return res.status(401).json({ message: "Nesprávny email alebo heslo" });
+      }
+      req.session.userId = user.id;
+      const safeUser = getCurrentUser(req);
+      res.json(safeUser);
+    } catch (err: any) {
+      res.status(400).json({ message: err.message || "Prihlásenie zlyhalo" });
+    }
+  });
+
+  app.post("/api/auth/logout", (req, res) => {
+    req.session.destroy(() => {
+      res.json({ message: "Odhlásené" });
+    });
+  });
+
+  app.get("/api/auth/me", (req, res) => {
+    const user = getCurrentUser(req);
+    if (!user) {
+      return res.status(401).json({ message: "Neprihlásený" });
+    }
+    res.json(user);
+  });
+
+  // ============ EVENTS ============
+  app.get("/api/events", requireAuth, (_req, res) => {
+    const allEvents = storage.getAllEvents();
+    res.json(allEvents);
+  });
+
+  app.get("/api/events/upcoming", requireAuth, (req, res) => {
+    const limit = parseInt(req.query.limit as string) || 5;
+    const events = storage.getUpcomingEvents(limit);
+    res.json(events);
+  });
+
+  app.get("/api/events/:id", requireAuth, (req, res) => {
+    const event = storage.getEvent(Number(req.params.id));
+    if (!event) return res.status(404).json({ message: "Event nenájdený" });
+    res.json(event);
+  });
+
+  app.post("/api/events", requireAdmin, (req, res) => {
+    try {
+      const data = insertEventSchema.parse({
+        ...req.body,
+        createdBy: req.user!.id,
+      });
+      const event = storage.createEvent(data);
+      res.status(201).json(event);
+    } catch (err: any) {
+      res.status(400).json({ message: err.message });
+    }
+  });
+
+  app.put("/api/events/:id", requireAdmin, (req, res) => {
+    const event = storage.updateEvent(Number(req.params.id), req.body);
+    if (!event) return res.status(404).json({ message: "Event nenájdený" });
+    res.json(event);
+  });
+
+  app.delete("/api/events/:id", requireAdmin, (_req, res) => {
+    storage.deleteEvent(Number(_req.params.id));
+    res.json({ message: "Event zmazaný" });
+  });
+
+  // ============ EVENT RESPONSES (Attendance) ============
+  app.get("/api/events/:id/responses", requireAuth, (req, res) => {
+    const responses = storage.getEventResponses(Number(req.params.id));
+    res.json(responses);
+  });
+
+  app.post("/api/events/:id/responses", requireAuth, (req, res) => {
+    const eventId = Number(req.params.id);
+    const { status, note } = req.body;
+    if (!["going", "not_going", "maybe"].includes(status)) {
+      return res.status(400).json({ message: "Neplatný status" });
+    }
+    storage.upsertEventResponse({
+      eventId,
+      userId: req.user!.id,
+      status,
+      note,
+    });
+    res.json({ message: "Účasť aktualizovaná" });
+  });
+
+  // ============ POLLS ============
+  app.get("/api/polls", requireAuth, (_req, res) => {
+    const allPolls = storage.getAllPolls();
+    res.json(allPolls);
+  });
+
+  app.get("/api/polls/:id", requireAuth, (req, res) => {
+    const poll = storage.getPoll(Number(req.params.id));
+    if (!poll) return res.status(404).json({ message: "Anketa nenájdená" });
+    const options = storage.getPollOptions(poll.id);
+    const votes = storage.getPollVotes(poll.id);
+    const userVote = storage.getUserPollVote(poll.id, req.user!.id);
+    res.json({ ...poll, options, votes, userVote });
+  });
+
+  app.post("/api/polls", requireAdmin, (req, res) => {
+    try {
+      const { options, ...pollData } = req.body;
+      const data = insertPollSchema.parse({
+        ...pollData,
+        createdBy: req.user!.id,
+      });
+      const poll = storage.createPoll(data);
+      if (options && Array.isArray(options)) {
+        storage.createPollOptions(
+          options.map((label: string) => ({ pollId: poll.id, label }))
+        );
+      }
+      res.status(201).json(poll);
+    } catch (err: any) {
+      res.status(400).json({ message: err.message });
+    }
+  });
+
+  app.delete("/api/polls/:id", requireAdmin, (req, res) => {
+    storage.deletePoll(Number(req.params.id));
+    res.json({ message: "Anketa zmazaná" });
+  });
+
+  // ============ POLL VOTES ============
+  app.post("/api/polls/:id/votes", requireAuth, (req, res) => {
+    const pollId = Number(req.params.id);
+    const { optionId } = req.body;
+    if (!optionId) {
+      return res.status(400).json({ message: "Option ID je povinné" });
+    }
+    storage.upsertPollVote({
+      pollId,
+      optionId: parseInt(optionId),
+      userId: req.user!.id,
+    });
+    res.json({ message: "Hlas zaznamenaný" });
+  });
+
+  // ============ USERS (Admin) ============
+  app.get("/api/users", requireAdmin, (_req, res) => {
+    const allUsers = storage.getAllUsers().map(({ password, ...u }) => u);
+    res.json(allUsers);
+  });
+
+  app.put("/api/users/:id/role", requireAdmin, (req, res) => {
+    const { role } = req.body;
+    if (!["admin", "player"].includes(role)) {
+      return res.status(400).json({ message: "Neplatná rola" });
+    }
+    const user = storage.updateUserRole(Number(req.params.id), role);
+    if (!user) return res.status(404).json({ message: "Používateľ nenájdený" });
+    const { password, ...safe } = user;
+    res.json(safe);
+  });
+
+  app.delete("/api/users/:id", requireAdmin, (req, res) => {
+    if (Number(req.params.id) === req.user!.id) {
+      return res.status(400).json({ message: "Nemôžete zmazať vlastný účet" });
+    }
+    storage.deleteUser(Number(req.params.id));
+    res.json({ message: "Používateľ zmazaný" });
+  });
+
+  // ============ PAYMENTS ============
+  app.get("/api/payments", requireAuth, (req, res) => {
+    const payments = storage.getPaymentsByUser(req.user!.id);
+    res.json(payments);
+  });
+
+  app.get("/api/payments/all", requireAdmin, (_req, res) => {
+    const payments = storage.getAllPayments();
+    res.json(payments);
+  });
+
+  app.post("/api/payments", requireAdmin, (req, res) => {
+    try {
+      const data = insertPaymentSchema.parse(req.body);
+      const payment = storage.createPayment(data);
+      res.status(201).json(payment);
+    } catch (err: any) {
+      res.status(400).json({ message: err.message });
+    }
+  });
+
+  app.put("/api/payments/:id", requireAdmin, (req, res) => {
+    const { status } = req.body;
+    if (!["pending", "paid", "overdue"].includes(status)) {
+      return res.status(400).json({ message: "Neplatný status" });
+    }
+    const payment = storage.updatePaymentStatus(Number(req.params.id), status);
+    if (!payment) return res.status(404).json({ message: "Platba nenájdená" });
+    res.json(payment);
+  });
+
+  app.delete("/api/payments/:id", requireAdmin, (req, res) => {
+    storage.deletePayment(Number(req.params.id));
+    res.json({ message: "Platba zmazaná" });
+  });
+
+  // ============ BANK (Admin) ============
+  app.get("/api/bank/transactions", requireAdmin, (req, res) => {
+    const limit = parseInt(req.query.limit as string) || 50;
+    const transactions = storage.getAllBankTransactions(limit);
+    res.json(transactions);
+  });
+
+  app.post("/api/bank/sync", requireAdmin, async (req, res) => {
+    try {
+      const token = storage.getAppSetting('fio_token');
+      if (!token) {
+        return res.status(400).json({ message: "FIO API token nie je nastavený" });
+      }
+      const { dateFrom, dateTo } = req.body || {};
+      const result = await syncFioTransactions(token, dateFrom, dateTo);
+      storage.setAppSetting('fio_last_sync', new Date().toISOString());
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Synchronizácia zlyhala" });
+    }
+  });
+
+  app.get("/api/bank/settings", requireAdmin, (_req, res) => {
+    const token = storage.getAppSetting('fio_token');
+    const lastSync = storage.getAppSetting('fio_last_sync');
+    res.json({ hasToken: !!token, lastSync });
+  });
+
+  app.put("/api/bank/settings", requireAdmin, (req, res) => {
+    const { fioToken } = req.body;
+    if (fioToken) {
+      storage.setAppSetting('fio_token', fioToken);
+    }
+    res.json({ message: "Nastavenia uložené" });
+  });
+
+  app.put("/api/bank/transactions/:id/match", requireAdmin, (req, res) => {
+    const { paymentId } = req.body;
+    const txId = Number(req.params.id);
+    if (paymentId) {
+      const pid = parseInt(paymentId);
+      storage.updateBankTransactionMatch(txId, pid);
+      storage.updatePaymentStatus(pid, 'paid');
+    } else {
+      // Unmatch
+      const transactions = storage.getAllBankTransactions();
+      const tx = transactions.find(t => t.id === txId);
+      if (tx?.matchedPaymentId) {
+        storage.updatePaymentStatus(tx.matchedPaymentId, 'pending');
+        storage.updateBankTransactionMatch(txId, null);
+      }
+    }
+    res.json({ message: "Transakcia aktualizovaná" });
+  });
+
+  // ============ NOTIFICATION SETTINGS ============
+  app.get("/api/settings/notifications", requireAuth, (req, res) => {
+    const settings = storage.getNotificationSettings(req.user!.id);
+    res.json(settings || { pushEnabled: true, emailEnabled: true });
+  });
+
+  app.put("/api/settings/notifications", requireAuth, (req, res) => {
+    const { pushEnabled, emailEnabled, pushSubscription } = req.body;
+    storage.upsertNotificationSettings({
+      userId: req.user!.id,
+      pushEnabled,
+      emailEnabled,
+      pushSubscription: pushSubscription ? JSON.stringify(pushSubscription) : undefined,
+    });
+    res.json({ message: "Nastavenia uložené" });
+  });
+
+  // ============ DASHBOARD STATS ============
+  app.get("/api/stats", requireAuth, (_req, res) => {
+    const users = storage.getAllUsers();
+    const events = storage.getAllEvents();
+    const polls = storage.getAllPolls();
+    const now = new Date().toISOString();
+    const upcomingEvents = events.filter(e => e.startTime >= now).slice(0, 5);
+    res.json({
+      playerCount: users.length,
+      upcomingEvents,
+      activePolls: polls.filter(p => !p.closesAt || p.closesAt >= now).length,
+    });
+  });
+
+  return httpServer;
+}
