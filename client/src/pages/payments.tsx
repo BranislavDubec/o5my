@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { CreditCard, CheckCircle2, Clock, AlertCircle } from "lucide-react";
+import { CreditCard, CheckCircle2, Clock, AlertCircle, ChevronRight } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { sk } from "date-fns/locale";
 
@@ -72,22 +73,25 @@ export default function PaymentsPage() {
             const cfg = statusConfig[payment.status as keyof typeof statusConfig] || statusConfig.pending;
             const Icon = cfg.icon;
             return (
-              <Card key={payment.id} data-testid={`card-payment-${payment.id}`}>
-                <CardContent className="p-4 flex items-center gap-3">
-                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 bg-muted ${cfg.color}`}>
-                    <Icon className="w-5 h-5" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-sm">{payment.description}</p>
-                    <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-                      <span className="font-semibold text-foreground">{payment.amount} Kč</span>
-                      <span>Splatnosť: {format(parseISO(payment.dueDate), "d. MMM yyyy", { locale: sk })}</span>
-                      {payment.variableSymbol && <span>VS: {payment.variableSymbol}</span>}
+              <Link key={payment.id} href={`/payments/${payment.id}`}>
+                <Card className="cursor-pointer transition-colors hover:border-primary/50" data-testid={`card-payment-${payment.id}`}>
+                  <CardContent className="p-4 flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 bg-muted ${cfg.color}`}>
+                      <Icon className="w-5 h-5" />
                     </div>
-                  </div>
-                  <Badge variant={cfg.variant} data-testid={`badge-payment-status-${payment.id}`}>{cfg.label}</Badge>
-                </CardContent>
-              </Card>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm">{payment.description}</p>
+                      <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground flex-wrap">
+                        <span className="font-semibold text-foreground">{payment.amount} Kč</span>
+                        <span>Splatnosť: {format(parseISO(payment.dueDate), "d. MMM yyyy", { locale: sk })}</span>
+                        {payment.variableSymbol && <span>VS: {payment.variableSymbol}</span>}
+                      </div>
+                    </div>
+                    <Badge variant={cfg.variant} data-testid={`badge-payment-status-${payment.id}`}>{cfg.label}</Badge>
+                    <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+                  </CardContent>
+                </Card>
+              </Link>
             );
           })}
         </div>

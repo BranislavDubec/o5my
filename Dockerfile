@@ -16,7 +16,8 @@ FROM node:22-bookworm-slim AS runtime
 
 ENV NODE_ENV=production \
     PORT=5000 \
-    DATABASE_PATH=/data/data.db
+    DATABASE_PATH=/data/data.db \
+    UPLOAD_DIR=/data/uploads
 
 WORKDIR /app
 
@@ -24,7 +25,7 @@ COPY --from=builder --chown=node:node /app/package.json ./package.json
 COPY --from=builder --chown=node:node /app/node_modules ./node_modules
 COPY --from=builder --chown=node:node /app/dist ./dist
 
-RUN mkdir -p /data && chown node:node /data
+RUN mkdir -p /data/uploads && chown -R node:node /data
 
 USER node
 

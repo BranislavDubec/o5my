@@ -124,17 +124,43 @@ async function getGoogleAccessToken() {
   return tokenPayload.access_token as string;
 }
 
+interface WritableGoogleCalendarEvent {
+  type: string;
+  title: string;
+  description?: string | null;
+  location?: string | null;
+  startTime: string;
+  endTime?: string | null;
+  opponent?: string | null;
+  homeAway?: string | null;
+}
+
+function buildGoogleEventDescription(event: WritableGoogleCalendarEvent) {
+  const eventTypeLabel = event.type === "match"
+    ? "Zápas"
+    : event.type === "teambuilding"
+      ? "Team building"
+      : "Tréning";
+
+  const descriptionParts = [`Typ: ${eventTypeLabel}`];
+  if (event.description) descriptionParts.push(event.description);
+  if (event.opponent) descriptionParts.push(`Súper: ${event.opponent}`);
+  if (event.homeAway) descriptionParts.push(`Strana: ${event.homeAway === "home" ? "Domáci" : "Vypravení"}`);
+  return descriptionParts;
+}
+
+function buildGoogleEventPayload(event: WritableGoogleCalendarEvent) {
+  return {
+    summary: event.title,
+    description: buildGoogleEventDescription(event).join("\n"),
+    location: event.location || undefined,
+    start: { dateTime: toGoogleDateTime(event.startTime) },
+    end: { dateTime: resolveGoogleEndTime(event.startTime, event.endTime) },
+  };
+}
+
 export async function createGoogleCalendarEvent(
-  event: {
-    type: string;
-    title: string;
-    description?: string | null;
-    location?: string | null;
-    startTime: string;
-    endTime?: string | null;
-    opponent?: string | null;
-    homeAway?: string | null;
-  },
+  event: WritableGoogleCalendarEvent,
   options: {
     calendarId?: string;
     accessToken?: string;
@@ -147,24 +173,7 @@ export async function createGoogleCalendarEvent(
     throw new Error("Google OAuth access token nie je nastavený. Potrebný je autorizovaný prístup k Google Calendar.");
   }
 
-  const eventTypeLabel = event.type === "match"
-    ? "Zápas"
-    : event.type === "teambuilding"
-      ? "Team building"
-      : "Tréning";
-
-  const descriptionParts = [`Typ: ${eventTypeLabel}`];
-  if (event.description) descriptionParts.push(event.description);
-  if (event.opponent) descriptionParts.push(`Súper: ${event.opponent}`);
-  if (event.homeAway) descriptionParts.push(`Strana: ${event.homeAway === "home" ? "Domáci" : "Vypravení"}`);
-
-  const payload = {
-    summary: event.title,
-    description: descriptionParts.join("\n"),
-    location: event.location || undefined,
-    start: { dateTime: toGoogleDateTime(event.startTime) },
-    end: { dateTime: resolveGoogleEndTime(event.startTime, event.endTime) },
-  };
+  const payload = buildGoogleEventPayload(event);
 
   console.log(`[google-calendar] Sending payload to Google Calendar:`, JSON.stringify(payload));
 
@@ -190,11 +199,45 @@ export async function createGoogleCalendarEvent(
   return responseBody;
 }
 
+export async function updateGoogleCalendarEvent(
+  event: WritableGoogleCalendarEvent & { externalId?: string | null },
+  options: {
+    calendarId?: string;
+    accessToken?: string;
+  } = {}
+) {
+  if (!event.externalId) return null;
+
+  const calendarId = options.calendarId || process.env.GOOGLE_CALENDAR_ID || "primary";
+  const accessToken = options.accessToken || process.env.GOOGLE_CALENDAR_ACCESS_TOKEN || await getGoogleAccessToken();
+  if (!accessToken) {
+    throw new Error("Google OAuth access token nie je nastavený. Potrebný je autorizovaný prístup k Google Calendar.");
+  }
+
+  const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(event.externalId)}`;
+  const response = await fetch(url, {
+    method: "PATCH",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify(buildGoogleEventPayload(event)),
+  });
+
+  const responseBody = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const reason = responseBody?.error?.errors?.[0]?.reason || responseBody?.error?.status || "unknown";
+    const message = responseBody?.error?.message || "Google Calendar event update failed";
+    throw new Error(`${message} (${reason})`);
+  }
+
+  return responseBody;
+}
+
 export async function updateGoogleCalendarEventAttendance(
-  event: {
+  event: WritableGoogleCalendarEvent & {
     externalId?: string | null;
-    description?: string | null;
-    title?: string;
   },
   responses: Array<{ status: string; user?: { name?: string | null } }> = [],
   options: {
@@ -222,7 +265,7 @@ export async function updateGoogleCalendarEventAttendance(
     not_going: responses.filter(r => r.status === "not_going").map(r => r.user?.name).filter(Boolean).slice(0, 20) as string[],
   };
 
-  const descriptionLines = [event.description || ""];
+  const descriptionLines = buildGoogleEventDescription(event);
   descriptionLines.push(`Účasť: Idú ${counts.going}, Možno ${counts.maybe}, Neidú ${counts.not_going}`);
   if (groupedNames.going.length > 0) {
     descriptionLines.push(`Idú: ${groupedNames.going.join(", ")}`);

@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/contexts/auth-context";
@@ -6,23 +7,42 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Bell, Mail, User as UserIcon, LogOut, Smartphone } from "lucide-react";
+import { Bell, Mail, User as UserIcon, LogOut, Send, Smartphone } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { PwaInstallButton } from "@/components/pwa-install-button";
+import { usePwaInstall } from "@/contexts/pwa-install-context";
 
 interface NotificationSettings {
   pushEnabled: boolean;
   emailEnabled: boolean;
+  subscriptionCount: number;
+}
+
+function urlBase64ToUint8Array(value: string) {
+  const padding = "=".repeat((4 - value.length % 4) % 4);
+  const base64 = (value + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = window.atob(base64);
+  return Uint8Array.from(Array.from(raw).map(character => character.charCodeAt(0)));
+}
+
+async function getServiceWorkerRegistration() {
+  return (await navigator.serviceWorker.getRegistration("/"))
+    || navigator.serviceWorker.register("/sw.js", { scope: "/", updateViaCache: "none" });
 }
 
 export default function Settings() {
   const { user, logout } = useAuth();
+  const { platform, isInstalled } = usePwaInstall();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const pushSupported = "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+  const [pushSubscribed, setPushSubscribed] = useState(false);
+  const [pushStatusLoading, setPushStatusLoading] = useState(pushSupported);
 
   const { data: settings } = useQuery<NotificationSettings>({
     queryKey: ["/api/settings/notifications"],
   });
+  const pushActive = pushSubscribed && (settings?.pushEnabled ?? true);
 
   const updateMutation = useMutation({
     mutationFn: (data: Partial<NotificationSettings>) =>
@@ -31,6 +51,66 @@ export default function Settings() {
       queryClient.invalidateQueries({ queryKey: ["/api/settings/notifications"] });
       toast({ title: "Nastavenia uložené" });
     },
+    onError: (error: Error) => toast({ title: "Nastavenia sa nepodarilo uložiť", description: error.message, variant: "destructive" }),
+  });
+
+  useEffect(() => {
+    if (!pushSupported) return;
+    let cancelled = false;
+    getServiceWorkerRegistration()
+      .then(registration => registration.pushManager.getSubscription())
+      .then(subscription => { if (!cancelled) setPushSubscribed(Boolean(subscription)); })
+      .catch(error => console.error("Push subscription check failed", error))
+      .finally(() => { if (!cancelled) setPushStatusLoading(false); });
+    return () => { cancelled = true; };
+  }, [pushSupported]);
+
+  const pushMutation = useMutation({
+    mutationFn: async (enabled: boolean) => {
+      if (!pushSupported || !window.isSecureContext) {
+        throw new Error("Push notifikácie vyžadujú HTTPS alebo localhost a podporovaný prehliadač.");
+      }
+
+      const registration = await getServiceWorkerRegistration();
+      let subscription = await registration.pushManager.getSubscription();
+
+      if (enabled) {
+        const permission = await Notification.requestPermission();
+        if (permission !== "granted") {
+          throw new Error("Povoľ notifikácie v nastaveniach prehliadača alebo telefónu.");
+        }
+        if (!subscription) {
+          const keyResponse = await apiRequest("GET", "/api/notifications/vapid-public-key");
+          const { publicKey } = await keyResponse.json() as { publicKey: string };
+          subscription = await registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(publicKey),
+          });
+        }
+        await apiRequest("POST", "/api/notifications/subscribe", subscription.toJSON());
+        await apiRequest("PUT", "/api/settings/notifications", { pushEnabled: true });
+        return true;
+      }
+
+      if (subscription) {
+        await apiRequest("DELETE", "/api/notifications/subscribe", { endpoint: subscription.endpoint });
+        await subscription.unsubscribe();
+      }
+      await apiRequest("PUT", "/api/settings/notifications", { pushEnabled: false });
+      return false;
+    },
+    onSuccess: enabled => {
+      setPushSubscribed(enabled);
+      queryClient.invalidateQueries({ queryKey: ["/api/settings/notifications"] });
+      toast({ title: enabled ? "Push notifikácie sú aktívne" : "Push notifikácie sú vypnuté" });
+    },
+    onError: (error: Error) => toast({ title: "Push notifikácie sa nepodarilo nastaviť", description: error.message, variant: "destructive" }),
+  });
+
+  const testNotificationMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/notifications/test"),
+    onSuccess: () => toast({ title: "Test bol odoslaný", description: "Push sa môže zobraziť o niekoľko sekúnd; skontroluj aj email." }),
+    onError: (error: Error) => toast({ title: "Test zlyhal", description: error.message, variant: "destructive" }),
   });
 
   return (
@@ -77,13 +157,22 @@ export default function Settings() {
               <Bell className="w-4 h-4 text-muted-foreground" />
               <div>
                 <Label htmlFor="push-toggle" className="text-sm">Push notifikácie</Label>
-                <p className="text-xs text-muted-foreground">Upozornenia na nové akcie a ankety</p>
+                <p className="text-xs text-muted-foreground">
+                  {!pushSupported
+                    ? "Tento prehliadač push notifikácie nepodporuje"
+                    : pushActive
+                      ? "Aktívne na tomto zariadení"
+                      : platform === "ios" && !isInstalled
+                        ? "Na iPhone najprv nainštaluj aplikáciu na plochu"
+                        : "Upozornenia na nové platby a správy od administrátora"}
+                </p>
               </div>
             </div>
             <Switch
               id="push-toggle"
-              checked={settings?.pushEnabled ?? true}
-              onCheckedChange={v => updateMutation.mutate({ pushEnabled: v })}
+              checked={pushActive}
+              onCheckedChange={enabled => pushMutation.mutate(enabled)}
+              disabled={!pushSupported || (platform === "ios" && !isInstalled) || pushStatusLoading || pushMutation.isPending}
               data-testid="switch-push"
             />
           </div>
@@ -92,7 +181,7 @@ export default function Settings() {
               <Mail className="w-4 h-4 text-muted-foreground" />
               <div>
                 <Label htmlFor="email-toggle" className="text-sm">Email notifikácie</Label>
-                <p className="text-xs text-muted-foreground">Pripomenutia pred zápasmi a tréningami</p>
+                <p className="text-xs text-muted-foreground">Emaily o nových platbách a správy od administrátora</p>
               </div>
             </div>
             <Switch
@@ -101,6 +190,16 @@ export default function Settings() {
               onCheckedChange={v => updateMutation.mutate({ emailEnabled: v })}
               data-testid="switch-email"
             />
+          </div>
+          <div className="pt-3 border-t">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => testNotificationMutation.mutate()}
+              disabled={testNotificationMutation.isPending || (!pushActive && !settings?.emailEnabled)}
+            >
+              <Send className="w-4 h-4 mr-1.5" />{testNotificationMutation.isPending ? "Odosielam..." : "Poslať testovaciu notifikáciu"}
+            </Button>
           </div>
         </CardContent>
       </Card>

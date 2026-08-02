@@ -211,6 +211,17 @@ export const insertNotificationSettingsSchema = createInsertSchema(notificationS
 export type InsertNotificationSettings = z.infer<typeof insertNotificationSettingsSchema>;
 export type NotificationSettings = typeof notificationSettings.$inferSelect;
 
+export const pushSubscriptions = sqliteTable("push_subscriptions", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: integer("user_id").notNull().references(() => users.id),
+  endpoint: text("endpoint").notNull().unique(),
+  subscription: text("subscription").notNull(),
+  createdAt: text("created_at").notNull().$defaultFn(() => new Date().toISOString()),
+  updatedAt: text("updated_at").notNull().$defaultFn(() => new Date().toISOString()),
+});
+
+export type PushSubscriptionRecord = typeof pushSubscriptions.$inferSelect;
+
 // ============ APP SETTINGS (key-value store) ============
 export const appSettings = sqliteTable("app_settings", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -219,3 +230,29 @@ export const appSettings = sqliteTable("app_settings", {
 });
 
 export type AppSetting = typeof appSettings.$inferSelect;
+
+// ============ TEAM MEDIA ============
+export const mediaCollections = sqliteTable("media_collections", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  kind: text("kind").notNull(), // tactic
+  title: text("title").notNull(),
+  description: text("description"),
+  createdBy: integer("created_by").notNull().references(() => users.id),
+  createdAt: text("created_at").notNull().$defaultFn(() => new Date().toISOString()),
+});
+
+export const mediaFiles = sqliteTable("media_files", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  collectionId: integer("collection_id").references(() => mediaCollections.id),
+  category: text("category").notNull(), // photo | tactic
+  storedName: text("stored_name").notNull().unique(),
+  originalName: text("original_name").notNull(),
+  mimeType: text("mime_type").notNull(),
+  size: integer("size").notNull(),
+  sortOrder: integer("sort_order").notNull().default(0),
+  uploadedBy: integer("uploaded_by").notNull().references(() => users.id),
+  createdAt: text("created_at").notNull().$defaultFn(() => new Date().toISOString()),
+});
+
+export type MediaCollection = typeof mediaCollections.$inferSelect;
+export type MediaFile = typeof mediaFiles.$inferSelect;

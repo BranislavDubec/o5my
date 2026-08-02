@@ -12,6 +12,7 @@ services:
       NODE_ENV: production
       PORT: 5000
       DATABASE_PATH: /data/data.db
+      UPLOAD_DIR: /data/uploads
     expose:
       - "5000"
     volumes:

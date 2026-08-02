@@ -71,6 +71,40 @@ function emailButton(label: string, url: string) {
   return `<a href="${url}" style="display:inline-block;margin:8px 0 24px;padding:14px 28px;background:#18181b;color:#ffffff;text-decoration:none;border-radius:8px;font-weight:700;">${label}</a>`;
 }
 
+export function isEmailConfigured() {
+  return Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
+}
+
+export async function sendAppNotificationEmail(options: {
+  to: string;
+  name: string;
+  subject: string;
+  heading: string;
+  message: string;
+  buttonLabel: string;
+  path: string;
+}) {
+  const url = `${getAppUrl()}${options.path}`;
+  const safeName = escapeHtml(options.name);
+  const safeHeading = escapeHtml(options.heading);
+  const safeMessage = escapeHtml(options.message);
+
+  await createTransport().sendMail({
+    from: process.env.SMTP_FROM || process.env.SMTP_USER,
+    to: options.to,
+    subject: options.subject,
+    text: `Ahoj ${options.name},\n\n${options.heading}\n\n${options.message}\n\nOtvoriť v aplikácii: ${url}\n\nO5MY Futsal`,
+    html: emailLayout(`
+      <h1 style="margin:0 0 16px;font-size:26px;">${safeHeading}</h1>
+      <p style="margin:0 0 12px;font-size:15px;line-height:1.6;">Ahoj ${safeName},</p>
+      <p style="margin:0 0 24px;font-size:16px;line-height:1.6;">${safeMessage}</p>
+      ${emailButton(escapeHtml(options.buttonLabel), url)}
+      <p style="margin:12px 0 0;color:#52525b;font-size:14px;">O5MY Futsal ⚽</p>
+    `),
+    attachments: getLogoAttachments(),
+  });
+}
+
 export async function sendEmailVerification(user: { id: number; email: string; name: string }) {
   const token = randomBytes(32).toString("hex");
   storage.createEmailVerificationToken(

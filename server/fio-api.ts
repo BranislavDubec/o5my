@@ -35,6 +35,28 @@ interface FioApiResponse {
   };
 }
 
+interface FioStatementResult {
+  transactions: FioTransaction[];
+  iban?: string;
+  currency?: string;
+}
+
+async function fetchFioStatement(url: string): Promise<FioStatementResult> {
+  const response = await fetch(url);
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`FIO API error: ${response.status} ${text}`);
+  }
+
+  const data: FioApiResponse = await response.json();
+  return {
+    transactions: data.accountStatement?.transactionList?.transaction || [],
+    iban: data.accountStatement?.info?.iban,
+    currency: data.accountStatement?.info?.currency,
+  };
+}
+
 /**
  * Fetch transactions from FIO bank API for a date range.
  * Uses the v1 REST API with token authentication.
@@ -46,15 +68,7 @@ export async function fetchFioTransactions(
   dateTo: string
 ): Promise<FioTransaction[]> {
   const url = `${FIO_API_BASE}/periods/${token}/${dateFrom}/${dateTo}/transactions.json`;
-  const response = await fetch(url);
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`FIO API error: ${response.status} ${text}`);
-  }
-
-  const data: FioApiResponse = await response.json();
-  return data.accountStatement?.transactionList?.transaction || [];
+  return (await fetchFioStatement(url)).transactions;
 }
 
 /**
@@ -63,15 +77,7 @@ export async function fetchFioTransactions(
  */
 export async function fetchLatestFioTransactions(token: string): Promise<FioTransaction[]> {
   const url = `${FIO_API_BASE}/last/${token}/transactions.json`;
-  const response = await fetch(url);
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`FIO API error: ${response.status} ${text}`);
-  }
-
-  const data: FioApiResponse = await response.json();
-  return data.accountStatement?.transactionList?.transaction || [];
+  return (await fetchFioStatement(url)).transactions;
 }
 
 /**
@@ -83,18 +89,23 @@ export async function syncFioTransactions(
   dateFrom?: string,
   dateTo?: string
 ): Promise<{ synced: number; matched: number }> {
-  let transactions: FioTransaction[];
+  let statement: FioStatementResult;
 
   if (dateFrom && dateTo) {
-    transactions = await fetchFioTransactions(token, dateFrom, dateTo);
+    statement = await fetchFioStatement(
+      `${FIO_API_BASE}/periods/${token}/${dateFrom}/${dateTo}/transactions.json`,
+    );
   } else {
-    transactions = await fetchLatestFioTransactions(token);
+    statement = await fetchFioStatement(`${FIO_API_BASE}/last/${token}/transactions.json`);
   }
+
+  if (statement.iban) storage.setAppSetting('payment_iban', statement.iban);
+  if (statement.currency) storage.setAppSetting('payment_currency', statement.currency.toUpperCase());
 
   let synced = 0;
   let matched = 0;
 
-  for (const tx of transactions) {
+  for (const tx of statement.transactions) {
     // Only process incoming payments (positive amounts)
     if (tx.amount <= 0) continue;
 

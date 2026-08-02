@@ -33,6 +33,7 @@ interface DashboardPoll {
 
 interface Stats {
   playerCount: number;
+  eventCount: number;
   upcomingEvents: DashboardEvent[];
   unansweredEvents: DashboardEvent[];
   activePolls: number;
@@ -167,18 +168,20 @@ export default function Dashboard() {
       )}
 
       <div className="grid grid-cols-3 gap-3">
-        <Card>
-          <CardContent className="p-4 flex flex-col items-center text-center">
-            <Users className="w-5 h-5 text-primary mb-2" />
-            <span className="text-xl font-bold" data-testid="stat-players">{stats?.playerCount ?? "—"}</span>
-            <span className="text-xs text-muted-foreground">Hráči</span>
-          </CardContent>
-        </Card>
+        <Link href="/admin/members" className="block rounded-lg" data-testid="link-dashboard-players">
+          <Card className="h-full hover-elevate cursor-pointer">
+            <CardContent className="p-4 flex flex-col items-center text-center">
+              <Users className="w-5 h-5 text-primary mb-2" />
+              <span className="text-xl font-bold" data-testid="stat-players">{stats?.playerCount ?? "—"}</span>
+              <span className="text-xs text-muted-foreground">Hráči</span>
+            </CardContent>
+          </Card>
+        </Link>
         <Card>
           <CardContent className="p-4 flex flex-col items-center text-center">
             <Calendar className="w-5 h-5 text-primary mb-2" />
-            <span className="text-xl font-bold" data-testid="stat-events">{upcomingEvents.length}</span>
-            <span className="text-xs text-muted-foreground">Nadchádzajúce</span>
+            <span className="text-xl font-bold" data-testid="stat-events">{stats?.eventCount ?? "—"}</span>
+            <span className="text-xs text-muted-foreground">Akcie</span>
           </CardContent>
         </Card>
         <Card>

@@ -6,7 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import {
   Calendar, Users, Vote, CreditCard, Settings, LogOut,
-  Shield, Menu, X, Sun, Moon, Home
+  Shield, Menu, X, Sun, Moon, Home, FolderOpen, BellRing
 } from "lucide-react";
 
 interface NavItem {
@@ -20,10 +20,12 @@ const navItems: NavItem[] = [
   { path: "/", label: "Dashboard", icon: <Home className="w-5 h-5" /> },
   { path: "/calendar", label: "Kalendár", icon: <Calendar className="w-5 h-5" /> },
   { path: "/polls", label: "Ankety", icon: <Vote className="w-5 h-5" /> },
+  { path: "/files", label: "Súbory", icon: <FolderOpen className="w-5 h-5" /> },
   { path: "/payments", label: "Platby", icon: <CreditCard className="w-5 h-5" /> },
   { path: "/admin/members", label: "Členovia", icon: <Users className="w-5 h-5" />, adminOnly: true },
   { path: "/admin/payments", label: "Správa platieb", icon: <CreditCard className="w-5 h-5" />, adminOnly: true },
   { path: "/admin/bank", label: "Banka", icon: <Shield className="w-5 h-5" />, adminOnly: true },
+  { path: "/admin/notifications", label: "Notifikácie", icon: <BellRing className="w-5 h-5" />, adminOnly: true },
   { path: "/settings", label: "Nastavenia", icon: <Settings className="w-5 h-5" /> },
 ];
 
@@ -77,6 +79,7 @@ export function Layout({ children }: { children: ReactNode }) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   const visibleNavItems = navItems.filter(item => !item.adminOnly || user?.role === "admin");
+  const isActive = (path: string) => path === "/" ? location === "/" : location === path || location.startsWith(`${path}/`);
 
   return (
     <div className="min-h-screen flex">
@@ -92,7 +95,7 @@ export function Layout({ children }: { children: ReactNode }) {
               href={item.path}
               className={cn(
                 "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
-                location === item.path
+                isActive(item.path)
                   ? "bg-sidebar-primary text-sidebar-primary-foreground"
                   : "text-sidebar-foreground hover:bg-sidebar-accent"
               )}
@@ -168,7 +171,7 @@ export function Layout({ children }: { children: ReactNode }) {
                   onClick={() => setMobileNavOpen(false)}
                   className={cn(
                     "flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors",
-                    location === item.path
+                    isActive(item.path)
                       ? "bg-primary text-primary-foreground"
                       : "text-foreground hover:bg-muted"
                   )}
@@ -201,7 +204,7 @@ export function Layout({ children }: { children: ReactNode }) {
               href={item.path}
               className={cn(
                 "flex flex-col items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-medium transition-colors min-w-[52px]",
-                location === item.path
+                isActive(item.path)
                   ? "text-primary"
                   : "text-muted-foreground"
               )}

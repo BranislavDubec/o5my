@@ -18,9 +18,13 @@ import EventDetailPage from "@/pages/event-detail";
 import PollsPage from "@/pages/polls";
 import PollDetailPage from "@/pages/poll-detail";
 import PaymentsPage from "@/pages/payments";
+import PaymentDetailPage from "@/pages/payment-detail";
+import MediaPage from "@/pages/media";
+import TacticDetailPage from "@/pages/tactic-detail";
 import AdminMembers from "@/pages/admin-members";
 import AdminPayments from "@/pages/admin-payments";
 import AdminBank from "@/pages/admin-bank";
+import AdminNotifications from "@/pages/admin-notifications";
 import Settings from "@/pages/settings";
 
 interface ProtectedRouteProps {
@@ -96,6 +100,15 @@ function AppRouter() {
       <Route path="/payments">
         <ProtectedRoute><PaymentsPage /></ProtectedRoute>
       </Route>
+      <Route path="/payments/:id">
+        <ProtectedRoute><PaymentDetailPage /></ProtectedRoute>
+      </Route>
+      <Route path="/files">
+        <ProtectedRoute><MediaPage /></ProtectedRoute>
+      </Route>
+      <Route path="/files/tactics/:id">
+        <ProtectedRoute><TacticDetailPage /></ProtectedRoute>
+      </Route>
       <Route path="/settings">
         <ProtectedRoute><Settings /></ProtectedRoute>
       </Route>
@@ -109,6 +122,9 @@ function AppRouter() {
       </Route>
       <Route path="/admin/bank">
         <ProtectedRoute requiredRole="admin"><AdminBank /></ProtectedRoute>
+      </Route>
+      <Route path="/admin/notifications">
+        <ProtectedRoute requiredRole="admin"><AdminNotifications /></ProtectedRoute>
       </Route>
 
       <Route component={NotFound} />

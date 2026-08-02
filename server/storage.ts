@@ -1,6 +1,7 @@
 import {
   users, emailVerificationTokens, events, eventResponses, polls, pollOptions, pollVotes,
-  payments, bankTransactions, notificationSettings, appSettings,
+  payments, bankTransactions, notificationSettings, pushSubscriptions, appSettings,
+  mediaCollections, mediaFiles,
 } from '@shared/schema';
 import type {
   User, InsertUser, EmailVerificationToken,
@@ -12,7 +13,9 @@ import type {
   Payment, InsertPayment,
   BankTransaction,
   NotificationSettings, InsertNotificationSettings,
+  PushSubscriptionRecord,
   AppSetting,
+  MediaCollection, MediaFile,
 } from '@shared/schema';
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import Database from "better-sqlite3";
@@ -158,12 +161,64 @@ sqlite.exec(`
     push_subscription TEXT
   );
 
+  CREATE TABLE IF NOT EXISTS push_subscriptions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    endpoint TEXT NOT NULL UNIQUE,
+    subscription TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS app_settings (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     key TEXT NOT NULL UNIQUE,
     value TEXT NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS media_collections (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind TEXT NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT,
+    created_by INTEGER NOT NULL REFERENCES users(id),
+    created_at TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS media_files (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    collection_id INTEGER REFERENCES media_collections(id),
+    category TEXT NOT NULL,
+    stored_name TEXT NOT NULL UNIQUE,
+    original_name TEXT NOT NULL,
+    mime_type TEXT NOT NULL,
+    size INTEGER NOT NULL,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    uploaded_by INTEGER NOT NULL REFERENCES users(id),
+    created_at TEXT NOT NULL
+  );
 `);
+
+// Payment IDs are stable numeric values and therefore make safe, unique
+// variable symbols. Normalize older name-based symbols during startup too.
+sqlite.exec(`
+  UPDATE payments
+  SET variable_symbol = CAST(id AS TEXT)
+  WHERE variable_symbol IS NULL
+     OR TRIM(variable_symbol) = ''
+     OR variable_symbol GLOB '*[^0-9]*';
+`);
+
+export interface NewStoredMediaFile {
+  storedName: string;
+  originalName: string;
+  mimeType: string;
+  size: number;
+  uploadedBy: number;
+  sortOrder?: number;
+}
+
+export type TacticWithFiles = MediaCollection & { files: MediaFile[] };
 
 export interface IStorage {
   // Users
@@ -216,6 +271,7 @@ export interface IStorage {
   getPaymentsByUser(userId: number): Payment[];
   getAllPayments(): (Payment & { user: Pick<User, 'id' | 'name'> })[];
   createPayment(payment: InsertPayment): Payment;
+  createPayments(paymentList: InsertPayment[]): Payment[];
   updatePaymentStatus(id: number, status: string): Payment | undefined;
   deletePayment(id: number): void;
   getPendingPaymentsByVariableSymbol(vs: string): Payment[];
@@ -229,10 +285,37 @@ export interface IStorage {
   // Notification Settings
   getNotificationSettings(userId: number): NotificationSettings | undefined;
   upsertNotificationSettings(settings: Partial<InsertNotificationSettings> & { userId: number }): void;
+  getPushSubscriptionsByUser(userId: number): PushSubscriptionRecord[];
+  upsertPushSubscription(userId: number, endpoint: string, subscription: string): PushSubscriptionRecord;
+  deletePushSubscription(userId: number, endpoint: string): void;
+  deletePushSubscriptionByEndpoint(endpoint: string): void;
 
   // App Settings
   getAppSetting(key: string): string | undefined;
   setAppSetting(key: string, value: string): void;
+
+  // Team media
+  getMediaFile(id: number): MediaFile | undefined;
+  getPhotos(): MediaFile[];
+  createPhotos(files: NewStoredMediaFile[]): MediaFile[];
+  deleteMediaFile(id: number): void;
+  getTacticCollections(): TacticWithFiles[];
+  getTacticCollection(id: number): TacticWithFiles | undefined;
+  createTacticCollection(
+    title: string,
+    description: string | null,
+    createdBy: number,
+    files: NewStoredMediaFile[],
+  ): TacticWithFiles;
+  updateTacticCollection(
+    id: number,
+    title: string,
+    description: string | null,
+    fileOrder: number[],
+    newFiles: NewStoredMediaFile[],
+  ): TacticWithFiles | undefined;
+  deleteTacticFile(collectionId: number, fileId: number): MediaFile | undefined;
+  deleteTacticCollection(id: number): void;
 }
 
 function normalizeEventTime(value?: string | null) {
@@ -467,7 +550,34 @@ export class DatabaseStorage implements IStorage {
   }
 
   createPayment(payment: InsertPayment): Payment {
-    return db.insert(payments).values(payment).returning().get();
+    return db.transaction(tx => {
+      const created = tx.insert(payments)
+        .values({ ...payment, variableSymbol: null })
+        .returning()
+        .get();
+
+      return tx.update(payments)
+        .set({ variableSymbol: String(created.id) })
+        .where(eq(payments.id, created.id))
+        .returning()
+        .get();
+    });
+  }
+
+  createPayments(paymentList: InsertPayment[]): Payment[] {
+    if (paymentList.length === 0) return [];
+    return db.transaction(tx => {
+      const created = tx.insert(payments)
+        .values(paymentList.map(payment => ({ ...payment, variableSymbol: null })))
+        .returning()
+        .all();
+
+      return created.map(payment => tx.update(payments)
+        .set({ variableSymbol: String(payment.id) })
+        .where(eq(payments.id, payment.id))
+        .returning()
+        .get());
+    });
   }
 
   updatePaymentStatus(id: number, status: string): Payment | undefined {
@@ -543,6 +653,44 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
+  getPushSubscriptionsByUser(userId: number): PushSubscriptionRecord[] {
+    return db.select().from(pushSubscriptions)
+      .where(eq(pushSubscriptions.userId, userId))
+      .all();
+  }
+
+  upsertPushSubscription(userId: number, endpoint: string, subscription: string): PushSubscriptionRecord {
+    const existing = db.select().from(pushSubscriptions)
+      .where(eq(pushSubscriptions.endpoint, endpoint))
+      .get();
+    const updatedAt = new Date().toISOString();
+
+    if (existing) {
+      return db.update(pushSubscriptions)
+        .set({ userId, subscription, updatedAt })
+        .where(eq(pushSubscriptions.id, existing.id))
+        .returning()
+        .get();
+    }
+
+    return db.insert(pushSubscriptions)
+      .values({ userId, endpoint, subscription, updatedAt })
+      .returning()
+      .get();
+  }
+
+  deletePushSubscription(userId: number, endpoint: string): void {
+    db.delete(pushSubscriptions)
+      .where(and(eq(pushSubscriptions.userId, userId), eq(pushSubscriptions.endpoint, endpoint)))
+      .run();
+  }
+
+  deletePushSubscriptionByEndpoint(endpoint: string): void {
+    db.delete(pushSubscriptions)
+      .where(eq(pushSubscriptions.endpoint, endpoint))
+      .run();
+  }
+
   // ============ APP SETTINGS ============
   getAppSetting(key: string): string | undefined {
     const setting = db.select().from(appSettings).where(eq(appSettings.key, key)).get();
@@ -556,6 +704,158 @@ export class DatabaseStorage implements IStorage {
     } else {
       db.insert(appSettings).values({ key, value }).run();
     }
+  }
+
+  // ============ TEAM MEDIA ============
+  getMediaFile(id: number): MediaFile | undefined {
+    return db.select().from(mediaFiles).where(eq(mediaFiles.id, id)).get();
+  }
+
+  getPhotos(): MediaFile[] {
+    return db.select().from(mediaFiles)
+      .where(eq(mediaFiles.category, "photo"))
+      .orderBy(desc(mediaFiles.createdAt))
+      .all();
+  }
+
+  createPhotos(files: NewStoredMediaFile[]): MediaFile[] {
+    if (files.length === 0) return [];
+    return db.insert(mediaFiles).values(files.map((file, index) => ({
+      ...file,
+      collectionId: null,
+      category: "photo",
+      sortOrder: file.sortOrder ?? index,
+    }))).returning().all();
+  }
+
+  deleteMediaFile(id: number): void {
+    db.delete(mediaFiles).where(eq(mediaFiles.id, id)).run();
+  }
+
+  getTacticCollections(): TacticWithFiles[] {
+    return db.select().from(mediaCollections)
+      .where(eq(mediaCollections.kind, "tactic"))
+      .orderBy(desc(mediaCollections.createdAt))
+      .all()
+      .map(collection => ({
+        ...collection,
+        files: db.select().from(mediaFiles)
+          .where(eq(mediaFiles.collectionId, collection.id))
+          .orderBy(asc(mediaFiles.sortOrder))
+          .all(),
+      }));
+  }
+
+  getTacticCollection(id: number): TacticWithFiles | undefined {
+    const collection = db.select().from(mediaCollections)
+      .where(and(eq(mediaCollections.id, id), eq(mediaCollections.kind, "tactic")))
+      .get();
+    if (!collection) return undefined;
+
+    return {
+      ...collection,
+      files: db.select().from(mediaFiles)
+        .where(eq(mediaFiles.collectionId, collection.id))
+        .orderBy(asc(mediaFiles.sortOrder))
+        .all(),
+    };
+  }
+
+  createTacticCollection(
+    title: string,
+    description: string | null,
+    createdBy: number,
+    files: NewStoredMediaFile[],
+  ): TacticWithFiles {
+    return db.transaction(tx => {
+      const collection = tx.insert(mediaCollections).values({
+        kind: "tactic",
+        title,
+        description,
+        createdBy,
+      }).returning().get();
+
+      const createdFiles = tx.insert(mediaFiles).values(files.map((file, index) => ({
+        ...file,
+        collectionId: collection.id,
+        category: "tactic",
+        sortOrder: file.sortOrder ?? index,
+      }))).returning().all();
+
+      return { ...collection, files: createdFiles };
+    });
+  }
+
+  updateTacticCollection(
+    id: number,
+    title: string,
+    description: string | null,
+    fileOrder: number[],
+    newFiles: NewStoredMediaFile[],
+  ): TacticWithFiles | undefined {
+    const existing = this.getTacticCollection(id);
+    if (!existing) return undefined;
+
+    const existingIds = existing.files.map(file => file.id).sort((a, b) => a - b);
+    const orderedIds = [...fileOrder].sort((a, b) => a - b);
+    if (existingIds.length !== orderedIds.length || existingIds.some((fileId, index) => fileId !== orderedIds[index])) {
+      throw new Error("Neplatné poradie súborov");
+    }
+
+    db.transaction(tx => {
+      tx.update(mediaCollections)
+        .set({ title, description })
+        .where(eq(mediaCollections.id, id))
+        .run();
+
+      fileOrder.forEach((fileId, index) => {
+        tx.update(mediaFiles)
+          .set({ sortOrder: index })
+          .where(and(eq(mediaFiles.id, fileId), eq(mediaFiles.collectionId, id)))
+          .run();
+      });
+
+      if (newFiles.length > 0) {
+        tx.insert(mediaFiles).values(newFiles.map((file, index) => ({
+          ...file,
+          collectionId: id,
+          category: "tactic",
+          sortOrder: fileOrder.length + index,
+        }))).run();
+      }
+    });
+
+    return this.getTacticCollection(id);
+  }
+
+  deleteTacticFile(collectionId: number, fileId: number): MediaFile | undefined {
+    const tactic = this.getTacticCollection(collectionId);
+    const file = tactic?.files.find(candidate => candidate.id === fileId);
+    if (!tactic || !file) return undefined;
+
+    db.transaction(tx => {
+      tx.delete(mediaFiles)
+        .where(and(eq(mediaFiles.id, fileId), eq(mediaFiles.collectionId, collectionId)))
+        .run();
+
+      tactic.files
+        .filter(candidate => candidate.id !== fileId)
+        .forEach((candidate, index) => {
+          tx.update(mediaFiles)
+            .set({ sortOrder: index })
+            .where(eq(mediaFiles.id, candidate.id))
+            .run();
+        });
+    });
+
+    return file;
+  }
+
+  deleteTacticCollection(id: number): void {
+    db.transaction(tx => {
+      tx.delete(mediaFiles).where(eq(mediaFiles.collectionId, id)).run();
+      tx.delete(mediaCollections).where(eq(mediaCollections.id, id)).run();
+    });
   }
 }
 

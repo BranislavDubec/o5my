@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Shield, RefreshCw, Banknote, Clock, CheckCircle2 } from "lucide-react";
+import { Shield, RefreshCw, Banknote, Clock, CheckCircle2, Landmark } from "lucide-react";
 import { format } from "date-fns";
 import { sk } from "date-fns/locale";
 
@@ -26,16 +26,33 @@ interface BankTransaction {
 interface BankSettings {
   hasToken: boolean;
   lastSync: string | null;
+  paymentIban: string;
+  paymentRecipientName: string;
+  paymentCurrency: string;
 }
 
 export default function AdminBank() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [token, setToken] = useState("");
+  const [paymentAccount, setPaymentAccount] = useState({
+    paymentIban: "",
+    paymentRecipientName: "O5MY Futsal",
+    paymentCurrency: "CZK",
+  });
 
   const { data: settings } = useQuery<BankSettings>({
     queryKey: ["/api/bank/settings"],
   });
+
+  useEffect(() => {
+    if (!settings) return;
+    setPaymentAccount({
+      paymentIban: settings.paymentIban || "",
+      paymentRecipientName: settings.paymentRecipientName || "O5MY Futsal",
+      paymentCurrency: settings.paymentCurrency || "CZK",
+    });
+  }, [settings]);
 
   const { data: transactions = [], refetch } = useQuery<BankTransaction[]>({
     queryKey: ["/api/bank/transactions"],
@@ -47,6 +64,15 @@ export default function AdminBank() {
       queryClient.invalidateQueries({ queryKey: ["/api/bank/settings"] });
       toast({ title: "Token uložený" });
       setToken("");
+    },
+    onError: (err: any) => toast({ title: "Chyba", description: err.message, variant: "destructive" }),
+  });
+
+  const savePaymentAccountMutation = useMutation({
+    mutationFn: () => apiRequest("PUT", "/api/bank/settings", paymentAccount),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/bank/settings"] });
+      toast({ title: "Platobný účet uložený" });
     },
     onError: (err: any) => toast({ title: "Chyba", description: err.message, variant: "destructive" }),
   });
@@ -124,6 +150,60 @@ export default function AdminBank() {
             data-testid="button-save-token"
           >
             {saveTokenMutation.isPending ? "Ukladám..." : "Uložiť token"}
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Payment QR Settings */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Landmark className="w-4 h-4" />
+            Účet pre QR platby
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="payment-iban">IBAN príjemcu</Label>
+            <Input
+              id="payment-iban"
+              value={paymentAccount.paymentIban}
+              onChange={event => setPaymentAccount(previous => ({ ...previous, paymentIban: event.target.value }))}
+              placeholder="CZ65 0800 0000 1920 0014 5399"
+              autoCapitalize="characters"
+              data-testid="input-payment-iban"
+            />
+          </div>
+          <div className="grid grid-cols-[1fr_6rem] gap-3">
+            <div className="space-y-2">
+              <Label htmlFor="payment-recipient">Názov príjemcu</Label>
+              <Input
+                id="payment-recipient"
+                value={paymentAccount.paymentRecipientName}
+                onChange={event => setPaymentAccount(previous => ({ ...previous, paymentRecipientName: event.target.value }))}
+                data-testid="input-payment-recipient"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="payment-currency">Mena</Label>
+              <Input
+                id="payment-currency"
+                value={paymentAccount.paymentCurrency}
+                onChange={event => setPaymentAccount(previous => ({ ...previous, paymentCurrency: event.target.value.toUpperCase() }))}
+                maxLength={3}
+                data-testid="input-payment-currency"
+              />
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            IBAN a mena sa doplnia aj automaticky pri synchronizácii s FIO. Použijú sa v QR kóde každej platby.
+          </p>
+          <Button
+            onClick={() => savePaymentAccountMutation.mutate()}
+            disabled={!paymentAccount.paymentIban || savePaymentAccountMutation.isPending}
+            data-testid="button-save-payment-account"
+          >
+            {savePaymentAccountMutation.isPending ? "Ukladám..." : "Uložiť platobný účet"}
           </Button>
         </CardContent>
       </Card>

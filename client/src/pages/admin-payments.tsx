@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Link } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Trash2, CreditCard } from "lucide-react";
+import { Plus, Trash2, CreditCard, QrCode } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { sk } from "date-fns/locale";
 
@@ -35,7 +36,7 @@ export default function AdminPayments() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [form, setForm] = useState({ userId: "", amount: "", dueDate: "", variableSymbol: "", description: "" });
+  const [form, setForm] = useState({ userId: "", amount: "", dueDate: "", description: "" });
 
   const { data: payments = [] } = useQuery<PaymentWithUser[]>({
     queryKey: ["/api/payments/all"],
@@ -44,16 +45,22 @@ export default function AdminPayments() {
   const { data: users = [] } = useQuery<UserItem[]>({
     queryKey: ["/api/users"],
   });
+  const activeUsers = users.filter(user => user.isActive);
 
   const createMutation = useMutation({
-    mutationFn: (data: any) => apiRequest("POST", "/api/payments", data),
-    onSuccess: () => {
+    mutationFn: async ({ bulk, data }: { bulk: boolean; data: Record<string, unknown> }) => {
+      const response = await apiRequest("POST", bulk ? "/api/payments/bulk" : "/api/payments", data);
+      return response.json() as Promise<{ created?: number }>;
+    },
+    onSuccess: result => {
       queryClient.invalidateQueries({ queryKey: ["/api/payments/all"] });
       queryClient.invalidateQueries({ queryKey: ["/api/payments"] });
       queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
-      toast({ title: "Platba vytvorená" });
+      toast({
+        title: result.created ? `${result.created} platieb vytvorených` : "Platba vytvorená",
+      });
       setDialogOpen(false);
-      setForm({ userId: "", amount: "", dueDate: "", variableSymbol: "", description: "" });
+      setForm({ userId: "", amount: "", dueDate: "", description: "" });
     },
     onError: (err: any) => toast({ title: "Chyba", description: err.message, variant: "destructive" }),
   });
@@ -81,13 +88,20 @@ export default function AdminPayments() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    createMutation.mutate({
-      userId: parseInt(form.userId),
+    const bulk = form.userId === "all";
+    createMutation.mutate({ bulk, data: {
+      ...(bulk ? {} : { userId: parseInt(form.userId) }),
       amount: parseInt(form.amount),
       dueDate: form.dueDate,
-      variableSymbol: form.variableSymbol || undefined,
       description: form.description,
-    });
+    } });
+  };
+
+  const handleUserChange = (userId: string) => {
+    setForm(previous => ({
+      ...previous,
+      userId,
+    }));
   };
 
   const statusBadge = (status: string) => {
@@ -119,14 +133,20 @@ export default function AdminPayments() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label>Člen</Label>
-                <Select value={form.userId} onValueChange={v => setForm({ ...form, userId: v })}>
+                <Select value={form.userId} onValueChange={handleUserChange}>
                   <SelectTrigger data-testid="select-user"><SelectValue placeholder="Vyber člena" /></SelectTrigger>
                   <SelectContent>
-                    {users.filter(user => user.isActive).map(user => (
+                    <SelectItem value="all">Všetci aktívni členovia ({activeUsers.length})</SelectItem>
+                    {activeUsers.map(user => (
                       <SelectItem key={user.id} value={String(user.id)}>{user.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                {form.userId === "all" && (
+                  <p className="text-xs text-muted-foreground">
+                    Vytvorí sa samostatná platba pre každého aktívneho člena.
+                  </p>
+                )}
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
@@ -139,16 +159,21 @@ export default function AdminPayments() {
                 </div>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="vs">Variabilný symbol</Label>
-                <Input id="vs" value={form.variableSymbol} onChange={e => setForm({ ...form, variableSymbol: e.target.value })} placeholder="napr. 1234" data-testid="input-variable-symbol" />
+                <p className="text-xs text-muted-foreground">
+                  Variabilný symbol sa vygeneruje automaticky ako jedinečné číslo platby.
+                </p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="desc">Popis</Label>
                 <Textarea id="desc" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} required rows={2} placeholder="Členské poplatky, dresy,..." data-testid="input-description" />
               </div>
               <DialogFooter>
-                <Button type="submit" disabled={createMutation.isPending} data-testid="button-submit-payment">
-                  {createMutation.isPending ? "Vytváram..." : "Vytvoriť"}
+                <Button type="submit" disabled={createMutation.isPending || !form.userId} data-testid="button-submit-payment">
+                  {createMutation.isPending
+                    ? "Vytváram..."
+                    : form.userId === "all"
+                      ? `Vytvoriť ${activeUsers.length} platieb`
+                      : "Vytvoriť"}
                 </Button>
               </DialogFooter>
             </form>
@@ -198,6 +223,11 @@ export default function AdminPayments() {
                   <p className="text-xs text-muted-foreground mt-0.5">{p.description}</p>
                 </div>
                 <div className="flex flex-col gap-1 shrink-0">
+                  <Button variant="outline" size="sm" className="h-7 text-xs" asChild>
+                    <Link href={`/payments/${p.id}`} data-testid={`button-payment-detail-${p.id}`}>
+                      <QrCode className="w-3 h-3 mr-1" />Detail
+                    </Link>
+                  </Button>
                   <Select
                     value={p.status}
                     onValueChange={v => updateStatusMutation.mutate({ id: p.id, status: v })}
