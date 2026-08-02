@@ -1,11 +1,11 @@
 import {
-  users, emailVerificationTokens, events, eventResponses, polls, pollOptions, pollVotes,
+  users, playerStatistics, emailVerificationTokens, events, eventResponses, polls, pollOptions, pollVotes,
   payments, bankTransactions, cashTransactions, notificationSettings, pushSubscriptions, appSettings, teamResponsibilities,
   teamResponsibilityOwners, teamInventoryItems,
   mediaCollections, mediaFiles,
 } from '@shared/schema';
 import type {
-  User, InsertUser, EmailVerificationToken,
+  User, InsertUser, PlayerStatistic, EmailVerificationToken,
   Event, InsertEvent,
   EventResponse, InsertEventResponse,
   Poll, InsertPoll,
@@ -44,6 +44,14 @@ sqlite.exec(`
     theme TEXT NOT NULL DEFAULT 'light',
     email_verified INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS player_statistics (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL UNIQUE REFERENCES users(id),
+    goals INTEGER NOT NULL DEFAULT 0,
+    assists INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL
   );
 
   CREATE TABLE IF NOT EXISTS events (
@@ -524,6 +532,14 @@ export type TeamResponsibilityWithOwners = TeamResponsibility & {
   inventoryItems: TeamInventoryItem[];
 };
 
+export interface PlayerStatisticSummary {
+  userId: number;
+  name: string;
+  goals: number;
+  assists: number;
+  updatedAt: string | null;
+}
+
 export interface IStorage {
   // Users
   getUser(id: number): User | undefined;
@@ -534,6 +550,10 @@ export interface IStorage {
   updateUserActiveStatus(id: number, isActive: boolean): User | undefined;
   updateUserTheme(id: number, theme: "light" | "dark"): User | undefined;
   markUserEmailVerified(id: number): User | undefined;
+
+  // Player statistics
+  getPlayerStatistics(): PlayerStatisticSummary[];
+  adjustPlayerStatistics(userId: number, goalsDelta: number, assistsDelta: number): PlayerStatisticSummary | undefined;
 
   // Email verification
   createEmailVerificationToken(userId: number, tokenHash: string, expiresAt: string): EmailVerificationToken;
@@ -691,6 +711,51 @@ export class DatabaseStorage implements IStorage {
 
   markUserEmailVerified(id: number): User | undefined {
     return db.update(users).set({ emailVerified: true }).where(eq(users.id, id)).returning().get();
+  }
+
+  // ============ PLAYER STATISTICS ============
+  getPlayerStatistics(): PlayerStatisticSummary[] {
+    const statisticsByUser = new Map<number, PlayerStatistic>(
+      db.select().from(playerStatistics).all().map(statistic => [statistic.userId, statistic]),
+    );
+    return this.getAllUsers()
+      .filter(user => user.isActive && user.emailVerified)
+      .map(user => {
+        const statistic = statisticsByUser.get(user.id);
+        return {
+          userId: user.id,
+          name: user.name,
+          goals: statistic?.goals ?? 0,
+          assists: statistic?.assists ?? 0,
+          updatedAt: statistic?.updatedAt ?? null,
+        };
+      })
+      .sort((first, second) => second.goals - first.goals || second.assists - first.assists || first.name.localeCompare(second.name, "sk"));
+  }
+
+  adjustPlayerStatistics(userId: number, goalsDelta: number, assistsDelta: number): PlayerStatisticSummary | undefined {
+    const user = this.getUser(userId);
+    if (!user?.isActive || !user.emailVerified) return undefined;
+    const statistic = db.transaction(tx => {
+      const existing = tx.select().from(playerStatistics).where(eq(playerStatistics.userId, userId)).get();
+      const goals = (existing?.goals ?? 0) + goalsDelta;
+      const assists = (existing?.assists ?? 0) + assistsDelta;
+      if (goals < 0 || assists < 0) throw new Error("Štatistika nemôže byť záporná");
+      if (goals > 10_000 || assists > 10_000) throw new Error("Štatistika je príliš vysoká");
+      const updatedAt = new Date().toISOString();
+      if (existing) {
+        return tx.update(playerStatistics)
+          .set({ goals, assists, updatedAt })
+          .where(eq(playerStatistics.id, existing.id))
+          .returning()
+          .get();
+      }
+      return tx.insert(playerStatistics)
+        .values({ userId, goals, assists, updatedAt })
+        .returning()
+        .get();
+    });
+    return { userId, name: user.name, goals: statistic.goals, assists: statistic.assists, updatedAt: statistic.updatedAt };
   }
 
   // ============ EMAIL VERIFICATION ============

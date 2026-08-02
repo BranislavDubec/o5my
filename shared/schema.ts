@@ -33,6 +33,17 @@ export type InsertUser = z.infer<typeof insertUserSchema>;
 export type LoginUser = z.infer<typeof loginUserSchema>;
 export type User = typeof users.$inferSelect;
 
+// ============ PLAYER STATISTICS ============
+export const playerStatistics = sqliteTable("player_statistics", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: integer("user_id").notNull().unique().references(() => users.id),
+  goals: integer("goals").notNull().default(0),
+  assists: integer("assists").notNull().default(0),
+  updatedAt: text("updated_at").notNull().$defaultFn(() => new Date().toISOString()),
+});
+
+export type PlayerStatistic = typeof playerStatistics.$inferSelect;
+
 // ============ EMAIL VERIFICATION TOKENS ============
 export const emailVerificationTokens = sqliteTable("email_verification_tokens", {
   id: integer("id").primaryKey({ autoIncrement: true }),

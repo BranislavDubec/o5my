@@ -509,6 +509,28 @@ export async function registerRoutes(
     res.json({ message: "Vec bola zmazaná" });
   });
 
+  // ============ PLAYER STATISTICS ============
+  app.get("/api/statistics", requireAuth, (_req, res) => {
+    res.json(storage.getPlayerStatistics());
+  });
+
+  app.patch("/api/statistics/:userId", requireAdmin, (req, res) => {
+    try {
+      const userId = Number(req.params.userId);
+      const goalsDelta = Number(req.body?.goalsDelta ?? 0);
+      const assistsDelta = Number(req.body?.assistsDelta ?? 0);
+      if (!Number.isInteger(userId)) return res.status(400).json({ message: "Neplatné ID hráča" });
+      if (![-1, 0, 1].includes(goalsDelta) || ![-1, 0, 1].includes(assistsDelta) || (goalsDelta === 0 && assistsDelta === 0)) {
+        return res.status(400).json({ message: "Naraz možno pridať alebo odobrať jeden gól či asistenciu" });
+      }
+      const statistic = storage.adjustPlayerStatistics(userId, goalsDelta, assistsDelta);
+      if (!statistic) return res.status(404).json({ message: "Aktívny hráč nebol nájdený" });
+      res.json(statistic);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message || "Štatistiku sa nepodarilo upraviť" });
+    }
+  });
+
   // ============ USERS (Admin) ============
   app.get("/api/users", requireAdmin, (_req, res) => {
     const allUsers = storage.getAllUsers().map(({ password, ...u }) => u);
