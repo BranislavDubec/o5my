@@ -39,6 +39,7 @@ interface FioStatementResult {
   transactions: FioTransaction[];
   iban?: string;
   currency?: string;
+  closingBalance?: number;
 }
 
 async function fetchFioStatement(url: string): Promise<FioStatementResult> {
@@ -54,6 +55,7 @@ async function fetchFioStatement(url: string): Promise<FioStatementResult> {
     transactions: data.accountStatement?.transactionList?.transaction || [],
     iban: data.accountStatement?.info?.iban,
     currency: data.accountStatement?.info?.currency,
+    closingBalance: data.accountStatement?.info?.closingBalance,
   };
 }
 
@@ -88,7 +90,7 @@ export async function syncFioTransactions(
   token: string,
   dateFrom?: string,
   dateTo?: string
-): Promise<{ synced: number; matched: number }> {
+): Promise<{ synced: number; matched: number; accountBalance?: number }> {
   let statement: FioStatementResult;
 
   if (dateFrom && dateTo) {
@@ -101,6 +103,10 @@ export async function syncFioTransactions(
 
   if (statement.iban) storage.setAppSetting('payment_iban', statement.iban);
   if (statement.currency) storage.setAppSetting('payment_currency', statement.currency.toUpperCase());
+  if (typeof statement.closingBalance === 'number' && Number.isFinite(statement.closingBalance)) {
+    storage.setAppSetting('fio_account_balance', String(statement.closingBalance));
+    storage.setAppSetting('fio_balance_updated_at', new Date().toISOString());
+  }
 
   let synced = 0;
   let matched = 0;
@@ -138,7 +144,7 @@ export async function syncFioTransactions(
     }
   }
 
-  return { synced, matched };
+  return { synced, matched, accountBalance: statement.closingBalance };
 }
 
 /**

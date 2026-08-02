@@ -7,7 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Shield, RefreshCw, Banknote, Clock, CheckCircle2, Landmark } from "lucide-react";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Shield, RefreshCw, Banknote, Clock, CheckCircle2, Landmark, WalletCards, Plus, Minus, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { sk } from "date-fns/locale";
 
@@ -29,12 +31,29 @@ interface BankSettings {
   paymentIban: string;
   paymentRecipientName: string;
   paymentCurrency: string;
+  accountBalance: number | null;
+  balanceUpdatedAt: string | null;
+}
+
+interface CashTransaction {
+  id: number;
+  type: "income" | "expense";
+  amount: number;
+  description: string;
+  createdAt: string;
+}
+
+interface CashboxSummary {
+  balance: number;
+  transactions: CashTransaction[];
 }
 
 export default function AdminBank() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [token, setToken] = useState("");
+  const [cashDialogOpen, setCashDialogOpen] = useState(false);
+  const [cashForm, setCashForm] = useState({ type: "income" as "income" | "expense", amount: "", description: "" });
   const [paymentAccount, setPaymentAccount] = useState({
     paymentIban: "",
     paymentRecipientName: "O5MY Futsal",
@@ -56,6 +75,10 @@ export default function AdminBank() {
 
   const { data: transactions = [], refetch } = useQuery<BankTransaction[]>({
     queryKey: ["/api/bank/transactions"],
+  });
+
+  const { data: cashbox } = useQuery<CashboxSummary>({
+    queryKey: ["/api/cashbox"],
   });
 
   const saveTokenMutation = useMutation({
@@ -91,14 +114,118 @@ export default function AdminBank() {
     onError: (err: any) => toast({ title: "Synchronizácia zlyhala", description: err.message, variant: "destructive" }),
   });
 
+  const cashMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/cashbox/transactions", {
+      type: cashForm.type,
+      amount: Number(cashForm.amount),
+      description: cashForm.description,
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/cashbox"] });
+      toast({ title: cashForm.type === "income" ? "Príjem bol pridaný" : "Výdavok bol pridaný" });
+      setCashDialogOpen(false);
+      setCashForm({ type: "income", amount: "", description: "" });
+    },
+    onError: (err: any) => toast({ title: "Pohyb sa nepodarilo uložiť", description: err.message, variant: "destructive" }),
+  });
+
+  const deleteCashMutation = useMutation({
+    mutationFn: (id: number) => apiRequest("DELETE", `/api/cashbox/transactions/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/cashbox"] });
+      toast({ title: "Pohyb bol zmazaný" });
+    },
+    onError: (err: any) => toast({ title: "Pohyb sa nepodarilo zmazať", description: err.message, variant: "destructive" }),
+  });
+
+  const openCashDialog = (type: "income" | "expense") => {
+    setCashForm({ type, amount: "", description: "" });
+    setCashDialogOpen(true);
+  };
+
   const lastSync = settings?.lastSync ? format(new Date(settings.lastSync), "d. MMM yyyy HH:mm", { locale: sk }) : "Nikdy";
+  const balanceUpdatedAt = settings?.balanceUpdatedAt
+    ? format(new Date(settings.balanceUpdatedAt), "d. MMM yyyy HH:mm", { locale: sk })
+    : null;
+  const currency = settings?.paymentCurrency || "CZK";
+  const formatMoney = (amount: number) => {
+    try {
+      return new Intl.NumberFormat("sk-SK", { style: "currency", currency, maximumFractionDigits: 2 }).format(amount);
+    } catch {
+      return `${amount} ${currency}`;
+    }
+  };
 
   return (
-    <div className="space-y-6 max-w-2xl">
+    <div className="space-y-6 max-w-4xl">
       <div>
         <h1 className="font-serif text-xl font-bold">Banková integrácia</h1>
         <p className="text-sm text-muted-foreground mt-1">FIO banka — read-only prístup k transakciám</p>
       </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Card>
+          <CardContent className="p-5">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm text-muted-foreground">Zostatok na bankovom účte</p>
+                <p className="text-2xl font-bold mt-1" data-testid="bank-account-balance">
+                  {settings?.accountBalance === null || settings?.accountBalance === undefined ? `— ${currency}` : formatMoney(settings.accountBalance)}
+                </p>
+              </div>
+              <div className="w-10 h-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center"><Landmark className="w-5 h-5" /></div>
+            </div>
+            <p className="text-xs text-muted-foreground mt-3">
+              {balanceUpdatedAt ? `Aktualizované z Fio API: ${balanceUpdatedAt}` : "Zostatok sa doplní pri synchronizácii s Fio API."}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-5">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm text-muted-foreground">Pokladnička · hotovosť</p>
+                <p className="text-2xl font-bold mt-1" data-testid="cashbox-balance">
+                  {cashbox ? formatMoney(cashbox.balance) : `— ${currency}`}
+                </p>
+              </div>
+              <div className="w-10 h-10 rounded-lg bg-amber-500/15 text-amber-600 flex items-center justify-center"><WalletCards className="w-5 h-5" /></div>
+            </div>
+            <div className="flex gap-2 mt-3">
+              <Button size="sm" variant="outline" onClick={() => openCashDialog("income")} data-testid="button-cash-income"><Plus className="w-3.5 h-3.5 mr-1" />Príjem</Button>
+              <Button size="sm" variant="outline" onClick={() => openCashDialog("expense")} data-testid="button-cash-expense"><Minus className="w-3.5 h-3.5 mr-1" />Výdavok</Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2"><WalletCards className="w-4 h-4" />Pohyby v pokladničke</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {!cashbox || cashbox.transactions.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-4">V pokladničke zatiaľ nie sú žiadne pohyby.</p>
+          ) : cashbox.transactions.slice(0, 20).map(transaction => (
+            <div key={transaction.id} className="flex items-center gap-3 rounded-lg border p-3" data-testid={`cash-transaction-${transaction.id}`}>
+              <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${transaction.type === "income" ? "bg-emerald-500/15 text-emerald-600" : "bg-red-500/15 text-red-600"}`}>
+                {transaction.type === "income" ? <Plus className="w-4 h-4" /> : <Minus className="w-4 h-4" />}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">{transaction.description}</p>
+                <p className="text-xs text-muted-foreground">{format(new Date(transaction.createdAt), "d. MMM yyyy HH:mm", { locale: sk })}</p>
+              </div>
+              <span className={`text-sm font-semibold ${transaction.type === "income" ? "text-emerald-600" : "text-red-600"}`}>
+                {transaction.type === "income" ? "+" : "−"}{formatMoney(transaction.amount)}
+              </span>
+              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => confirm("Zmazať tento hotovostný pohyb?") && deleteCashMutation.mutate(transaction.id)} aria-label="Zmazať hotovostný pohyb">
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
 
       {/* Connection Status */}
       <Card>
@@ -265,6 +392,42 @@ export default function AdminBank() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={cashDialogOpen} onOpenChange={open => {
+        setCashDialogOpen(open);
+        if (!open) setCashForm({ type: "income", amount: "", description: "" });
+      }}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Nový pohyb v pokladničke</DialogTitle></DialogHeader>
+          <form onSubmit={event => { event.preventDefault(); cashMutation.mutate(); }} className="space-y-4">
+            <div className="space-y-2">
+              <Label>Typ pohybu</Label>
+              <Select value={cashForm.type} onValueChange={value => setCashForm(previous => ({ ...previous, type: value as "income" | "expense" }))}>
+                <SelectTrigger data-testid="select-cash-type"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="income">Príjem do pokladničky</SelectItem>
+                  <SelectItem value="expense">Výdavok z pokladničky</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="cash-amount">Suma v {currency}</Label>
+              <Input id="cash-amount" type="number" min="1" step="1" value={cashForm.amount} onChange={event => setCashForm(previous => ({ ...previous, amount: event.target.value }))} required data-testid="input-cash-amount" />
+              {cashForm.type === "expense" && cashbox && <p className="text-xs text-muted-foreground">Dostupná hotovosť: {formatMoney(cashbox.balance)}</p>}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="cash-description">Popis</Label>
+              <Input id="cash-description" value={cashForm.description} onChange={event => setCashForm(previous => ({ ...previous, description: event.target.value }))} maxLength={200} placeholder="Napr. výber za tréning" required data-testid="input-cash-description" />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setCashDialogOpen(false)}>Zrušiť</Button>
+              <Button type="submit" disabled={cashMutation.isPending || !cashForm.amount || !cashForm.description.trim()} data-testid="button-save-cash-transaction">
+                {cashMutation.isPending ? "Ukladám…" : "Uložiť pohyb"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

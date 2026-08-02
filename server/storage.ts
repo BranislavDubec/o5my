@@ -1,6 +1,7 @@
 import {
   users, emailVerificationTokens, events, eventResponses, polls, pollOptions, pollVotes,
-  payments, bankTransactions, notificationSettings, pushSubscriptions, appSettings,
+  payments, bankTransactions, cashTransactions, notificationSettings, pushSubscriptions, appSettings, teamResponsibilities,
+  teamResponsibilityOwners, teamInventoryItems,
   mediaCollections, mediaFiles,
 } from '@shared/schema';
 import type {
@@ -12,9 +13,11 @@ import type {
   PollVote, InsertPollVote,
   Payment, InsertPayment,
   BankTransaction,
+  CashTransaction, InsertCashTransaction,
   NotificationSettings, InsertNotificationSettings,
   PushSubscriptionRecord,
-  AppSetting,
+  AppSetting, TeamResponsibility, InsertTeamResponsibility,
+  TeamInventoryItem, InsertTeamInventoryItem,
   MediaCollection, MediaFile,
 } from '@shared/schema';
 import { drizzle } from "drizzle-orm/better-sqlite3";
@@ -153,6 +156,15 @@ sqlite.exec(`
     synced_at TEXT NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS cash_transactions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    type TEXT NOT NULL,
+    amount INTEGER NOT NULL,
+    description TEXT NOT NULL,
+    created_by INTEGER REFERENCES users(id),
+    created_at TEXT NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS notification_settings (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL REFERENCES users(id),
@@ -174,6 +186,44 @@ sqlite.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     key TEXT NOT NULL UNIQUE,
     value TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS team_responsibilities (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    section TEXT NOT NULL,
+    title TEXT NOT NULL,
+    kind TEXT NOT NULL DEFAULT 'responsibility',
+    status TEXT NOT NULL DEFAULT 'ok',
+    owner TEXT,
+    notes TEXT,
+    quantity INTEGER,
+    usable_quantity INTEGER,
+    location TEXT,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS team_responsibility_owners (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    responsibility_id INTEGER NOT NULL REFERENCES team_responsibilities(id),
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    created_at TEXT NOT NULL,
+    UNIQUE(responsibility_id, user_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS team_inventory_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    responsibility_id INTEGER NOT NULL REFERENCES team_responsibilities(id),
+    name TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'ok',
+    quantity INTEGER,
+    usable_quantity INTEGER,
+    location TEXT,
+    notes TEXT,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
   );
 
   CREATE TABLE IF NOT EXISTS media_collections (
@@ -199,6 +249,256 @@ sqlite.exec(`
   );
 `);
 
+const responsibilityColumns = sqlite.prepare("PRAGMA table_info(team_responsibilities)")
+  .all() as Array<{ name: string }>;
+const responsibilityHadKind = responsibilityColumns.some(column => column.name === "kind");
+if (!responsibilityHadKind) {
+  sqlite.exec("ALTER TABLE team_responsibilities ADD COLUMN kind TEXT NOT NULL DEFAULT 'responsibility'");
+}
+if (!responsibilityColumns.some(column => column.name === "status")) {
+  sqlite.exec("ALTER TABLE team_responsibilities ADD COLUMN status TEXT NOT NULL DEFAULT 'ok'");
+}
+if (!responsibilityColumns.some(column => column.name === "quantity")) {
+  sqlite.exec("ALTER TABLE team_responsibilities ADD COLUMN quantity INTEGER");
+}
+if (!responsibilityColumns.some(column => column.name === "usable_quantity")) {
+  sqlite.exec("ALTER TABLE team_responsibilities ADD COLUMN usable_quantity INTEGER");
+}
+if (!responsibilityColumns.some(column => column.name === "location")) {
+  sqlite.exec("ALTER TABLE team_responsibilities ADD COLUMN location TEXT");
+}
+if (!responsibilityHadKind) {
+  sqlite.exec(`
+    UPDATE team_responsibilities
+    SET kind = 'inventory'
+    WHERE section = 'Výbava';
+
+    UPDATE team_responsibilities
+    SET quantity = 4, usable_quantity = 2, status = 'attention'
+    WHERE section = 'Výbava' AND title = 'Balóny';
+
+    UPDATE team_responsibilities
+    SET status = 'attention'
+    WHERE section = 'Výbava' AND title = 'Lekárnička';
+  `);
+}
+
+const organizationSeedMarker = "team_responsibilities_seeded_v1";
+const organizationSeeded = sqlite.prepare("SELECT value FROM app_settings WHERE key = ?")
+  .get(organizationSeedMarker) as { value: string } | undefined;
+
+if (!organizationSeeded) {
+  const existingResponsibilities = sqlite.prepare("SELECT COUNT(*) AS count FROM team_responsibilities")
+    .get() as { count: number };
+
+  if (existingResponsibilities.count === 0) {
+    const initialResponsibilities = [
+      {
+        section: "Administratíva",
+        title: "Klubová administratíva",
+        kind: "responsibility",
+        status: "ok",
+        owner: "Krši, Lukáš",
+        notes: "• komunikácia s Poliakom\n• prihlášky a registrácie\n• prestupy",
+        quantity: null,
+        usableQuantity: null,
+        location: null,
+      },
+      {
+        section: "Finance",
+        title: "Kontrola platieb",
+        kind: "responsibility",
+        status: "ok",
+        owner: "Vedúci",
+        notes: "• platby vykonáva vedúci\n• kontrola, kto zaplatil a kto nezaplatil\n• výber peňazí za tréning mimo tímu",
+        quantity: null,
+        usableQuantity: null,
+        location: null,
+      },
+      {
+        section: "Výbava",
+        title: "Taška a náhradná výbava",
+        kind: "inventory",
+        status: "ok",
+        owner: "Braňo",
+        notes: "Obsah tašky:\n• 2 dresy\n• žlté rozlišky\n• pár červených a 1 zelená rozliška\n• coach tabuľa\n• pumpa\n• pokladnička (~200 Kč)\n• brankárske rukavice\n\nU Braňa:\n• staré dresy Mara a Varič\n• brankárske veci Horníka\n• ďalšie kusy oblečenia",
+        quantity: 1,
+        usableQuantity: 1,
+        location: null,
+      },
+      {
+        section: "Výbava",
+        title: "Lekárnička",
+        kind: "inventory",
+        status: "attention",
+        owner: "Braňo",
+        notes: "• mraziace spreje\n• dezinfekcia a peroxid\n• obväzy\n• náplasti a ošetrenie odrenín\n• lepiaca páska\n• textilná páska — treba doplniť novú\n• rukavice",
+        quantity: 1,
+        usableQuantity: 1,
+        location: null,
+      },
+      {
+        section: "Výbava",
+        title: "Balóny",
+        kind: "inventory",
+        status: "attention",
+        owner: "Braňo",
+        notes: "• približne 4 kusy\n• z toho 2 použiteľné\n• 1 balón od Slavoja",
+        quantity: 4,
+        usableQuantity: 2,
+        location: null,
+      },
+      {
+        section: "Zápasy",
+        title: "Organizácia zápasov",
+        kind: "responsibility",
+        status: "ok",
+        owner: null,
+        notes: "• anketa účasti na zápas\n• zápis v IS FAČR",
+        quantity: null,
+        usableQuantity: null,
+        location: null,
+      },
+      {
+        section: "Zápasy",
+        title: "Zapisovač gólov",
+        kind: "responsibility",
+        status: "ok",
+        owner: "Braňo",
+        notes: null,
+        quantity: null,
+        usableQuantity: null,
+        location: null,
+      },
+      {
+        section: "Zápasy",
+        title: "Zapisovač asistencií",
+        kind: "responsibility",
+        status: "ok",
+        owner: "Krši",
+        notes: null,
+        quantity: null,
+        usableQuantity: null,
+        location: null,
+      },
+    ];
+    const insertResponsibility = sqlite.prepare(`
+      INSERT INTO team_responsibilities
+        (section, title, kind, status, owner, notes, quantity, usable_quantity, location, sort_order, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    const now = new Date().toISOString();
+    sqlite.transaction(() => {
+      initialResponsibilities.forEach((item, index) => {
+        insertResponsibility.run(
+          item.section,
+          item.title,
+          item.kind,
+          item.status,
+          item.owner,
+          item.notes,
+          item.quantity,
+          item.usableQuantity,
+          item.location,
+          index,
+          now,
+          now,
+        );
+      });
+    })();
+  }
+
+  sqlite.prepare("INSERT INTO app_settings (key, value) VALUES (?, ?)")
+    .run(organizationSeedMarker, "1");
+}
+
+const inventorySeedMarker = "team_inventory_items_seeded_v1";
+const inventorySeeded = sqlite.prepare("SELECT value FROM app_settings WHERE key = ?")
+  .get(inventorySeedMarker) as { value: string } | undefined;
+
+if (!inventorySeeded) {
+  const initialInventoryItems = [
+    { parent: "Taška a náhradná výbava", name: "Náhradné dresy", status: "ok", quantity: 2, usableQuantity: 2, location: null, notes: null },
+    { parent: "Taška a náhradná výbava", name: "Žlté rozlišky", status: "ok", quantity: null, usableQuantity: null, location: null, notes: null },
+    { parent: "Taška a náhradná výbava", name: "Červené rozlišky", status: "ok", quantity: 2, usableQuantity: 2, location: null, notes: "Pár kusov" },
+    { parent: "Taška a náhradná výbava", name: "Zelená rozliška", status: "ok", quantity: 1, usableQuantity: 1, location: null, notes: null },
+    { parent: "Taška a náhradná výbava", name: "Coach tabuľa", status: "ok", quantity: 1, usableQuantity: 1, location: null, notes: null },
+    { parent: "Taška a náhradná výbava", name: "Pumpa", status: "ok", quantity: 1, usableQuantity: 1, location: null, notes: null },
+    { parent: "Taška a náhradná výbava", name: "Brankárske rukavice", status: "ok", quantity: 1, usableQuantity: 1, location: null, notes: null },
+    { parent: "Taška a náhradná výbava", name: "Staré dresy Mara a Varič", status: "ok", quantity: 2, usableQuantity: 2, location: "u Braňa", notes: null },
+    { parent: "Taška a náhradná výbava", name: "Brankárske veci Horníka", status: "ok", quantity: null, usableQuantity: null, location: "u Braňa", notes: null },
+    { parent: "Taška a náhradná výbava", name: "Ďalšie kusy oblečenia", status: "ok", quantity: null, usableQuantity: null, location: "u Braňa", notes: null },
+    { parent: "Lekárnička", name: "Mraziace spreje", status: "ok", quantity: null, usableQuantity: null, location: null, notes: null },
+    { parent: "Lekárnička", name: "Dezinfekcia a peroxid", status: "ok", quantity: null, usableQuantity: null, location: null, notes: null },
+    { parent: "Lekárnička", name: "Obväzy", status: "ok", quantity: null, usableQuantity: null, location: null, notes: null },
+    { parent: "Lekárnička", name: "Náplasti na odreniny", status: "ok", quantity: null, usableQuantity: null, location: null, notes: null },
+    { parent: "Lekárnička", name: "Lepiaca páska", status: "ok", quantity: null, usableQuantity: null, location: null, notes: null },
+    { parent: "Lekárnička", name: "Textilná páska", status: "attention", quantity: null, usableQuantity: null, location: null, notes: "Treba doplniť novú" },
+    { parent: "Lekárnička", name: "Rukavice", status: "ok", quantity: null, usableQuantity: null, location: null, notes: null },
+    { parent: "Balóny", name: "Tímové balóny", status: "attention", quantity: 4, usableQuantity: 2, location: null, notes: null },
+    { parent: "Balóny", name: "Balón od Slavoja", status: "ok", quantity: 1, usableQuantity: 1, location: null, notes: null },
+  ];
+  const findParent = sqlite.prepare("SELECT id FROM team_responsibilities WHERE title = ? AND kind = 'inventory'");
+  const countParentItems = sqlite.prepare("SELECT COUNT(*) AS count FROM team_inventory_items WHERE responsibility_id = ?");
+  const insertInventoryItem = sqlite.prepare(`
+    INSERT INTO team_inventory_items
+      (responsibility_id, name, status, quantity, usable_quantity, location, notes, sort_order, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const now = new Date().toISOString();
+  sqlite.transaction(() => {
+    const parentOffsets = new Map<number, number>();
+    initialInventoryItems.forEach(item => {
+      const parent = findParent.get(item.parent) as { id: number } | undefined;
+      if (!parent) return;
+      const existingCount = countParentItems.get(parent.id) as { count: number };
+      if (existingCount.count > 0 && !parentOffsets.has(parent.id)) return;
+      const sortOrder = parentOffsets.get(parent.id) ?? 0;
+      insertInventoryItem.run(
+        parent.id,
+        item.name,
+        item.status,
+        item.quantity,
+        item.usableQuantity,
+        item.location,
+        item.notes,
+        sortOrder,
+        now,
+        now,
+      );
+      parentOffsets.set(parent.id, sortOrder + 1);
+    });
+  })();
+  sqlite.prepare("INSERT INTO app_settings (key, value) VALUES (?, ?)")
+    .run(inventorySeedMarker, "1");
+}
+
+const cashboxSeedMarker = "cashbox_initialized_v1";
+const cashboxSeeded = sqlite.prepare("SELECT value FROM app_settings WHERE key = ?")
+  .get(cashboxSeedMarker) as { value: string } | undefined;
+
+if (!cashboxSeeded) {
+  const cashTransactionCount = sqlite.prepare("SELECT COUNT(*) AS count FROM cash_transactions")
+    .get() as { count: number };
+  if (cashTransactionCount.count === 0) {
+    sqlite.prepare(`
+      INSERT INTO cash_transactions (type, amount, description, created_by, created_at)
+      VALUES ('income', 200, 'Počiatočný stav pokladničky (odhad)', NULL, ?)
+    `).run(new Date().toISOString());
+  }
+
+  sqlite.prepare(`
+    DELETE FROM team_inventory_items
+    WHERE name = 'Pokladnička'
+      AND responsibility_id IN (
+        SELECT id FROM team_responsibilities
+        WHERE title = 'Taška a náhradná výbava'
+      )
+  `).run();
+  sqlite.prepare("INSERT INTO app_settings (key, value) VALUES (?, ?)")
+    .run(cashboxSeedMarker, "1");
+}
+
 // Payment IDs are stable numeric values and therefore make safe, unique
 // variable symbols. Normalize older name-based symbols during startup too.
 sqlite.exec(`
@@ -219,6 +519,10 @@ export interface NewStoredMediaFile {
 }
 
 export type TacticWithFiles = MediaCollection & { files: MediaFile[] };
+export type TeamResponsibilityWithOwners = TeamResponsibility & {
+  owners: Array<Pick<User, "id" | "name">>;
+  inventoryItems: TeamInventoryItem[];
+};
 
 export interface IStorage {
   // Users
@@ -282,6 +586,12 @@ export interface IStorage {
   createBankTransaction(tx: Omit<BankTransaction, 'id'>): BankTransaction | undefined;
   updateBankTransactionMatch(id: number, paymentId: number | null): void;
 
+  // Cashbox
+  getAllCashTransactions(): CashTransaction[];
+  getCashBalance(): number;
+  createCashTransaction(tx: InsertCashTransaction): CashTransaction;
+  deleteCashTransaction(id: number): boolean;
+
   // Notification Settings
   getNotificationSettings(userId: number): NotificationSettings | undefined;
   upsertNotificationSettings(settings: Partial<InsertNotificationSettings> & { userId: number }): void;
@@ -289,6 +599,19 @@ export interface IStorage {
   upsertPushSubscription(userId: number, endpoint: string, subscription: string): PushSubscriptionRecord;
   deletePushSubscription(userId: number, endpoint: string): void;
   deletePushSubscriptionByEndpoint(endpoint: string): void;
+
+  // Team organization
+  getTeamResponsibilities(): TeamResponsibilityWithOwners[];
+  getTeamResponsibility(id: number): TeamResponsibilityWithOwners | undefined;
+  createTeamResponsibility(responsibility: InsertTeamResponsibility, ownerIds: number[]): TeamResponsibilityWithOwners;
+  updateTeamResponsibility(id: number, responsibility: InsertTeamResponsibility, ownerIds: number[]): TeamResponsibilityWithOwners | undefined;
+  deleteTeamResponsibility(id: number): boolean;
+  reorderTeamResponsibilities(ids: number[]): void;
+  getTeamInventoryItem(responsibilityId: number, itemId: number): TeamInventoryItem | undefined;
+  createTeamInventoryItem(item: InsertTeamInventoryItem): TeamInventoryItem;
+  updateTeamInventoryItem(responsibilityId: number, itemId: number, item: Omit<InsertTeamInventoryItem, "responsibilityId">): TeamInventoryItem | undefined;
+  deleteTeamInventoryItem(responsibilityId: number, itemId: number): boolean;
+  reorderTeamInventoryItems(responsibilityId: number, ids: number[]): void;
 
   // App Settings
   getAppSetting(key: string): string | undefined;
@@ -629,6 +952,28 @@ export class DatabaseStorage implements IStorage {
       .run();
   }
 
+  // ============ CASHBOX ============
+  getAllCashTransactions(): CashTransaction[] {
+    return db.select().from(cashTransactions)
+      .orderBy(desc(cashTransactions.createdAt), desc(cashTransactions.id))
+      .all();
+  }
+
+  getCashBalance(): number {
+    return this.getAllCashTransactions().reduce(
+      (balance, transaction) => balance + (transaction.type === "income" ? transaction.amount : -transaction.amount),
+      0,
+    );
+  }
+
+  createCashTransaction(tx: InsertCashTransaction): CashTransaction {
+    return db.insert(cashTransactions).values(tx).returning().get();
+  }
+
+  deleteCashTransaction(id: number): boolean {
+    return db.delete(cashTransactions).where(eq(cashTransactions.id, id)).run().changes > 0;
+  }
+
   // ============ NOTIFICATION SETTINGS ============
   getNotificationSettings(userId: number): NotificationSettings | undefined {
     return db.select().from(notificationSettings)
@@ -689,6 +1034,157 @@ export class DatabaseStorage implements IStorage {
     db.delete(pushSubscriptions)
       .where(eq(pushSubscriptions.endpoint, endpoint))
       .run();
+  }
+
+  // ============ TEAM ORGANIZATION ============
+  getTeamResponsibilities(): TeamResponsibilityWithOwners[] {
+    return db.select().from(teamResponsibilities)
+      .orderBy(asc(teamResponsibilities.sortOrder), asc(teamResponsibilities.id))
+      .all()
+      .map(responsibility => this.attachTeamResponsibilityOwners(responsibility));
+  }
+
+  getTeamResponsibility(id: number): TeamResponsibilityWithOwners | undefined {
+    const responsibility = db.select().from(teamResponsibilities)
+      .where(eq(teamResponsibilities.id, id))
+      .get();
+    return responsibility ? this.attachTeamResponsibilityOwners(responsibility) : undefined;
+  }
+
+  private attachTeamResponsibilityOwners(responsibility: TeamResponsibility): TeamResponsibilityWithOwners {
+    const owners = db.select().from(teamResponsibilityOwners)
+      .where(eq(teamResponsibilityOwners.responsibilityId, responsibility.id))
+      .all()
+      .map(assignment => db.select({ id: users.id, name: users.name })
+        .from(users)
+        .where(eq(users.id, assignment.userId))
+      .get())
+      .filter((owner): owner is Pick<User, "id" | "name"> => Boolean(owner));
+    const inventoryItems = db.select().from(teamInventoryItems)
+      .where(eq(teamInventoryItems.responsibilityId, responsibility.id))
+      .orderBy(asc(teamInventoryItems.sortOrder), asc(teamInventoryItems.id))
+      .all();
+    return { ...responsibility, owners, inventoryItems };
+  }
+
+  createTeamResponsibility(responsibility: InsertTeamResponsibility, ownerIds: number[]): TeamResponsibilityWithOwners {
+    const nextOrder = sqlite.prepare("SELECT COALESCE(MAX(sort_order), -1) + 1 AS value FROM team_responsibilities")
+      .get() as { value: number };
+    const created = db.transaction(tx => {
+      const item = tx.insert(teamResponsibilities)
+        .values({ ...responsibility, sortOrder: responsibility.sortOrder ?? nextOrder.value })
+        .returning()
+        .get();
+      if (ownerIds.length > 0) {
+        tx.insert(teamResponsibilityOwners)
+          .values(ownerIds.map(userId => ({ responsibilityId: item.id, userId })))
+          .run();
+      }
+      return item;
+    });
+    return this.attachTeamResponsibilityOwners(created);
+  }
+
+  updateTeamResponsibility(id: number, responsibility: InsertTeamResponsibility, ownerIds: number[]): TeamResponsibilityWithOwners | undefined {
+    if (!this.getTeamResponsibility(id)) return undefined;
+    db.transaction(tx => {
+      tx.update(teamResponsibilities)
+        .set({ ...responsibility, updatedAt: new Date().toISOString() })
+        .where(eq(teamResponsibilities.id, id))
+        .run();
+      tx.delete(teamResponsibilityOwners)
+        .where(eq(teamResponsibilityOwners.responsibilityId, id))
+        .run();
+      if (ownerIds.length > 0) {
+        tx.insert(teamResponsibilityOwners)
+          .values(ownerIds.map(userId => ({ responsibilityId: id, userId })))
+          .run();
+      }
+    });
+    return this.getTeamResponsibility(id);
+  }
+
+  deleteTeamResponsibility(id: number): boolean {
+    return db.transaction(tx => {
+      tx.delete(teamInventoryItems)
+        .where(eq(teamInventoryItems.responsibilityId, id))
+        .run();
+      tx.delete(teamResponsibilityOwners)
+        .where(eq(teamResponsibilityOwners.responsibilityId, id))
+        .run();
+      return tx.delete(teamResponsibilities).where(eq(teamResponsibilities.id, id)).run().changes > 0;
+    });
+  }
+
+  reorderTeamResponsibilities(ids: number[]): void {
+    const existingIds = db.select({ id: teamResponsibilities.id }).from(teamResponsibilities).all().map(item => item.id);
+    const sortedExisting = [...existingIds].sort((first, second) => first - second);
+    const sortedRequested = Array.from(new Set(ids)).sort((first, second) => first - second);
+    if (sortedExisting.length !== sortedRequested.length || sortedExisting.some((id, index) => id !== sortedRequested[index])) {
+      throw new Error("Neplatné poradie položiek");
+    }
+    db.transaction(tx => {
+      ids.forEach((id, index) => {
+        tx.update(teamResponsibilities)
+          .set({ sortOrder: index, updatedAt: new Date().toISOString() })
+          .where(eq(teamResponsibilities.id, id))
+          .run();
+      });
+    });
+  }
+
+  getTeamInventoryItem(responsibilityId: number, itemId: number): TeamInventoryItem | undefined {
+    return db.select().from(teamInventoryItems)
+      .where(and(eq(teamInventoryItems.id, itemId), eq(teamInventoryItems.responsibilityId, responsibilityId)))
+      .get();
+  }
+
+  createTeamInventoryItem(item: InsertTeamInventoryItem): TeamInventoryItem {
+    const nextOrder = sqlite.prepare("SELECT COALESCE(MAX(sort_order), -1) + 1 AS value FROM team_inventory_items WHERE responsibility_id = ?")
+      .get(item.responsibilityId) as { value: number };
+    return db.insert(teamInventoryItems)
+      .values({ ...item, sortOrder: item.sortOrder ?? nextOrder.value })
+      .returning()
+      .get();
+  }
+
+  updateTeamInventoryItem(
+    responsibilityId: number,
+    itemId: number,
+    item: Omit<InsertTeamInventoryItem, "responsibilityId">,
+  ): TeamInventoryItem | undefined {
+    return db.update(teamInventoryItems)
+      .set({ ...item, updatedAt: new Date().toISOString() })
+      .where(and(eq(teamInventoryItems.id, itemId), eq(teamInventoryItems.responsibilityId, responsibilityId)))
+      .returning()
+      .get();
+  }
+
+  deleteTeamInventoryItem(responsibilityId: number, itemId: number): boolean {
+    return db.delete(teamInventoryItems)
+      .where(and(eq(teamInventoryItems.id, itemId), eq(teamInventoryItems.responsibilityId, responsibilityId)))
+      .run().changes > 0;
+  }
+
+  reorderTeamInventoryItems(responsibilityId: number, ids: number[]): void {
+    const existingIds = db.select({ id: teamInventoryItems.id })
+      .from(teamInventoryItems)
+      .where(eq(teamInventoryItems.responsibilityId, responsibilityId))
+      .all()
+      .map(item => item.id);
+    const sortedExisting = [...existingIds].sort((first, second) => first - second);
+    const sortedRequested = Array.from(new Set(ids)).sort((first, second) => first - second);
+    if (sortedExisting.length !== sortedRequested.length || sortedExisting.some((id, index) => id !== sortedRequested[index])) {
+      throw new Error("Neplatné poradie inventára");
+    }
+    db.transaction(tx => {
+      ids.forEach((id, index) => {
+        tx.update(teamInventoryItems)
+          .set({ sortOrder: index, updatedAt: new Date().toISOString() })
+          .where(and(eq(teamInventoryItems.id, id), eq(teamInventoryItems.responsibilityId, responsibilityId)))
+          .run();
+      });
+    });
   }
 
   // ============ APP SETTINGS ============

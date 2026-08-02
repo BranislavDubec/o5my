@@ -192,6 +192,26 @@ export const bankTransactions = sqliteTable("bank_transactions", {
 
 export type BankTransaction = typeof bankTransactions.$inferSelect;
 
+// ============ CASHBOX ============
+export const cashTransactions = sqliteTable("cash_transactions", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  type: text("type").notNull(), // income | expense
+  amount: integer("amount").notNull(), // in CZK
+  description: text("description").notNull(),
+  createdBy: integer("created_by").references(() => users.id),
+  createdAt: text("created_at").notNull().$defaultFn(() => new Date().toISOString()),
+});
+
+export const insertCashTransactionSchema = createInsertSchema(cashTransactions).pick({
+  type: true,
+  amount: true,
+  description: true,
+  createdBy: true,
+});
+
+export type InsertCashTransaction = z.infer<typeof insertCashTransactionSchema>;
+export type CashTransaction = typeof cashTransactions.$inferSelect;
+
 // ============ NOTIFICATION SETTINGS ============
 export const notificationSettings = sqliteTable("notification_settings", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -221,6 +241,76 @@ export const pushSubscriptions = sqliteTable("push_subscriptions", {
 });
 
 export type PushSubscriptionRecord = typeof pushSubscriptions.$inferSelect;
+
+// ============ TEAM ORGANIZATION ============
+export const teamResponsibilities = sqliteTable("team_responsibilities", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  section: text("section").notNull(),
+  title: text("title").notNull(),
+  kind: text("kind").notNull().default("responsibility"), // responsibility | inventory
+  status: text("status").notNull().default("ok"), // ok | attention | done
+  owner: text("owner"),
+  notes: text("notes"),
+  quantity: integer("quantity"),
+  usableQuantity: integer("usable_quantity"),
+  location: text("location"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: text("created_at").notNull().$defaultFn(() => new Date().toISOString()),
+  updatedAt: text("updated_at").notNull().$defaultFn(() => new Date().toISOString()),
+});
+
+export const insertTeamResponsibilitySchema = createInsertSchema(teamResponsibilities).pick({
+  section: true,
+  title: true,
+  kind: true,
+  status: true,
+  owner: true,
+  notes: true,
+  quantity: true,
+  usableQuantity: true,
+  location: true,
+  sortOrder: true,
+});
+
+export type InsertTeamResponsibility = z.infer<typeof insertTeamResponsibilitySchema>;
+export type TeamResponsibility = typeof teamResponsibilities.$inferSelect;
+
+export const teamResponsibilityOwners = sqliteTable("team_responsibility_owners", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  responsibilityId: integer("responsibility_id").notNull().references(() => teamResponsibilities.id),
+  userId: integer("user_id").notNull().references(() => users.id),
+  createdAt: text("created_at").notNull().$defaultFn(() => new Date().toISOString()),
+});
+
+export type TeamResponsibilityOwner = typeof teamResponsibilityOwners.$inferSelect;
+
+export const teamInventoryItems = sqliteTable("team_inventory_items", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  responsibilityId: integer("responsibility_id").notNull().references(() => teamResponsibilities.id),
+  name: text("name").notNull(),
+  status: text("status").notNull().default("ok"), // ok | attention | done
+  quantity: integer("quantity"),
+  usableQuantity: integer("usable_quantity"),
+  location: text("location"),
+  notes: text("notes"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: text("created_at").notNull().$defaultFn(() => new Date().toISOString()),
+  updatedAt: text("updated_at").notNull().$defaultFn(() => new Date().toISOString()),
+});
+
+export const insertTeamInventoryItemSchema = createInsertSchema(teamInventoryItems).pick({
+  responsibilityId: true,
+  name: true,
+  status: true,
+  quantity: true,
+  usableQuantity: true,
+  location: true,
+  notes: true,
+  sortOrder: true,
+});
+
+export type InsertTeamInventoryItem = z.infer<typeof insertTeamInventoryItemSchema>;
+export type TeamInventoryItem = typeof teamInventoryItems.$inferSelect;
 
 // ============ APP SETTINGS (key-value store) ============
 export const appSettings = sqliteTable("app_settings", {

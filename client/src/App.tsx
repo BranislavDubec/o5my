@@ -21,6 +21,7 @@ import PaymentsPage from "@/pages/payments";
 import PaymentDetailPage from "@/pages/payment-detail";
 import MediaPage from "@/pages/media";
 import TacticDetailPage from "@/pages/tactic-detail";
+import OrganizationPage from "@/pages/organization";
 import AdminMembers from "@/pages/admin-members";
 import AdminPayments from "@/pages/admin-payments";
 import AdminBank from "@/pages/admin-bank";
@@ -108,6 +109,9 @@ function AppRouter() {
       </Route>
       <Route path="/files/tactics/:id">
         <ProtectedRoute><TacticDetailPage /></ProtectedRoute>
+      </Route>
+      <Route path="/organization">
+        <ProtectedRoute><OrganizationPage /></ProtectedRoute>
       </Route>
       <Route path="/settings">
         <ProtectedRoute><Settings /></ProtectedRoute>

@@ -177,20 +177,24 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         </Link>
-        <Card>
-          <CardContent className="p-4 flex flex-col items-center text-center">
-            <Calendar className="w-5 h-5 text-primary mb-2" />
-            <span className="text-xl font-bold" data-testid="stat-events">{stats?.eventCount ?? "—"}</span>
-            <span className="text-xs text-muted-foreground">Akcie</span>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 flex flex-col items-center text-center">
-            <Vote className="w-5 h-5 text-primary mb-2" />
-            <span className="text-xl font-bold" data-testid="stat-polls">{stats?.activePolls ?? "—"}</span>
-            <span className="text-xs text-muted-foreground">Ankety</span>
-          </CardContent>
-        </Card>
+        <Link href="/calendar" className="block rounded-lg" data-testid="link-dashboard-events">
+          <Card className="h-full hover-elevate cursor-pointer">
+            <CardContent className="p-4 flex flex-col items-center text-center">
+              <Calendar className="w-5 h-5 text-primary mb-2" />
+              <span className="text-xl font-bold" data-testid="stat-events">{stats?.eventCount ?? "—"}</span>
+              <span className="text-xs text-muted-foreground">Akcie</span>
+            </CardContent>
+          </Card>
+        </Link>
+        <Link href="/polls" className="block rounded-lg" data-testid="link-dashboard-polls">
+          <Card className="h-full hover-elevate cursor-pointer">
+            <CardContent className="p-4 flex flex-col items-center text-center">
+              <Vote className="w-5 h-5 text-primary mb-2" />
+              <span className="text-xl font-bold" data-testid="stat-polls">{stats?.activePolls ?? "—"}</span>
+              <span className="text-xs text-muted-foreground">Ankety</span>
+            </CardContent>
+          </Card>
+        </Link>
       </div>
 
       <Card>
