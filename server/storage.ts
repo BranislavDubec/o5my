@@ -35,6 +35,7 @@ sqlite.exec(`
     phone TEXT,
     role TEXT NOT NULL DEFAULT 'player',
     is_active INTEGER NOT NULL DEFAULT 1,
+    theme TEXT NOT NULL DEFAULT 'light',
     email_verified INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL
   );
@@ -63,6 +64,9 @@ if (!userColumns.some(column => column.name === "email_verified")) {
 }
 if (!userColumns.some(column => column.name === "is_active")) {
   sqlite.exec("ALTER TABLE users ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1");
+}
+if (!userColumns.some(column => column.name === "theme")) {
+  sqlite.exec("ALTER TABLE users ADD COLUMN theme TEXT NOT NULL DEFAULT 'light'");
 }
 
 sqlite.exec(`
@@ -169,6 +173,7 @@ export interface IStorage {
   createUser(user: InsertUser): User;
   updateUserRole(id: number, role: string): User | undefined;
   updateUserActiveStatus(id: number, isActive: boolean): User | undefined;
+  updateUserTheme(id: number, theme: "light" | "dark"): User | undefined;
   markUserEmailVerified(id: number): User | undefined;
 
   // Email verification
@@ -272,6 +277,10 @@ export class DatabaseStorage implements IStorage {
 
   updateUserActiveStatus(id: number, isActive: boolean): User | undefined {
     return db.update(users).set({ isActive }).where(eq(users.id, id)).returning().get();
+  }
+
+  updateUserTheme(id: number, theme: "light" | "dark"): User | undefined {
+    return db.update(users).set({ theme }).where(eq(users.id, id)).returning().get();
   }
 
   markUserEmailVerified(id: number): User | undefined {

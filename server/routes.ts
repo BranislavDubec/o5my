@@ -347,6 +347,20 @@ export async function registerRoutes(
     res.json({ message: "Nastavenia uložené" });
   });
 
+  app.put("/api/settings/theme", requireAuth, (req, res) => {
+    const { theme } = req.body;
+    if (theme !== "light" && theme !== "dark") {
+      return res.status(400).json({ message: "Neplatný farebný režim" });
+    }
+
+    const user = storage.updateUserTheme(req.user!.id, theme);
+    if (!user) {
+      return res.status(404).json({ message: "Používateľ nenájdený" });
+    }
+
+    res.json({ theme: user.theme });
+  });
+
   // ============ DASHBOARD STATS ============
   app.get("/api/stats", requireAuth, (req, res) => {
     const users = storage.getAllUsers();

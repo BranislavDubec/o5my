@@ -6,12 +6,12 @@ export default {
   theme: {
     extend: {
       fontSize: {
-        xs: ["0.8125rem", { lineHeight: "1.125rem" }],
-        sm: ["0.9375rem", { lineHeight: "1.375rem" }],
-        base: ["1.0625rem", { lineHeight: "1.625rem" }],
-        lg: ["1.1875rem", { lineHeight: "1.75rem" }],
-        xl: ["1.375rem", { lineHeight: "1.875rem" }],
-        "2xl": ["1.625rem", { lineHeight: "2.125rem" }],
+        xs: ["0.875rem", { lineHeight: "1.25rem" }],
+        sm: ["1rem", { lineHeight: "1.5rem" }],
+        base: ["1.125rem", { lineHeight: "1.75rem" }],
+        lg: ["1.25rem", { lineHeight: "1.875rem" }],
+        xl: ["1.4375rem", { lineHeight: "2rem" }],
+        "2xl": ["1.75rem", { lineHeight: "2.25rem" }],
       },
       borderRadius: {
         lg: ".5625rem", /* 9px */

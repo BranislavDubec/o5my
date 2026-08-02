@@ -6,6 +6,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/contexts/auth-context";
 import { PwaInstallProvider } from "@/contexts/pwa-install-context";
+import { ThemeProvider } from "@/contexts/theme-context";
 import { Layout } from "@/components/layout";
 import NotFound from "@/pages/not-found";
 import Login from "@/pages/login";
@@ -122,9 +123,11 @@ function App() {
         <TooltipProvider>
           <Toaster />
           <AuthProvider>
-            <Router hook={useAppHashLocation}>
-              <AppRouter />
-            </Router>
+            <ThemeProvider>
+              <Router hook={useAppHashLocation}>
+                <AppRouter />
+              </Router>
+            </ThemeProvider>
           </AuthProvider>
         </TooltipProvider>
       </PwaInstallProvider>

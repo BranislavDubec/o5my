@@ -1,6 +1,8 @@
-import { ReactNode, useState, useEffect } from "react";
+import { ReactNode, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/contexts/auth-context";
+import { useTheme } from "@/contexts/theme-context";
+import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import {
   Calendar, Users, Vote, CreditCard, Settings, LogOut,
@@ -39,25 +41,29 @@ function Logo() {
 }
 
 function ThemeToggle() {
-  const [isDark, setIsDark] = useState(false);
+  const { theme, updateTheme, isSaving } = useTheme();
+  const { toast } = useToast();
+  const isDark = theme === "dark";
 
-  useEffect(() => {
-    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    setIsDark(prefersDark);
-    document.documentElement.classList.toggle("dark", prefersDark);
-  }, []);
-
-  const toggle = () => {
-    const next = !isDark;
-    setIsDark(next);
-    document.documentElement.classList.toggle("dark", next);
+  const toggle = async () => {
+    try {
+      await updateTheme(isDark ? "light" : "dark");
+    } catch (error) {
+      toast({
+        title: "Režim sa nepodarilo uložiť",
+        description: error instanceof Error ? error.message : undefined,
+        variant: "destructive",
+      });
+    }
   };
 
   return (
     <button
       onClick={toggle}
+      disabled={isSaving}
       className="p-2 rounded-lg hover-elevate text-muted-foreground hover:text-foreground transition-colors"
-      aria-label="Prepnúť tmavý režim"
+      aria-label={isDark ? "Prepnúť na svetlý režim" : "Prepnúť na tmavý režim"}
+      aria-pressed={isDark}
       data-testid="button-theme-toggle"
     >
       {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}

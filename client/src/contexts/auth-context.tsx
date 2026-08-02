@@ -8,6 +8,7 @@ interface AuthUser {
   phone: string | null;
   role: string;
   isActive: boolean;
+  theme: "light" | "dark";
   emailVerified: boolean;
   createdAt: string;
 }
