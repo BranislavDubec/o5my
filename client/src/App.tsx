@@ -34,6 +34,13 @@ function FullPageSpinner() {
   );
 }
 
+function useAppHashLocation(
+  options?: Parameters<typeof useHashLocation>[0],
+): ReturnType<typeof useHashLocation> {
+  const [location, navigate] = useHashLocation(options);
+  return [location.split("?", 1)[0], navigate];
+}
+
 function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) {
   const { user, isLoading } = useAuth();
   if (isLoading) {
@@ -113,7 +120,7 @@ function App() {
       <TooltipProvider>
         <Toaster />
         <AuthProvider>
-          <Router hook={useHashLocation}>
+          <Router hook={useAppHashLocation}>
             <AppRouter />
           </Router>
         </AuthProvider>

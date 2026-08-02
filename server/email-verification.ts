@@ -44,7 +44,7 @@ export async function sendEmailVerification(user: { id: number; email: string; n
   );
 
   const appUrl = (process.env.APP_URL || "http://localhost:5000").replace(/\/$/, "");
-  const verificationUrl = `${appUrl}/#/verify-email?token=${encodeURIComponent(token)}`;
+  const verificationUrl = `${appUrl}/?token=${encodeURIComponent(token)}#/verify-email`;
   const safeName = escapeHtml(user.name);
 
   await createTransport().sendMail({

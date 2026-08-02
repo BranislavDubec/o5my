@@ -8,6 +8,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 type VerificationState = "loading" | "success" | "error";
 
 function getTokenFromHash() {
+  const tokenFromSearch = new URLSearchParams(window.location.search).get("token");
+  if (tokenFromSearch) return tokenFromSearch;
+
+  // Backward compatibility for links issued before the query was moved
+  // outside the hash route.
   const query = window.location.hash.split("?", 2)[1] || "";
   return new URLSearchParams(query).get("token");
 }
