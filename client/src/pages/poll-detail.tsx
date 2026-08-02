@@ -34,6 +34,7 @@ export default function PollDetailPage() {
       apiRequest("POST", `/api/polls/${id}/votes`, { optionId }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/polls", id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
       toast({ title: "Hlas zaznamenaný" });
     },
   });

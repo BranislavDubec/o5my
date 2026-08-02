@@ -380,7 +380,9 @@ export async function syncGoogleCalendarEvents(options: {
       source: "google",
     };
 
-    const existingByGoogleId = storage.getEventByExternalId(item.id, "google");
+    const matchesByGoogleId = storage.getEventsByExternalId(item.id);
+    const existingByGoogleId = matchesByGoogleId.find(existingEvent => existingEvent.source === "local")
+      || matchesByGoogleId[0];
     const existingByTitle = !existingByGoogleId ? storage.getAllEvents().find(existingEvent =>
       existingEvent.source === "local" &&
       existingEvent.title === normalizedTitle &&
@@ -395,6 +397,29 @@ export async function syncGoogleCalendarEvents(options: {
         ...eventData,
         source: existing.source === "google" ? "google" : "local",
       } as any);
+
+      const responseUserIds = new Set(
+        storage.getEventResponses(existing.id).map(response => response.userId),
+      );
+
+      for (const duplicate of matchesByGoogleId) {
+        if (duplicate.id === existing.id) continue;
+
+        for (const response of storage.getEventResponses(duplicate.id)) {
+          if (responseUserIds.has(response.userId)) continue;
+
+          storage.upsertEventResponse({
+            eventId: existing.id,
+            userId: response.userId,
+            status: response.status,
+            note: response.note,
+          });
+          responseUserIds.add(response.userId);
+        }
+
+        storage.deleteEvent(duplicate.id);
+      }
+
       updated += 1;
     } else {
       storage.createEvent(eventData as any);

@@ -52,6 +52,8 @@ export default function EventDetailPage() {
       apiRequest("POST", `/api/events/${id}/responses`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/events", id, "responses"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/events"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
       toast({ title: "Účasť aktualizovaná" });
     },
   });

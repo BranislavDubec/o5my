@@ -47,6 +47,9 @@ export function registerAuthRoutes(app: Express) {
       if (!user || !(await comparePassword(password, user.password))) {
         return res.status(401).json({ message: "Nesprávny email alebo heslo" });
       }
+      if (!user.isActive) {
+        return res.status(403).json({ message: "Účet je deaktivovaný. Kontaktuj administrátora." });
+      }
       if (!user.emailVerified) {
         return res.status(403).json({ message: "Pred prihlásením potvrď svoj email" });
       }
@@ -89,7 +92,7 @@ export function registerAuthRoutes(app: Express) {
     const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
     const user = email ? storage.getUserByEmail(email) : undefined;
 
-    if (user && !user.emailVerified) {
+    if (user?.isActive && !user.emailVerified) {
       try {
         await sendEmailVerification(user);
       } catch (error) {

@@ -7,6 +7,7 @@ interface AuthUser {
   name: string;
   phone: string | null;
   role: string;
+  isActive: boolean;
   emailVerified: boolean;
   createdAt: string;
 }

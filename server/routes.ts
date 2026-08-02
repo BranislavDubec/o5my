@@ -16,15 +16,21 @@ export async function registerRoutes(
   registerAuthRoutes(app);
 
   // ============ EVENTS ============
-  app.get("/api/events", requireAuth, (_req, res) => {
+  app.get("/api/events", requireAuth, (req, res) => {
     const allEvents = storage.getAllEvents();
-    res.json(allEvents);
+    res.json(allEvents.map(event => ({
+      ...event,
+      attendanceStatus: storage.getEventResponse(event.id, req.user!.id)?.status ?? null,
+    })));
   });
 
   app.get("/api/events/upcoming", requireAuth, (req, res) => {
     const limit = parseInt(req.query.limit as string) || 5;
     const events = storage.getUpcomingEvents(limit);
-    res.json(events);
+    res.json(events.map(event => ({
+      ...event,
+      attendanceStatus: storage.getEventResponse(event.id, req.user!.id)?.status ?? null,
+    })));
   });
 
   app.get("/api/events/:id", requireAuth, (req, res) => {
@@ -204,12 +210,21 @@ export async function registerRoutes(
     res.json(safe);
   });
 
-  app.delete("/api/users/:id", requireAdmin, (req, res) => {
-    if (Number(req.params.id) === req.user!.id) {
-      return res.status(400).json({ message: "Nemôžete zmazať vlastný účet" });
+  app.put("/api/users/:id/status", requireAdmin, (req, res) => {
+    const userId = Number(req.params.id);
+    if (userId === req.user!.id) {
+      return res.status(400).json({ message: "Nemôžete deaktivovať vlastný účet" });
     }
-    storage.deleteUser(Number(req.params.id));
-    res.json({ message: "Používateľ zmazaný" });
+
+    if (typeof req.body?.isActive !== "boolean") {
+      return res.status(400).json({ message: "Neplatný stav účtu" });
+    }
+
+    const user = storage.updateUserActiveStatus(userId, req.body.isActive);
+    if (!user) return res.status(404).json({ message: "Používateľ nenájdený" });
+
+    const { password, ...safe } = user;
+    res.json(safe);
   });
 
   // ============ PAYMENTS ============
@@ -333,16 +348,33 @@ export async function registerRoutes(
   });
 
   // ============ DASHBOARD STATS ============
-  app.get("/api/stats", requireAuth, (_req, res) => {
+  app.get("/api/stats", requireAuth, (req, res) => {
     const users = storage.getAllUsers();
     const events = storage.getAllEvents();
     const polls = storage.getAllPolls();
     const now = new Date().toISOString();
-    const upcomingEvents = events.filter(e => e.startTime >= now).slice(0, 5);
+    const upcomingEventsWithAttendance = events
+      .filter(event => event.startTime >= now)
+      .map(event => ({
+        ...event,
+        attendanceStatus: storage.getEventResponse(event.id, req.user!.id)?.status ?? null,
+      }));
+    const activePolls = polls.filter(poll => !poll.closesAt || poll.closesAt >= now);
+    const outstandingPayments = storage
+      .getPaymentsByUser(req.user!.id)
+      .filter(payment => payment.status !== "paid");
+
     res.json({
-      playerCount: users.length,
-      upcomingEvents,
-      activePolls: polls.filter(p => !p.closesAt || p.closesAt >= now).length,
+      playerCount: users.filter(user => user.isActive).length,
+      upcomingEvents: upcomingEventsWithAttendance.slice(0, 5),
+      unansweredEvents: upcomingEventsWithAttendance
+        .filter(event => !event.attendanceStatus)
+        .slice(0, 5),
+      activePolls: activePolls.length,
+      unansweredPolls: activePolls
+        .filter(poll => !storage.getUserPollVote(poll.id, req.user!.id))
+        .slice(0, 5),
+      outstandingPayments,
     });
   });
 

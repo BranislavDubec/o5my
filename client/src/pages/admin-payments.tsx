@@ -28,6 +28,7 @@ interface PaymentWithUser {
 interface UserItem {
   id: number;
   name: string;
+  isActive: boolean;
 }
 
 export default function AdminPayments() {
@@ -48,6 +49,8 @@ export default function AdminPayments() {
     mutationFn: (data: any) => apiRequest("POST", "/api/payments", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/payments/all"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/payments"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
       toast({ title: "Platba vytvorená" });
       setDialogOpen(false);
       setForm({ userId: "", amount: "", dueDate: "", variableSymbol: "", description: "" });
@@ -60,6 +63,8 @@ export default function AdminPayments() {
       apiRequest("PUT", `/api/payments/${id}`, { status }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/payments/all"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/payments"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
       toast({ title: "Status aktualizovaný" });
     },
   });
@@ -68,6 +73,8 @@ export default function AdminPayments() {
     mutationFn: (id: number) => apiRequest("DELETE", `/api/payments/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/payments/all"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/payments"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
       toast({ title: "Platba zmazaná" });
     },
   });
@@ -115,7 +122,9 @@ export default function AdminPayments() {
                 <Select value={form.userId} onValueChange={v => setForm({ ...form, userId: v })}>
                   <SelectTrigger data-testid="select-user"><SelectValue placeholder="Vyber člena" /></SelectTrigger>
                   <SelectContent>
-                    {users.map(u => <SelectItem key={u.id} value={String(u.id)}>{u.name}</SelectItem>)}
+                    {users.filter(user => user.isActive).map(user => (
+                      <SelectItem key={user.id} value={String(user.id)}>{user.name}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>

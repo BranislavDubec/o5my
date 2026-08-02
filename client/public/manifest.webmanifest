@@ -1,18 +1,42 @@
 {
-  "name": "O5MY tim",
+  "id": "/",
+  "name": "O5MY Futsal",
   "short_name": "O5MY",
-  "description": "Tímová appka pre futbal — kalendár, tréningy, zápasy, ankety a platby",
-  "start_url": "/",
+  "description": "Tímová aplikácia O5MY Futsal pre kalendár, účasť, ankety a platby.",
+  "lang": "sk",
+  "start_url": "/#/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#15803d",
-  "orientation": "portrait",
+  "orientation": "portrait-primary",
+  "categories": ["sports", "social", "productivity"],
   "icons": [
     {
-      "src": "/favicon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "src": "/android-chrome-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/android-chrome-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Kalendár",
+      "short_name": "Kalendár",
+      "url": "/#/calendar",
+      "icons": [{ "src": "/android-chrome-192x192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Ankety",
+      "short_name": "Ankety",
+      "url": "/#/polls",
+      "icons": [{ "src": "/android-chrome-192x192.png", "sizes": "192x192" }]
     }
   ]
 }

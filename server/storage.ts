@@ -34,6 +34,7 @@ sqlite.exec(`
     name TEXT NOT NULL,
     phone TEXT,
     role TEXT NOT NULL DEFAULT 'player',
+    is_active INTEGER NOT NULL DEFAULT 1,
     email_verified INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL
   );
@@ -59,6 +60,9 @@ const userColumns = sqlite.prepare("PRAGMA table_info(users)").all() as Array<{ 
 if (!userColumns.some(column => column.name === "email_verified")) {
   sqlite.exec("ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 0");
   sqlite.exec("UPDATE users SET email_verified = 1");
+}
+if (!userColumns.some(column => column.name === "is_active")) {
+  sqlite.exec("ALTER TABLE users ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1");
 }
 
 sqlite.exec(`
@@ -164,8 +168,8 @@ export interface IStorage {
   getAllUsers(): User[];
   createUser(user: InsertUser): User;
   updateUserRole(id: number, role: string): User | undefined;
+  updateUserActiveStatus(id: number, isActive: boolean): User | undefined;
   markUserEmailVerified(id: number): User | undefined;
-  deleteUser(id: number): void;
 
   // Email verification
   createEmailVerificationToken(userId: number, tokenHash: string, expiresAt: string): EmailVerificationToken;
@@ -174,7 +178,7 @@ export interface IStorage {
 
   // Events
   getEvent(id: number): Event | undefined;
-  getEventByExternalId(externalId: string, source: string): Event | undefined;
+  getEventsByExternalId(externalId: string): Event[];
   getAllEvents(): Event[];
   getUpcomingEvents(limit?: number): Event[];
   createEvent(event: InsertEvent): Event;
@@ -266,13 +270,12 @@ export class DatabaseStorage implements IStorage {
     return db.update(users).set({ role }).where(eq(users.id, id)).returning().get();
   }
 
-  markUserEmailVerified(id: number): User | undefined {
-    return db.update(users).set({ emailVerified: true }).where(eq(users.id, id)).returning().get();
+  updateUserActiveStatus(id: number, isActive: boolean): User | undefined {
+    return db.update(users).set({ isActive }).where(eq(users.id, id)).returning().get();
   }
 
-  deleteUser(id: number): void {
-    this.deleteEmailVerificationTokens(id);
-    db.delete(users).where(eq(users.id, id)).run();
+  markUserEmailVerified(id: number): User | undefined {
+    return db.update(users).set({ emailVerified: true }).where(eq(users.id, id)).returning().get();
   }
 
   // ============ EMAIL VERIFICATION ============
@@ -301,10 +304,10 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(events).where(eq(events.id, id)).get();
   }
 
-  getEventByExternalId(externalId: string, source: string): Event | undefined {
+  getEventsByExternalId(externalId: string): Event[] {
     return db.select().from(events)
-      .where(and(eq(events.externalId, externalId), eq(events.source, source)))
-      .get();
+      .where(eq(events.externalId, externalId))
+      .all();
   }
 
   getAllEvents(): Event[] {

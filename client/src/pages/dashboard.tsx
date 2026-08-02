@@ -2,16 +2,42 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Users, Calendar, Vote, ArrowRight, MapPin, Clock } from "lucide-react";
+import { Users, Calendar, Vote, ArrowRight, MapPin, Clock, CreditCard } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { EventAttendanceBadge } from "@/components/event-attendance-badge";
+import { getAttendanceBorderClass, type AttendanceStatus } from "@/lib/event-attendance";
 import { format, parseISO } from "date-fns";
 import { sk } from "date-fns/locale";
 
+interface DashboardEvent {
+  id: number;
+  type: string;
+  title: string;
+  location?: string | null;
+  startTime: string;
+  attendanceStatus?: AttendanceStatus;
+}
+
+interface DashboardPayment {
+  id: number;
+  amount: number;
+  dueDate: string;
+  description: string;
+  status: string;
+}
+
+interface DashboardPoll {
+  id: number;
+  title: string;
+  closesAt?: string | null;
+}
+
 interface Stats {
   playerCount: number;
-  upcomingEvents: any[];
+  upcomingEvents: DashboardEvent[];
+  unansweredEvents: DashboardEvent[];
   activePolls: number;
+  unansweredPolls: DashboardPoll[];
+  outstandingPayments: DashboardPayment[];
 }
 
 export default function Dashboard() {
@@ -20,6 +46,10 @@ export default function Dashboard() {
   });
 
   const upcomingEvents = stats?.upcomingEvents || [];
+  const unansweredEvents = stats?.unansweredEvents || [];
+  const unansweredPolls = stats?.unansweredPolls || [];
+  const outstandingPayments = stats?.outstandingPayments || [];
+  const hasUnansweredVotes = unansweredEvents.length > 0 || unansweredPolls.length > 0;
 
   const formatEventDate = (dateStr: string) => {
     try {
@@ -37,14 +67,105 @@ export default function Dashboard() {
     }
   };
 
+  const formatDueDate = (dateStr: string) => {
+    try {
+      return format(parseISO(dateStr), "d. MMM yyyy", { locale: sk });
+    } catch {
+      return dateStr;
+    }
+  };
+
   return (
     <div className="space-y-6 max-w-4xl">
       <div>
         <h1 className="font-serif text-xl font-bold">Dashboard</h1>
-        <p className="text-sm text-muted-foreground mt-1">Prehľad tímu a nadchádzajúcich akcií</p>
+        <p className="text-sm text-muted-foreground mt-1">Prehľad tímu a toho, čo čaká na tvoju reakciu</p>
       </div>
 
-      {/* Stats Cards */}
+      {outstandingPayments.length > 0 && (
+        <Card data-testid="dashboard-payments">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="text-base flex items-center gap-2">
+              <CreditCard className="w-4 h-4 text-primary" />
+              Platby
+            </CardTitle>
+            <Link href="/payments">
+              <Button variant="ghost" size="sm" className="text-primary">
+                Všetko <ArrowRight className="w-4 h-4 ml-1" />
+              </Button>
+            </Link>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-2">
+            {outstandingPayments.map(payment => (
+              <Link key={payment.id} href="/payments">
+                <div
+                  className={`flex items-center gap-3 rounded-lg border-2 p-3 hover-elevate cursor-pointer ${
+                    payment.status === "overdue"
+                      ? "border-red-500/80 dark:border-red-400/80"
+                      : "border-yellow-500/80 dark:border-yellow-400/80"
+                  }`}
+                  data-testid={`dashboard-payment-${payment.id}`}
+                >
+                  <CreditCard className="w-5 h-5 text-muted-foreground shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-sm truncate">{payment.description}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {payment.amount} Kč · splatnosť {formatDueDate(payment.dueDate)}
+                    </p>
+                  </div>
+                  <Badge variant={payment.status === "overdue" ? "destructive" : "secondary"}>
+                    {payment.status === "overdue" ? "Po termíne" : "Čaká"}
+                  </Badge>
+                </div>
+              </Link>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {hasUnansweredVotes && (
+        <Card data-testid="dashboard-unanswered-votes">
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Vote className="w-4 h-4 text-orange-500" />
+              Hlasovania bez odpovede
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-2">
+            {unansweredEvents.map(event => (
+              <Link key={`event-${event.id}`} href={`/events/${event.id}`}>
+                <div
+                  className="flex items-center gap-3 rounded-lg border-2 border-orange-500/80 p-3 hover-elevate cursor-pointer dark:border-orange-400/80"
+                  data-testid={`dashboard-unanswered-event-${event.id}`}
+                >
+                  <Calendar className="w-5 h-5 text-orange-500 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-sm truncate">{event.title}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {formatEventDate(event.startTime)} · {formatEventTime(event.startTime)}
+                    </p>
+                  </div>
+                  <Badge variant="outline">Účasť</Badge>
+                </div>
+              </Link>
+            ))}
+
+            {unansweredPolls.map(poll => (
+              <Link key={`poll-${poll.id}`} href={`/polls/${poll.id}`}>
+                <div
+                  className="flex items-center gap-3 rounded-lg border-2 border-orange-500/80 p-3 hover-elevate cursor-pointer dark:border-orange-400/80"
+                  data-testid={`dashboard-unanswered-poll-${poll.id}`}
+                >
+                  <Vote className="w-5 h-5 text-orange-500 shrink-0" />
+                  <p className="font-medium text-sm flex-1 min-w-0 truncate">{poll.title}</p>
+                  <Badge variant="outline">Anketa</Badge>
+                </div>
+              </Link>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
       <div className="grid grid-cols-3 gap-3">
         <Card>
           <CardContent className="p-4 flex flex-col items-center text-center">
@@ -69,7 +190,6 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* Upcoming Events */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-base">Nadchádzajúce akcie</CardTitle>
@@ -79,13 +199,17 @@ export default function Dashboard() {
             </Button>
           </Link>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="flex flex-col gap-3">
           {upcomingEvents.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-6">Žiadne nadchádzajúce akcie</p>
           ) : (
             upcomingEvents.map(event => (
               <Link key={event.id} href={`/events/${event.id}`}>
-                <div className="flex items-center gap-3 p-3 rounded-lg border border-border hover-elevate cursor-pointer" data-testid={`card-event-${event.id}`}>
+                <div
+                  className={`flex items-center gap-3 p-3 rounded-lg hover-elevate cursor-pointer ${getAttendanceBorderClass(event.attendanceStatus)}`}
+                  data-attendance-status={event.attendanceStatus || "unanswered"}
+                  data-testid={`card-event-${event.id}`}
+                >
                   <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${event.type === "match" ? "bg-primary/15" : event.type === "teambuilding" ? "bg-purple-500/15" : "bg-blue-500/15"}`}>
                     {event.type === "match" ? (
                       <span className="text-primary text-lg">⚽</span>
@@ -101,7 +225,6 @@ export default function Dashboard() {
                       <Badge variant={event.type === "match" ? "default" : "secondary"} className="text-xs shrink-0">
                         {event.type === "match" ? "Zápas" : event.type === "teambuilding" ? "Team building" : "Tréning"}
                       </Badge>
-                      <EventAttendanceBadge eventId={event.id} />
                     </div>
                     <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
                       <span className="flex items-center gap-1">
@@ -129,4 +252,3 @@ export default function Dashboard() {
     </div>
   );
 }
-

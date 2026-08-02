@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar, Plus, MapPin, Clock, Filter, RefreshCw } from "lucide-react";
-import { EventAttendanceBadge } from "@/components/event-attendance-badge";
+import { getAttendanceBorderClass, type AttendanceStatus } from "@/lib/event-attendance";
 import { format, parseISO } from "date-fns";
 import { sk } from "date-fns/locale";
 
@@ -28,6 +28,7 @@ interface EventItem {
   opponent: string | null;
   homeAway: string | null;
   source?: string | null;
+  attendanceStatus?: AttendanceStatus;
 }
 
 export default function CalendarPage() {
@@ -116,7 +117,11 @@ export default function CalendarPage() {
 
     return (
       <Link href={`/events/${event.id}`} key={event.id}>
-        <Card className="hover-elevate cursor-pointer transition-shadow" data-testid={`card-event-${event.id}`}>
+        <Card
+          className={`hover-elevate cursor-pointer transition-shadow ${getAttendanceBorderClass(event.attendanceStatus)}`}
+          data-attendance-status={event.attendanceStatus || "unanswered"}
+          data-testid={`card-event-${event.id}`}
+        >
           <CardContent className="p-3 flex items-center gap-3">
             <div className={`w-11 h-11 rounded-lg flex flex-col items-center justify-center shrink-0 ${colorClass}`}>
               <span className="text-base leading-none">{icon}</span>
@@ -127,7 +132,6 @@ export default function CalendarPage() {
                 <Badge variant={event.type === "match" ? "default" : "secondary"} className="text-xs shrink-0">
                   {typeLabel}
                 </Badge>
-                <EventAttendanceBadge eventId={event.id} />
                 {event.source === "google" && (
                   <Badge variant="outline" className="text-[10px] shrink-0">Google</Badge>
                 )}

@@ -6,8 +6,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Bell, Mail, User as UserIcon, LogOut } from "lucide-react";
+import { Bell, Mail, User as UserIcon, LogOut, Smartphone } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { PwaInstallButton } from "@/components/pwa-install-button";
 
 interface NotificationSettings {
   pushEnabled: boolean;
@@ -104,6 +105,21 @@ export default function Settings() {
         </CardContent>
       </Card>
 
+      {/* App installation */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Smartphone className="w-4 h-4" />Aplikácia
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Pridaj si O5MY Futsal na plochu a otvor ho ako bežnú mobilnú aplikáciu.
+          </p>
+          <PwaInstallButton showInstalledState className="w-full sm:w-auto" />
+        </CardContent>
+      </Card>
+
       {/* Logout */}
       <Button
         variant="outline"
@@ -116,4 +132,3 @@ export default function Settings() {
     </div>
   );
 }
-

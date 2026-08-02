@@ -38,6 +38,7 @@ export default function PollsPage() {
     mutationFn: (data: any) => apiRequest("POST", "/api/polls", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/polls"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
       toast({ title: "Anketa vytvorená" });
       setDialogOpen(false);
       setForm({ title: "", description: "", options: ["", ""] });
@@ -49,6 +50,7 @@ export default function PollsPage() {
     mutationFn: (id: number) => apiRequest("DELETE", `/api/polls/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/polls"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
       toast({ title: "Anketa zmazaná" });
     },
   });

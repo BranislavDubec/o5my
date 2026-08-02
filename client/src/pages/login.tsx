@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Link } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
+import { PwaInstallButton } from "@/components/pwa-install-button";
 
 export default function Login() {
   const { login } = useAuth();
@@ -107,6 +108,8 @@ export default function Login() {
             </p>
           </CardContent>
         </Card>
+
+        <PwaInstallButton className="w-full" />
       </div>
     </div>
   );

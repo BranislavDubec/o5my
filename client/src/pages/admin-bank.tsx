@@ -58,6 +58,8 @@ export default function AdminBank() {
       queryClient.invalidateQueries({ queryKey: ["/api/bank/transactions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/bank/settings"] });
       queryClient.invalidateQueries({ queryKey: ["/api/payments/all"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/payments"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
       toast({ title: `Synchronizované: ${data.synced} transakcií, ${data.matched} spárovaných` });
     },
     onError: (err: any) => toast({ title: "Synchronizácia zlyhala", description: err.message, variant: "destructive" }),
