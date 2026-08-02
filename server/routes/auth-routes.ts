@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { insertUserSchema } from "@shared/schema";
 import { comparePassword, getCurrentUser, hashPassword } from "../auth";
-import { sendEmailVerification, verifyEmailToken } from "../email-verification";
+import { sendEmailVerification, sendRegistrationCompleteEmail, verifyEmailToken } from "../email-verification";
 import { storage } from "../storage";
 
 export function registerAuthRoutes(app: Express) {
@@ -74,10 +74,15 @@ export function registerAuthRoutes(app: Express) {
 
   app.post("/api/auth/verify-email", (req, res) => {
     const token = typeof req.body?.token === "string" ? req.body.token : "";
-    if (!token || !verifyEmailToken(token)) {
+    const verifiedUser = token ? verifyEmailToken(token) : null;
+    if (!verifiedUser) {
       return res.status(400).json({ message: "Odkaz je neplatný alebo expirovaný" });
     }
     res.json({ message: "Email bol úspešne potvrdený" });
+
+    void sendRegistrationCompleteEmail(verifiedUser).catch(error => {
+      console.error("Failed to send registration complete email", error);
+    });
   });
 
   app.post("/api/auth/resend-verification", async (req, res) => {
