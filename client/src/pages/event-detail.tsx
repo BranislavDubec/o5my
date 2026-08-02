@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, MapPin, Calendar as CalIcon, Check, X, Minus, Users, Trash2, Pencil } from "lucide-react";
+import { ArrowLeft, MapPin, Calendar as CalIcon, Check, X, Minus, Users, Trash2, Pencil, Trophy } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { sk } from "date-fns/locale";
 import { useState } from "react";
@@ -27,6 +27,34 @@ interface EventDetail {
   opponent: string | null;
   homeAway: string | null;
   source?: string | null;
+  matchResult: MatchResult | null;
+}
+
+interface MatchPlayerContribution {
+  userId: number;
+  goals: number;
+  assists: number;
+  user: { id: number; name: string };
+}
+
+interface MatchResult {
+  id: number;
+  teamScore: number;
+  opponentScore: number;
+  notes: string | null;
+  players: MatchPlayerContribution[];
+}
+
+interface AdminUser {
+  id: number;
+  name: string;
+  isActive: boolean;
+  emailVerified: boolean;
+}
+
+interface ResultPlayerValue {
+  goals: number;
+  assists: number;
 }
 
 interface EventResponse {
@@ -83,6 +111,11 @@ export default function EventDetailPage() {
   const [note, setNote] = useState("");
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editForm, setEditForm] = useState<EventEditForm>(emptyEditForm);
+  const [resultDialogOpen, setResultDialogOpen] = useState(false);
+  const [teamScore, setTeamScore] = useState(0);
+  const [opponentScore, setOpponentScore] = useState(0);
+  const [resultNotes, setResultNotes] = useState("");
+  const [resultPlayers, setResultPlayers] = useState<Record<number, ResultPlayerValue>>({});
 
   const { data: event } = useQuery<EventDetail>({
     queryKey: ["/api/events", id],
@@ -90,6 +123,11 @@ export default function EventDetailPage() {
 
   const { data: responses = [] } = useQuery<EventResponse[]>({
     queryKey: ["/api/events", id, "responses"],
+  });
+
+  const { data: adminUsers = [] } = useQuery<AdminUser[]>({
+    queryKey: ["/api/users"],
+    enabled: user?.role === "admin",
   });
 
   const respondMutation = useMutation({
@@ -132,6 +170,41 @@ export default function EventDetailPage() {
     },
   });
 
+  const saveResultMutation = useMutation({
+    mutationFn: () => apiRequest("PUT", `/api/events/${id}/result`, {
+      teamScore,
+      opponentScore,
+      notes: resultNotes,
+      players: Object.entries(resultPlayers)
+        .map(([userId, values]) => ({ userId: Number(userId), ...values }))
+        .filter(player => player.goals > 0 || player.assists > 0),
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/events", id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/events"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/statistics"] });
+      toast({ title: "Výsledok uložený" });
+      setResultDialogOpen(false);
+    },
+    onError: (error: Error) => {
+      toast({ title: "Výsledok sa nepodarilo uložiť", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const deleteResultMutation = useMutation({
+    mutationFn: () => apiRequest("DELETE", `/api/events/${id}/result`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/events", id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/events"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/statistics"] });
+      toast({ title: "Výsledok zmazaný" });
+      setResultDialogOpen(false);
+    },
+    onError: (error: Error) => {
+      toast({ title: "Výsledok sa nepodarilo zmazať", description: error.message, variant: "destructive" });
+    },
+  });
+
   const handleEditSubmit = (submitEvent: React.FormEvent) => {
     submitEvent.preventDefault();
     const startTime = `${editForm.date}T${editForm.time}:00`;
@@ -150,6 +223,31 @@ export default function EventDetailPage() {
     });
   };
 
+  const openResultDialog = () => {
+    if (!event) return;
+    const values: Record<number, ResultPlayerValue> = {};
+    event.matchResult?.players.forEach(player => {
+      values[player.userId] = { goals: player.goals, assists: player.assists };
+    });
+    setTeamScore(event.matchResult?.teamScore ?? 0);
+    setOpponentScore(event.matchResult?.opponentScore ?? 0);
+    setResultNotes(event.matchResult?.notes ?? "");
+    setResultPlayers(values);
+    setResultDialogOpen(true);
+  };
+
+  const updateResultPlayer = (userId: number, field: keyof ResultPlayerValue, value: string) => {
+    const parsed = Math.max(0, Math.min(100, Number.parseInt(value || "0", 10) || 0));
+    setResultPlayers(previous => ({
+      ...previous,
+      [userId]: {
+        goals: previous[userId]?.goals ?? 0,
+        assists: previous[userId]?.assists ?? 0,
+        [field]: parsed,
+      },
+    }));
+  };
+
   if (!event) {
     return (
       <div className="flex items-center justify-center p-8">
@@ -162,6 +260,17 @@ export default function EventDetailPage() {
   const going = responses.filter(r => r.status === "going");
   const notGoing = responses.filter(r => r.status === "not_going");
   const maybe = responses.filter(r => r.status === "maybe");
+  const goingUserIds = new Set(going.map(response => response.user.id));
+  const existingResultUserIds = new Set(event.matchResult?.players.map(player => player.userId) ?? []);
+  const resultUsers = adminUsers
+    .filter(resultUser => (resultUser.isActive && resultUser.emailVerified) || existingResultUserIds.has(resultUser.id))
+    .sort((first, second) => Number(goingUserIds.has(second.id)) - Number(goingUserIds.has(first.id)) || first.name.localeCompare(second.name, "sk"));
+  const isWin = event.matchResult && event.matchResult.teamScore > event.matchResult.opponentScore;
+  const isDraw = event.matchResult && event.matchResult.teamScore === event.matchResult.opponentScore;
+  const resultLeftName = event.homeAway === "away" ? event.opponent || "Súper" : "O5MY";
+  const resultRightName = event.homeAway === "away" ? "O5MY" : event.opponent || "Súper";
+  const resultLeftScore = event.homeAway === "away" ? event.matchResult?.opponentScore : event.matchResult?.teamScore;
+  const resultRightScore = event.homeAway === "away" ? event.matchResult?.teamScore : event.matchResult?.opponentScore;
 
   const formatFull = (dateStr: string) => {
     try { return format(parseISO(dateStr), "EEEE d. MMMM yyyy 'o' HH:mm", { locale: sk }); } catch { return dateStr; }
@@ -238,6 +347,63 @@ export default function EventDetailPage() {
           )}
         </CardContent>
       </Card>
+
+      {event.type === "match" && (
+        <Card data-testid="card-match-result">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between gap-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Trophy className="w-4 h-4" />Výsledok zápasu
+              </CardTitle>
+              {user?.role === "admin" && (
+                <Button variant="outline" size="sm" onClick={openResultDialog} data-testid="button-edit-result">
+                  <Pencil className="w-4 h-4 mr-1" />
+                  {event.matchResult ? "Upraviť" : "Zapísať výsledok"}
+                </Button>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent>
+            {event.matchResult ? (
+              <div className="space-y-4">
+                <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 text-center">
+                  <p className="font-semibold truncate">{resultLeftName}</p>
+                  <div className="flex items-center gap-2">
+                    <span className="text-3xl font-bold tabular-nums">{resultLeftScore}</span>
+                    <span className="text-xl text-muted-foreground">:</span>
+                    <span className="text-3xl font-bold tabular-nums">{resultRightScore}</span>
+                  </div>
+                  <p className="font-semibold truncate">{resultRightName}</p>
+                </div>
+                <div className="flex justify-center">
+                  <Badge variant={isWin ? "default" : "secondary"}>
+                    {isWin ? "Výhra" : isDraw ? "Remíza" : "Prehra"}
+                  </Badge>
+                </div>
+                {event.matchResult.players.length > 0 && (
+                  <div className="pt-3 border-t space-y-2">
+                    {event.matchResult.players.map(player => (
+                      <div key={player.userId} className="flex items-center justify-between gap-3 text-sm">
+                        <span>{player.user.name}</span>
+                        <span className="text-muted-foreground">
+                          {player.goals > 0 && `${player.goals} ${player.goals === 1 ? "gól" : "góly"}`}
+                          {player.goals > 0 && player.assists > 0 && " · "}
+                          {player.assists > 0 && `${player.assists} ${player.assists === 1 ? "asistencia" : "asistencie"}`}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {event.matchResult.notes && (
+                  <p className="pt-3 border-t text-sm text-muted-foreground whitespace-pre-wrap">{event.matchResult.notes}</p>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Výsledok zatiaľ nie je zapísaný.</p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Attendance */}
       <Card>
@@ -327,6 +493,127 @@ export default function EventDetailPage() {
           </div>
         </CardContent>
       </Card>
+
+      <Dialog open={resultDialogOpen} onOpenChange={setResultDialogOpen}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>{event.matchResult ? "Upraviť výsledok" : "Zapísať výsledok"}</DialogTitle>
+          </DialogHeader>
+          <form
+            className="space-y-5"
+            onSubmit={submitEvent => {
+              submitEvent.preventDefault();
+              saveResultMutation.mutate();
+            }}
+          >
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="result-team-score">O5MY</Label>
+                <Input
+                  id="result-team-score"
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={teamScore}
+                  onChange={inputEvent => setTeamScore(Math.max(0, Math.min(100, Number(inputEvent.target.value) || 0)))}
+                  className="text-center text-lg font-bold"
+                  data-testid="input-team-score"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="result-opponent-score">{event.opponent || "Súper"}</Label>
+                <Input
+                  id="result-opponent-score"
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={opponentScore}
+                  onChange={inputEvent => setOpponentScore(Math.max(0, Math.min(100, Number(inputEvent.target.value) || 0)))}
+                  className="text-center text-lg font-bold"
+                  data-testid="input-opponent-score"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <div className="grid grid-cols-[1fr_72px_72px] gap-2 px-1 text-xs font-medium text-muted-foreground">
+                <span>Hráč</span>
+                <span className="text-center">Góly</span>
+                <span className="text-center">Asist.</span>
+              </div>
+              <div className="divide-y rounded-md border">
+                {resultUsers.map(resultUser => (
+                  <div key={resultUser.id} className="grid grid-cols-[1fr_72px_72px] items-center gap-2 p-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">{resultUser.name}</p>
+                      {goingUserIds.has(resultUser.id) && <p className="text-[11px] text-green-600">Potvrdil účasť</p>}
+                    </div>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={100}
+                      aria-label={`Góly – ${resultUser.name}`}
+                      value={resultPlayers[resultUser.id]?.goals ?? 0}
+                      onChange={inputEvent => updateResultPlayer(resultUser.id, "goals", inputEvent.target.value)}
+                      className="text-center px-2"
+                    />
+                    <Input
+                      type="number"
+                      min={0}
+                      max={100}
+                      aria-label={`Asistencie – ${resultUser.name}`}
+                      value={resultPlayers[resultUser.id]?.assists ?? 0}
+                      onChange={inputEvent => updateResultPlayer(resultUser.id, "assists", inputEvent.target.value)}
+                      className="text-center px-2"
+                    />
+                  </div>
+                ))}
+                {resultUsers.length === 0 && (
+                  <p className="p-4 text-sm text-muted-foreground">Nie sú dostupní žiadni aktívni hráči.</p>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">Nevyplnené góly môžu predstavovať vlastné góly súpera.</p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="result-notes">Poznámka</Label>
+              <Textarea
+                id="result-notes"
+                value={resultNotes}
+                onChange={inputEvent => setResultNotes(inputEvent.target.value)}
+                rows={3}
+                maxLength={2000}
+                placeholder="Krátke zhodnotenie zápasu..."
+              />
+            </div>
+
+            <DialogFooter className="gap-2 sm:justify-between">
+              <div>
+                {event.matchResult && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="text-destructive"
+                    disabled={deleteResultMutation.isPending}
+                    onClick={() => {
+                      if (confirm("Zmazať výsledok a odpočítať jeho štatistiky?")) deleteResultMutation.mutate();
+                    }}
+                    data-testid="button-delete-result"
+                  >
+                    <Trash2 className="w-4 h-4 mr-1" />Zmazať výsledok
+                  </Button>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={() => setResultDialogOpen(false)}>Zrušiť</Button>
+                <Button type="submit" disabled={saveResultMutation.isPending} data-testid="button-save-result">
+                  {saveResultMutation.isPending ? "Ukladám..." : "Uložiť výsledok"}
+                </Button>
+              </div>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto">

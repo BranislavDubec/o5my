@@ -5,6 +5,7 @@ import { useAuth } from "@/contexts/auth-context";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Bell, Mail, User as UserIcon, LogOut, Send, Smartphone } from "lucide-react";
@@ -31,18 +32,33 @@ async function getServiceWorkerRegistration() {
 }
 
 export default function Settings() {
-  const { user, logout } = useAuth();
+  const { user, updateProfile, logout } = useAuth();
   const { platform, isInstalled } = usePwaInstall();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const pushSupported = "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
   const [pushSubscribed, setPushSubscribed] = useState(false);
   const [pushStatusLoading, setPushStatusLoading] = useState(pushSupported);
+  const [nickname, setNickname] = useState(user?.nickname ?? "");
 
   const { data: settings } = useQuery<NotificationSettings>({
     queryKey: ["/api/settings/notifications"],
   });
   const pushActive = pushSubscribed && (settings?.pushEnabled ?? true);
+
+  useEffect(() => {
+    setNickname(user?.nickname ?? "");
+  }, [user?.nickname]);
+
+  const profileMutation = useMutation({
+    mutationFn: () => updateProfile({ nickname }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/statistics"] });
+      toast({ title: "Profil uložený" });
+    },
+    onError: (error: Error) => toast({ title: "Profil sa nepodarilo uložiť", description: error.message, variant: "destructive" }),
+  });
 
   const updateMutation = useMutation({
     mutationFn: (data: Partial<NotificationSettings>) =>
@@ -130,10 +146,11 @@ export default function Settings() {
         <CardContent className="space-y-3">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-full bg-primary/15 flex items-center justify-center text-primary font-semibold">
-              {user?.name?.charAt(0).toUpperCase()}
+              {(user?.nickname || user?.name)?.charAt(0).toUpperCase()}
             </div>
             <div>
               <p className="font-medium">{user?.name}</p>
+              {user?.nickname && <p className="text-sm font-medium text-primary">@{user.nickname}</p>}
               <p className="text-sm text-muted-foreground">{user?.email}</p>
               {user?.phone && <p className="text-sm text-muted-foreground">{user.phone}</p>}
             </div>
@@ -141,6 +158,35 @@ export default function Settings() {
           <div className="pt-2">
             <Badge variant="secondary">{user?.role === "admin" ? "Admin" : "Hráč"}</Badge>
           </div>
+          <form
+            className="space-y-2 border-t pt-4"
+            onSubmit={submitEvent => {
+              submitEvent.preventDefault();
+              profileMutation.mutate();
+            }}
+          >
+            <Label htmlFor="profile-nickname">Prezývka</Label>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Input
+                id="profile-nickname"
+                value={nickname}
+                onChange={inputEvent => setNickname(inputEvent.target.value)}
+                required
+                maxLength={30}
+                placeholder="Ako ťa volá tím?"
+                autoComplete="nickname"
+                data-testid="input-profile-nickname"
+              />
+              <Button
+                type="submit"
+                disabled={profileMutation.isPending || !nickname.trim() || nickname.trim() === (user?.nickname ?? "")}
+                data-testid="button-save-profile"
+              >
+                {profileMutation.isPending ? "Ukladám..." : "Uložiť"}
+              </Button>
+            </div>
+            {!user?.nickname && <p className="text-xs text-amber-600 dark:text-amber-400">Doplň si prezývku, aby ťa spoluhráči ľahko rozoznali.</p>}
+          </form>
         </CardContent>
       </Card>
 

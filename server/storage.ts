@@ -1,12 +1,12 @@
 import {
-  users, playerStatistics, emailVerificationTokens, events, eventResponses, polls, pollOptions, pollVotes,
+  users, playerStatistics, emailVerificationTokens, events, matchResults, matchPlayerStatistics, eventResponses, polls, pollOptions, pollVotes,
   payments, bankTransactions, cashTransactions, notificationSettings, pushSubscriptions, appSettings, teamResponsibilities,
   teamResponsibilityOwners, teamInventoryItems,
   mediaCollections, mediaFiles,
 } from '@shared/schema';
 import type {
   User, InsertUser, PlayerStatistic, EmailVerificationToken,
-  Event, InsertEvent,
+  Event, InsertEvent, MatchResult, MatchPlayerStatistic,
   EventResponse, InsertEventResponse,
   Poll, InsertPoll,
   PollOption, InsertPollOption,
@@ -38,6 +38,7 @@ sqlite.exec(`
     email TEXT NOT NULL UNIQUE,
     password TEXT NOT NULL,
     name TEXT NOT NULL,
+    nickname TEXT,
     phone TEXT,
     role TEXT NOT NULL DEFAULT 'player',
     is_active INTEGER NOT NULL DEFAULT 1,
@@ -69,6 +70,28 @@ sqlite.exec(`
     created_by INTEGER NOT NULL REFERENCES users(id),
     created_at TEXT NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS match_results (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_id INTEGER NOT NULL UNIQUE REFERENCES events(id),
+    team_score INTEGER NOT NULL,
+    opponent_score INTEGER NOT NULL,
+    notes TEXT,
+    updated_by INTEGER NOT NULL REFERENCES users(id),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS match_player_statistics (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_id INTEGER NOT NULL REFERENCES events(id),
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    goals INTEGER NOT NULL DEFAULT 0,
+    assists INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(event_id, user_id)
+  );
 `);
 
 const userColumns = sqlite.prepare("PRAGMA table_info(users)").all() as Array<{ name: string }>;
@@ -81,6 +104,9 @@ if (!userColumns.some(column => column.name === "is_active")) {
 }
 if (!userColumns.some(column => column.name === "theme")) {
   sqlite.exec("ALTER TABLE users ADD COLUMN theme TEXT NOT NULL DEFAULT 'light'");
+}
+if (!userColumns.some(column => column.name === "nickname")) {
+  sqlite.exec("ALTER TABLE users ADD COLUMN nickname TEXT");
 }
 
 sqlite.exec(`
@@ -540,6 +566,16 @@ export interface PlayerStatisticSummary {
   updatedAt: string | null;
 }
 
+export interface MatchPlayerContributionInput {
+  userId: number;
+  goals: number;
+  assists: number;
+}
+
+export type MatchResultWithPlayers = MatchResult & {
+  players: Array<MatchPlayerStatistic & { user: Pick<User, "id" | "name"> }>;
+};
+
 export interface IStorage {
   // Users
   getUser(id: number): User | undefined;
@@ -549,6 +585,7 @@ export interface IStorage {
   updateUserRole(id: number, role: string): User | undefined;
   updateUserActiveStatus(id: number, isActive: boolean): User | undefined;
   updateUserTheme(id: number, theme: "light" | "dark"): User | undefined;
+  updateUserNickname(id: number, nickname: string): User | undefined;
   markUserEmailVerified(id: number): User | undefined;
 
   // Player statistics
@@ -568,6 +605,18 @@ export interface IStorage {
   createEvent(event: InsertEvent): Event;
   updateEvent(id: number, data: Partial<InsertEvent>): Event | undefined;
   deleteEvent(id: number): void;
+
+  // Match results
+  getMatchResult(eventId: number): MatchResultWithPlayers | undefined;
+  upsertMatchResult(
+    eventId: number,
+    teamScore: number,
+    opponentScore: number,
+    notes: string | null,
+    updatedBy: number,
+    players: MatchPlayerContributionInput[],
+  ): MatchResultWithPlayers;
+  deleteMatchResult(eventId: number): boolean;
 
   // Event Responses
   getEventResponse(eventId: number, userId: number): EventResponse | undefined;
@@ -679,6 +728,48 @@ function normalizeEventData(event: Partial<InsertEvent>) {
   return normalized;
 }
 
+function applyPlayerStatisticDelta(
+  tx: any,
+  userId: number,
+  goalsDelta: number,
+  assistsDelta: number,
+  updatedAt: string,
+) {
+  if (goalsDelta === 0 && assistsDelta === 0) return;
+  const existing = tx.select().from(playerStatistics).where(eq(playerStatistics.userId, userId)).get() as PlayerStatistic | undefined;
+  const goals = (existing?.goals ?? 0) + goalsDelta;
+  const assists = (existing?.assists ?? 0) + assistsDelta;
+  if (goals < 0 || assists < 0) {
+    throw new Error("Celková štatistika hráča nemôže byť nižšia ako príspevky zo zápasov");
+  }
+  if (goals > 10_000 || assists > 10_000) {
+    throw new Error("Štatistika hráča je príliš vysoká");
+  }
+  if (existing) {
+    tx.update(playerStatistics)
+      .set({ goals, assists, updatedAt })
+      .where(eq(playerStatistics.id, existing.id))
+      .run();
+  } else {
+    tx.insert(playerStatistics).values({ userId, goals, assists, updatedAt }).run();
+  }
+}
+
+function deleteMatchResultInTransaction(tx: any, eventId: number): boolean {
+  const result = tx.select().from(matchResults).where(eq(matchResults.eventId, eventId)).get() as MatchResult | undefined;
+  if (!result) return false;
+  const contributions = tx.select().from(matchPlayerStatistics)
+    .where(eq(matchPlayerStatistics.eventId, eventId))
+    .all() as MatchPlayerStatistic[];
+  const updatedAt = new Date().toISOString();
+  contributions.forEach(contribution => {
+    applyPlayerStatisticDelta(tx, contribution.userId, -contribution.goals, -contribution.assists, updatedAt);
+  });
+  tx.delete(matchPlayerStatistics).where(eq(matchPlayerStatistics.eventId, eventId)).run();
+  tx.delete(matchResults).where(eq(matchResults.eventId, eventId)).run();
+  return true;
+}
+
 export class DatabaseStorage implements IStorage {
   // ============ USERS ============
   getUser(id: number): User | undefined {
@@ -707,6 +798,10 @@ export class DatabaseStorage implements IStorage {
 
   updateUserTheme(id: number, theme: "light" | "dark"): User | undefined {
     return db.update(users).set({ theme }).where(eq(users.id, id)).returning().get();
+  }
+
+  updateUserNickname(id: number, nickname: string): User | undefined {
+    return db.update(users).set({ nickname }).where(eq(users.id, id)).returning().get();
   }
 
   markUserEmailVerified(id: number): User | undefined {
@@ -741,6 +836,14 @@ export class DatabaseStorage implements IStorage {
       const goals = (existing?.goals ?? 0) + goalsDelta;
       const assists = (existing?.assists ?? 0) + assistsDelta;
       if (goals < 0 || assists < 0) throw new Error("Štatistika nemôže byť záporná");
+      const trackedContributions = tx.select().from(matchPlayerStatistics)
+        .where(eq(matchPlayerStatistics.userId, userId))
+        .all() as MatchPlayerStatistic[];
+      const trackedGoals = trackedContributions.reduce((sum, contribution) => sum + contribution.goals, 0);
+      const trackedAssists = trackedContributions.reduce((sum, contribution) => sum + contribution.assists, 0);
+      if (goals < trackedGoals || assists < trackedAssists) {
+        throw new Error("Štatistiku nemožno znížiť pod súčet zapísaný vo výsledkoch zápasov");
+      }
       if (goals > 10_000 || assists > 10_000) throw new Error("Štatistika je príliš vysoká");
       const updatedAt = new Date().toISOString();
       if (existing) {
@@ -821,8 +924,98 @@ export class DatabaseStorage implements IStorage {
   }
 
   deleteEvent(id: number): void {
-    db.delete(eventResponses).where(eq(eventResponses.eventId, id)).run();
-    db.delete(events).where(eq(events.id, id)).run();
+    db.transaction(tx => {
+      deleteMatchResultInTransaction(tx, id);
+      tx.delete(eventResponses).where(eq(eventResponses.eventId, id)).run();
+      tx.delete(events).where(eq(events.id, id)).run();
+    });
+  }
+
+  // ============ MATCH RESULTS ============
+  getMatchResult(eventId: number): MatchResultWithPlayers | undefined {
+    const result = db.select().from(matchResults).where(eq(matchResults.eventId, eventId)).get();
+    if (!result) return undefined;
+    const players = db.select().from(matchPlayerStatistics)
+      .where(eq(matchPlayerStatistics.eventId, eventId))
+      .all()
+      .map(contribution => {
+        const user = this.getUser(contribution.userId);
+        return {
+          ...contribution,
+          user: { id: contribution.userId, name: user?.name ?? "Neznámy hráč" },
+        };
+      })
+      .sort((first, second) => second.goals - first.goals || second.assists - first.assists || first.user.name.localeCompare(second.user.name, "sk"));
+    return { ...result, players };
+  }
+
+  upsertMatchResult(
+    eventId: number,
+    teamScore: number,
+    opponentScore: number,
+    notes: string | null,
+    updatedBy: number,
+    players: MatchPlayerContributionInput[],
+  ): MatchResultWithPlayers {
+    db.transaction(tx => {
+      const existingResult = tx.select().from(matchResults).where(eq(matchResults.eventId, eventId)).get() as MatchResult | undefined;
+      const existingPlayers = tx.select().from(matchPlayerStatistics)
+        .where(eq(matchPlayerStatistics.eventId, eventId))
+        .all() as MatchPlayerStatistic[];
+      const previousByUser = new Map(existingPlayers.map(player => [player.userId, player]));
+      const nextByUser = new Map(players.map(player => [player.userId, player]));
+      const userIds = new Set([...Array.from(previousByUser.keys()), ...Array.from(nextByUser.keys())]);
+      const updatedAt = new Date().toISOString();
+
+      userIds.forEach(userId => {
+        const previous = previousByUser.get(userId);
+        const next = nextByUser.get(userId);
+        applyPlayerStatisticDelta(
+          tx,
+          userId,
+          (next?.goals ?? 0) - (previous?.goals ?? 0),
+          (next?.assists ?? 0) - (previous?.assists ?? 0),
+          updatedAt,
+        );
+      });
+
+      if (existingResult) {
+        tx.update(matchResults)
+          .set({ teamScore, opponentScore, notes, updatedBy, updatedAt })
+          .where(eq(matchResults.id, existingResult.id))
+          .run();
+      } else {
+        tx.insert(matchResults).values({
+          eventId,
+          teamScore,
+          opponentScore,
+          notes,
+          updatedBy,
+          createdAt: updatedAt,
+          updatedAt,
+        }).run();
+      }
+
+      tx.delete(matchPlayerStatistics).where(eq(matchPlayerStatistics.eventId, eventId)).run();
+      players
+        .filter(player => player.goals > 0 || player.assists > 0)
+        .forEach(player => {
+          tx.insert(matchPlayerStatistics).values({
+            eventId,
+            userId: player.userId,
+            goals: player.goals,
+            assists: player.assists,
+            createdAt: updatedAt,
+            updatedAt,
+          }).run();
+        });
+    });
+
+    return this.getMatchResult(eventId)!;
+  }
+
+  deleteMatchResult(eventId: number): boolean {
+    return db.transaction(tx => deleteMatchResultInTransaction(tx, eventId));
   }
 
   // ============ EVENT RESPONSES ============

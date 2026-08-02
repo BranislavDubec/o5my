@@ -13,6 +13,7 @@ export default function Register() {
   const { register } = useAuth();
   const { toast } = useToast();
   const [name, setName] = useState("");
+  const [nickname, setNickname] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
@@ -27,7 +28,7 @@ export default function Register() {
     }
     setIsLoading(true);
     try {
-      await register({ name, email, phone: phone || undefined, password });
+      await register({ name, nickname, email, phone: phone || undefined, password });
       setRegistrationComplete(true);
     } catch (err: any) {
       toast({ title: "Chyba", description: err.message, variant: "destructive" });
@@ -81,6 +82,20 @@ export default function Register() {
               <div className="space-y-2">
                 <Label htmlFor="name">Meno a priezvisko</Label>
                 <Input id="name" value={name} onChange={e => setName(e.target.value)} required placeholder="Ján Novák" data-testid="input-name" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="nickname">Prezývka</Label>
+                <Input
+                  id="nickname"
+                  value={nickname}
+                  onChange={e => setNickname(e.target.value)}
+                  required
+                  maxLength={30}
+                  placeholder="Napr. Krši"
+                  autoComplete="nickname"
+                  data-testid="input-nickname"
+                />
+                <p className="text-xs text-muted-foreground">Meno, pod ktorým ťa pozná tím.</p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>

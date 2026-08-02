@@ -1,13 +1,15 @@
 import type { Express } from "express";
 import { insertUserSchema } from "@shared/schema";
-import { comparePassword, getCurrentUser, hashPassword } from "../auth";
+import { comparePassword, getCurrentUser, hashPassword, requireAuth } from "../auth";
 import { sendEmailVerification, sendRegistrationCompleteEmail, verifyEmailToken } from "../email-verification";
 import { storage } from "../storage";
+import { normalizeNickname } from "../user-profile";
 
 export function registerAuthRoutes(app: Express) {
   app.post("/api/auth/register", async (req, res) => {
     try {
-      const data = insertUserSchema.parse(req.body);
+      const nickname = normalizeNickname(req.body?.nickname);
+      const data = insertUserSchema.parse({ ...req.body, nickname });
       const email = data.email.trim().toLowerCase();
       const existing = storage.getUserByEmail(email);
       if (existing) {
@@ -73,6 +75,18 @@ export function registerAuthRoutes(app: Express) {
       return res.status(401).json({ message: "Neprihlásený" });
     }
     res.json(user);
+  });
+
+  app.put("/api/auth/profile", requireAuth, (req, res) => {
+    try {
+      const nickname = normalizeNickname(req.body?.nickname);
+      const user = storage.updateUserNickname(req.user!.id, nickname);
+      if (!user) return res.status(404).json({ message: "Používateľ nenájdený" });
+      const { password, ...safeUser } = user;
+      res.json(safeUser);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message || "Profil sa nepodarilo uložiť" });
+    }
   });
 
   app.post("/api/auth/verify-email", (req, res) => {

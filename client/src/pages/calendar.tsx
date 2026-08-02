@@ -29,6 +29,7 @@ interface EventItem {
   homeAway: string | null;
   source?: string | null;
   attendanceStatus?: AttendanceStatus;
+  matchResult?: { teamScore: number; opponentScore: number } | null;
 }
 
 export default function CalendarPage() {
@@ -134,6 +135,11 @@ export default function CalendarPage() {
                 </Badge>
                 {event.source === "google" && (
                   <Badge variant="outline" className="text-[10px] shrink-0">Google</Badge>
+                )}
+                {event.matchResult && (
+                  <Badge variant="outline" className="text-xs shrink-0 tabular-nums" data-testid={`result-event-${event.id}`}>
+                    O5MY {event.matchResult.teamScore}:{event.matchResult.opponentScore}
+                  </Badge>
                 )}
               </div>
               <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground">

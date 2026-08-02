@@ -14,6 +14,7 @@ import Register from "@/pages/register";
 import VerifyEmail from "@/pages/verify-email";
 import Dashboard from "@/pages/dashboard";
 import CalendarPage from "@/pages/calendar";
+import MatchesPage from "@/pages/matches";
 import EventDetailPage from "@/pages/event-detail";
 import PollsPage from "@/pages/polls";
 import PollDetailPage from "@/pages/poll-detail";
@@ -89,6 +90,9 @@ function AppRouter() {
       </Route>
       <Route path="/calendar">
         <ProtectedRoute><CalendarPage /></ProtectedRoute>
+      </Route>
+      <Route path="/matches">
+        <ProtectedRoute><MatchesPage /></ProtectedRoute>
       </Route>
       <Route path="/events/:id">
         <ProtectedRoute><EventDetailPage /></ProtectedRoute>

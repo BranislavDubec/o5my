@@ -6,7 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import {
   Calendar, Users, Vote, CreditCard, Settings, LogOut,
-  Shield, Menu, X, Sun, Moon, Home, FolderOpen, BellRing, ClipboardList, Trophy
+  Shield, Menu, X, Sun, Moon, Home, FolderOpen, BellRing, ClipboardList, Trophy, Swords
 } from "lucide-react";
 
 interface NavItem {
@@ -19,6 +19,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { path: "/", label: "Dashboard", icon: <Home className="w-5 h-5" /> },
   { path: "/calendar", label: "Kalendár", icon: <Calendar className="w-5 h-5" /> },
+  { path: "/matches", label: "Zápasy", icon: <Swords className="w-5 h-5" /> },
   { path: "/polls", label: "Ankety", icon: <Vote className="w-5 h-5" /> },
   { path: "/files", label: "Súbory", icon: <FolderOpen className="w-5 h-5" /> },
   { path: "/payments", label: "Platby", icon: <CreditCard className="w-5 h-5" /> },
@@ -111,11 +112,11 @@ export function Layout({ children }: { children: ReactNode }) {
         <div className="p-3 border-t border-sidebar-border space-y-2">
           <div className="flex items-center gap-2 px-3 py-2">
             <div className="w-8 h-8 rounded-full bg-primary/15 flex items-center justify-center text-primary font-semibold text-sm">
-              {user?.name?.charAt(0)?.toUpperCase()}
+              {(user?.nickname || user?.name)?.charAt(0)?.toUpperCase()}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">{user?.name}</p>
-              <p className="text-xs text-muted-foreground truncate">{user?.role === "admin" ? "Admin" : "Hráč"}</p>
+              <p className="text-sm font-medium truncate">{user?.nickname || user?.name}</p>
+              <p className="text-xs text-muted-foreground truncate">{user?.nickname ? user.name : user?.role === "admin" ? "Admin" : "Hráč"}</p>
             </div>
           </div>
           <button

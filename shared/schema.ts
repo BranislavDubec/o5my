@@ -8,6 +8,7 @@ export const users = sqliteTable("users", {
   email: text("email").notNull().unique(),
   password: text("password").notNull(),
   name: text("name").notNull(),
+  nickname: text("nickname"),
   phone: text("phone"),
   role: text("role").notNull().default("player"), // admin | player
   isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
@@ -20,6 +21,7 @@ export const insertUserSchema = createInsertSchema(users).pick({
   email: true,
   password: true,
   name: true,
+  nickname: true,
   phone: true,
   role: true,
 });
@@ -88,6 +90,31 @@ export const insertEventSchema = createInsertSchema(events).pick({
 
 export type InsertEvent = z.infer<typeof insertEventSchema>;
 export type Event = typeof events.$inferSelect;
+
+// ============ MATCH RESULTS ============
+export const matchResults = sqliteTable("match_results", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  eventId: integer("event_id").notNull().unique().references(() => events.id),
+  teamScore: integer("team_score").notNull(),
+  opponentScore: integer("opponent_score").notNull(),
+  notes: text("notes"),
+  updatedBy: integer("updated_by").notNull().references(() => users.id),
+  createdAt: text("created_at").notNull().$defaultFn(() => new Date().toISOString()),
+  updatedAt: text("updated_at").notNull().$defaultFn(() => new Date().toISOString()),
+});
+
+export const matchPlayerStatistics = sqliteTable("match_player_statistics", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  eventId: integer("event_id").notNull().references(() => events.id),
+  userId: integer("user_id").notNull().references(() => users.id),
+  goals: integer("goals").notNull().default(0),
+  assists: integer("assists").notNull().default(0),
+  createdAt: text("created_at").notNull().$defaultFn(() => new Date().toISOString()),
+  updatedAt: text("updated_at").notNull().$defaultFn(() => new Date().toISOString()),
+});
+
+export type MatchResult = typeof matchResults.$inferSelect;
+export type MatchPlayerStatistic = typeof matchPlayerStatistics.$inferSelect;
 
 // ============ EVENT RESPONSES (Attendance) ============
 export const eventResponses = sqliteTable("event_responses", {

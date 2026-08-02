@@ -5,6 +5,7 @@ interface AuthUser {
   id: number;
   email: string;
   name: string;
+  nickname: string | null;
   phone: string | null;
   role: string;
   isActive: boolean;
@@ -17,7 +18,8 @@ interface AuthContextType {
   user: AuthUser | null;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (data: { email: string; password: string; name: string; phone?: string }) => Promise<void>;
+  register: (data: { email: string; password: string; name: string; nickname: string; phone?: string }) => Promise<void>;
+  updateProfile: (data: { nickname: string }) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -41,8 +43,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(data);
   };
 
-  const register = async (data: { email: string; password: string; name: string; phone?: string }) => {
+  const register = async (data: { email: string; password: string; name: string; nickname: string; phone?: string }) => {
     await apiRequest("POST", "/api/auth/register", data);
+  };
+
+  const updateProfile = async (data: { nickname: string }) => {
+    const response = await apiRequest("PUT", "/api/auth/profile", data);
+    setUser(await response.json());
   };
 
   const logout = async () => {
@@ -51,7 +58,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, isLoading, login, register, updateProfile, logout }}>
       {children}
     </AuthContext.Provider>
   );

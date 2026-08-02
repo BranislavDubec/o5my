@@ -15,6 +15,7 @@ import { sk } from "date-fns/locale";
 interface UserItem {
   id: number;
   name: string;
+  nickname: string | null;
   email: string;
   phone: string | null;
   role: string;
@@ -90,6 +91,7 @@ export default function AdminMembers() {
                     {!u.isActive && <Badge variant="outline" className="text-xs">Deaktivovaný</Badge>}
                   </div>
                   <p className="text-xs text-muted-foreground truncate">{u.email}</p>
+                  {u.nickname && <p className="text-xs font-medium text-primary truncate">@{u.nickname}</p>}
                   <p className="text-xs text-muted-foreground">Pridaný: {format(parseISO(u.createdAt), "d. MMM yyyy", { locale: sk })}</p>
                 </div>
                 <div className="flex flex-col gap-1 shrink-0">

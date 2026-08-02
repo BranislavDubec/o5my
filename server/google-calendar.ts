@@ -35,6 +35,37 @@ function inferEventType(summary = "") {
   return "match";
 }
 
+function parseGoogleMatchMetadata(summary = "", description = "") {
+  const opponentFromDescription = description
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .find(line => line.toLocaleLowerCase("sk").startsWith("súper:"))
+    ?.slice("súper:".length)
+    .trim();
+  const sideFromDescription = description
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .find(line => line.toLocaleLowerCase("sk").startsWith("strana:"))
+    ?.slice("strana:".length)
+    .trim()
+    .toLocaleLowerCase("sk");
+
+  let opponent = opponentFromDescription || undefined;
+  let homeAway: "home" | "away" | undefined = sideFromDescription
+    ? sideFromDescription.includes("vypraven") || sideFromDescription.includes("vonku") ? "away" : "home"
+    : undefined;
+
+  const title = summary.replace(/^zápas\s*:\s*/i, "").trim();
+  const homeMatch = title.match(/^o5my(?:\s+futsal)?\s+(?:vs\.?|[-–])\s+(.+)$/i);
+  const awayMatch = title.match(/^(.+?)\s+(?:vs\.?|[-–])\s+o5my(?:\s+futsal)?$/i);
+  if (!opponent && homeMatch?.[1]) opponent = homeMatch[1].trim();
+  if (!opponent && awayMatch?.[1]) opponent = awayMatch[1].trim();
+  if (!homeAway && homeMatch) homeAway = "home";
+  if (!homeAway && awayMatch) homeAway = "away";
+
+  return { opponent, homeAway };
+}
+
 function parseGoogleDate(value?: { date?: string; dateTime?: string }) {
   if (!value) return null;
   const raw = value.dateTime || value.date;
@@ -408,6 +439,9 @@ export async function syncGoogleCalendarEvents(options: {
 
     const type = inferEventType(item.summary || "");
     const normalizedTitle = item.summary || "Google event";
+    const matchMetadata: { opponent?: string; homeAway?: "home" | "away" } = type === "match"
+      ? parseGoogleMatchMetadata(normalizedTitle, item.description || "")
+      : {};
 
     const eventData = {
       type,
@@ -416,8 +450,8 @@ export async function syncGoogleCalendarEvents(options: {
       location: item.location || undefined,
       startTime,
       endTime,
-      opponent: type === "match" ? undefined : undefined,
-      homeAway: type === "match" ? "home" : undefined,
+      opponent: type === "match" ? matchMetadata.opponent : undefined,
+      homeAway: type === "match" ? matchMetadata.homeAway : undefined,
       createdBy: options.userId,
       externalId: item.id,
       source: "google",
@@ -438,6 +472,8 @@ export async function syncGoogleCalendarEvents(options: {
     if (existing) {
       storage.updateEvent(existing.id, {
         ...eventData,
+        opponent: type === "match" ? matchMetadata.opponent || existing.opponent : null,
+        homeAway: type === "match" ? matchMetadata.homeAway || existing.homeAway || "home" : null,
         source: existing.source === "google" ? "google" : "local",
       } as any);
 
@@ -465,7 +501,10 @@ export async function syncGoogleCalendarEvents(options: {
 
       updated += 1;
     } else {
-      storage.createEvent(eventData as any);
+      storage.createEvent({
+        ...eventData,
+        homeAway: type === "match" ? matchMetadata.homeAway || "home" : undefined,
+      } as any);
       created += 1;
     }
   }

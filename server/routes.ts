@@ -134,6 +134,52 @@ function parseTeamInventoryItem(body: unknown, responsibilityId: number) {
   });
 }
 
+function parseMatchResult(body: unknown) {
+  const input = body && typeof body === "object" ? body as Record<string, unknown> : {};
+  const parseCount = (value: unknown, label: string, maximum = 100) => {
+    const parsed = Number(value);
+    if (!Number.isInteger(parsed) || parsed < 0 || parsed > maximum) {
+      throw new Error(`${label} musí byť celé číslo od 0 do ${maximum}`);
+    }
+    return parsed;
+  };
+  const teamScore = parseCount(input.teamScore, "Skóre O5MY");
+  const opponentScore = parseCount(input.opponentScore, "Skóre súpera");
+  const notes = typeof input.notes === "string" ? input.notes.trim() : "";
+  if (notes.length > 2_000) throw new Error("Poznámka môže mať najviac 2 000 znakov");
+
+  const rawPlayers = input.players === undefined ? [] : input.players;
+  if (!Array.isArray(rawPlayers) || rawPlayers.length > 100) {
+    throw new Error("Neplatný zoznam hráčov");
+  }
+  const players = rawPlayers.map(rawPlayer => {
+    const player = rawPlayer && typeof rawPlayer === "object" ? rawPlayer as Record<string, unknown> : {};
+    return {
+      userId: parseCount(player.userId, "ID hráča", 1_000_000),
+      goals: parseCount(player.goals ?? 0, "Počet gólov"),
+      assists: parseCount(player.assists ?? 0, "Počet asistencií"),
+    };
+  }).filter(player => player.goals > 0 || player.assists > 0);
+
+  if (new Set(players.map(player => player.userId)).size !== players.length) {
+    throw new Error("Každý hráč môže byť vo výsledku iba raz");
+  }
+  if (players.some(player => {
+    const user = storage.getUser(player.userId);
+    return !user?.isActive || !user.emailVerified;
+  })) {
+    throw new Error("Góly a asistencie možno zapísať iba aktívnym hráčom");
+  }
+  if (players.reduce((sum, player) => sum + player.goals, 0) > teamScore) {
+    throw new Error("Súčet gólov hráčov nemôže byť vyšší ako skóre O5MY");
+  }
+  if (players.reduce((sum, player) => sum + player.assists, 0) > teamScore) {
+    throw new Error("Súčet asistencií nemôže byť vyšší ako skóre O5MY");
+  }
+
+  return { teamScore, opponentScore, notes: notes || null, players };
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -148,6 +194,7 @@ export async function registerRoutes(
     res.json(allEvents.map(event => ({
       ...event,
       attendanceStatus: storage.getEventResponse(event.id, req.user!.id)?.status ?? null,
+      matchResult: storage.getMatchResult(event.id) ?? null,
     })));
   });
 
@@ -157,13 +204,46 @@ export async function registerRoutes(
     res.json(events.map(event => ({
       ...event,
       attendanceStatus: storage.getEventResponse(event.id, req.user!.id)?.status ?? null,
+      matchResult: storage.getMatchResult(event.id) ?? null,
     })));
   });
 
   app.get("/api/events/:id", requireAuth, (req, res) => {
     const event = storage.getEvent(Number(req.params.id));
     if (!event) return res.status(404).json({ message: "Event nenájdený" });
-    res.json(event);
+    res.json({ ...event, matchResult: storage.getMatchResult(event.id) ?? null });
+  });
+
+  app.put("/api/events/:id/result", requireAdmin, (req, res) => {
+    try {
+      const eventId = Number(req.params.id);
+      if (!Number.isInteger(eventId)) return res.status(400).json({ message: "Neplatné ID zápasu" });
+      const event = storage.getEvent(eventId);
+      if (!event) return res.status(404).json({ message: "Event nenájdený" });
+      if (event.type !== "match") return res.status(400).json({ message: "Výsledok možno zapísať iba k zápasu" });
+      const result = parseMatchResult(req.body);
+      res.json(storage.upsertMatchResult(
+        eventId,
+        result.teamScore,
+        result.opponentScore,
+        result.notes,
+        req.user!.id,
+        result.players,
+      ));
+    } catch (error: any) {
+      res.status(400).json({ message: error.message || "Výsledok sa nepodarilo uložiť" });
+    }
+  });
+
+  app.delete("/api/events/:id/result", requireAdmin, (req, res) => {
+    try {
+      const eventId = Number(req.params.id);
+      if (!storage.getEvent(eventId)) return res.status(404).json({ message: "Event nenájdený" });
+      if (!storage.deleteMatchResult(eventId)) return res.status(404).json({ message: "Výsledok nebol zapísaný" });
+      res.json({ message: "Výsledok bol zmazaný" });
+    } catch (error: any) {
+      res.status(400).json({ message: error.message || "Výsledok sa nepodarilo zmazať" });
+    }
   });
 
   app.post("/api/events", requireAdmin, async (req, res) => {
@@ -173,6 +253,7 @@ export async function registerRoutes(
         createdBy: req.user!.id,
       });
       const event = storage.createEvent(data);
+      let googleSyncWarning: string | undefined;
 
       try {
         const googleEvent = await createGoogleCalendarEvent({
@@ -194,9 +275,10 @@ export async function registerRoutes(
         }
       } catch (googleErr: any) {
         console.error("Failed to create Google Calendar event", googleErr.message || googleErr);
+        googleSyncWarning = "Event bol vytvorený, ale nepodarilo sa ho pridať do Google Calendar.";
       }
 
-      res.status(201).json(event);
+      res.status(201).json({ ...(storage.getEvent(event.id) ?? event), googleSyncWarning });
     } catch (err: any) {
       res.status(400).json({ message: err.message });
     }
@@ -239,6 +321,7 @@ export async function registerRoutes(
         : null,
     });
     if (!event) return res.status(404).json({ message: "Event nenájdený" });
+    if (event.type !== "match") storage.deleteMatchResult(event.id);
 
     let googleSyncWarning: string | undefined;
     if (event.externalId) {
