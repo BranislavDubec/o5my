@@ -1,4 +1,10 @@
 {$APP_DOMAIN} {
+  tls {
+    issuer acme {
+      profile shortlived
+    }
+  }
+
   encode zstd gzip
   reverse_proxy app:5000
 }

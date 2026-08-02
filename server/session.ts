@@ -6,6 +6,13 @@ const MemoryStore = createMemoryStore(session);
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const SESSION_MAX_AGE_MS = 7 * ONE_DAY_MS;
 
+function useSecureCookies() {
+  if (process.env.SESSION_COOKIE_SECURE !== undefined) {
+    return process.env.SESSION_COOKIE_SECURE === "true";
+  }
+  return process.env.NODE_ENV === "production";
+}
+
 export function configureSession(app: Express) {
   app.set("trust proxy", 1);
   app.use(
@@ -15,7 +22,7 @@ export function configureSession(app: Express) {
       saveUninitialized: false,
       cookie: {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
+        secure: useSecureCookies(),
         sameSite: "lax",
         maxAge: SESSION_MAX_AGE_MS,
       },
