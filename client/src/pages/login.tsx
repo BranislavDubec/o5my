@@ -53,7 +53,7 @@ export default function Login() {
             src="/logo.jpg"
             alt="Futbal App"
           />
-          <h1 className="font-serif text-2xl font-bold tracking-tight">Futbal Tím</h1>
+          <h1 className="font-serif text-2xl font-bold tracking-tight">O5MY Futsal</h1>
           <p className="text-sm text-muted-foreground">Prihlás sa do tímovej appky</p>
         </div>
 
