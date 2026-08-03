@@ -615,10 +615,23 @@ export async function registerRoutes(
     }
   });
 
-  // ============ USERS (Admin) ============
-  app.get("/api/users", requireAdmin, (_req, res) => {
-    const allUsers = storage.getAllUsers().map(({ password, ...u }) => u);
-    res.json(allUsers);
+  // ============ USERS ============
+  app.get("/api/users", requireAuth, (req, res) => {
+    const allUsers = storage.getAllUsers();
+    if (req.user!.role === "admin") {
+      return res.json(allUsers.map(({ password, ...user }) => user));
+    }
+
+    res.json(allUsers
+      .filter(user => user.isActive)
+      .map(user => ({
+        id: user.id,
+        name: user.name,
+        nickname: user.nickname,
+        role: user.role,
+        isActive: user.isActive,
+        createdAt: user.createdAt,
+      })));
   });
 
   app.put("/api/users/:id/role", requireAdmin, (req, res) => {

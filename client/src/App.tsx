@@ -133,13 +133,16 @@ function AppRouter() {
       <Route path="/statistics">
         <ProtectedRoute><StatisticsPage /></ProtectedRoute>
       </Route>
+      <Route path="/members">
+        <ProtectedRoute><AdminMembers /></ProtectedRoute>
+      </Route>
       <Route path="/settings">
         <ProtectedRoute><Settings /></ProtectedRoute>
       </Route>
 
       {/* Admin routes */}
       <Route path="/admin/members">
-        <ProtectedRoute requiredRole="admin"><AdminMembers /></ProtectedRoute>
+        <Redirect to="/members" />
       </Route>
       <Route path="/admin/payments">
         <ProtectedRoute requiredRole="admin"><AdminPayments /></ProtectedRoute>

@@ -16,8 +16,8 @@ interface UserItem {
   id: number;
   name: string;
   nickname: string | null;
-  email: string;
-  phone: string | null;
+  email?: string;
+  phone?: string | null;
   role: string;
   isActive: boolean;
   createdAt: string;
@@ -28,6 +28,7 @@ export default function AdminMembers() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [roleDialog, setRoleDialog] = useState<{ open: boolean; userId: number; role: string }>({ open: false, userId: 0, role: "" });
+  const isAdmin = currentUser?.role === "admin";
 
   const { data: users = [] } = useQuery<UserItem[]>({
     queryKey: ["/api/users"],
@@ -90,57 +91,59 @@ export default function AdminMembers() {
                     )}
                     {!u.isActive && <Badge variant="outline" className="text-xs">Deaktivovaný</Badge>}
                   </div>
-                  <p className="text-xs text-muted-foreground truncate">{u.email}</p>
+                  {isAdmin && u.email && <p className="text-xs text-muted-foreground truncate">{u.email}</p>}
                   {u.nickname && <p className="text-xs font-medium text-primary truncate">@{u.nickname}</p>}
                   <p className="text-xs text-muted-foreground">Pridaný: {format(parseISO(u.createdAt), "d. MMM yyyy", { locale: sk })}</p>
                 </div>
-                <div className="flex flex-col gap-1 shrink-0">
-                  <Dialog open={roleDialog.open && roleDialog.userId === u.id} onOpenChange={open => setRoleDialog({ open, userId: u.id, role: u.role })}>
-                    <DialogTrigger asChild>
-                      <Button variant="outline" size="sm" className="text-xs" disabled={!u.isActive} data-testid={`button-role-${u.id}`}>Rola</Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                      <DialogHeader>
-                        <DialogTitle>Zmeniť rolu — {u.name}</DialogTitle>
-                      </DialogHeader>
-                      <Select
-                        value={roleDialog.role}
-                        onValueChange={v => setRoleDialog({ ...roleDialog, role: v })}
-                      >
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="admin">Admin</SelectItem>
-                          <SelectItem value="player">Hráč</SelectItem>
-                        </SelectContent>
-                      </Select>
+                {isAdmin && (
+                  <div className="flex flex-col gap-1 shrink-0">
+                    <Dialog open={roleDialog.open && roleDialog.userId === u.id} onOpenChange={open => setRoleDialog({ open, userId: u.id, role: u.role })}>
+                      <DialogTrigger asChild>
+                        <Button variant="outline" size="sm" className="text-xs" disabled={!u.isActive} data-testid={`button-role-${u.id}`}>Rola</Button>
+                      </DialogTrigger>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>Zmeniť rolu — {u.name}</DialogTitle>
+                        </DialogHeader>
+                        <Select
+                          value={roleDialog.role}
+                          onValueChange={v => setRoleDialog({ ...roleDialog, role: v })}
+                        >
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="admin">Admin</SelectItem>
+                            <SelectItem value="player">Hráč</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          onClick={() => updateRoleMutation.mutate({ id: u.id, role: roleDialog.role })}
+                          disabled={updateRoleMutation.isPending}
+                          data-testid="button-save-role"
+                        >
+                          Uložiť
+                        </Button>
+                      </DialogContent>
+                    </Dialog>
+                    {u.id !== currentUser?.id && (
                       <Button
-                        onClick={() => updateRoleMutation.mutate({ id: u.id, role: roleDialog.role })}
-                        disabled={updateRoleMutation.isPending}
-                        data-testid="button-save-role"
+                        variant={u.isActive ? "ghost" : "outline"}
+                        size="sm"
+                        className={u.isActive ? "text-xs text-destructive hover:text-destructive" : "text-xs"}
+                        disabled={updateStatusMutation.isPending}
+                        onClick={() => {
+                          const nextIsActive = !u.isActive;
+                          if (nextIsActive || confirm(`Deaktivovať ${u.name}?`)) {
+                            updateStatusMutation.mutate({ id: u.id, isActive: nextIsActive });
+                          }
+                        }}
+                        data-testid={`button-status-user-${u.id}`}
                       >
-                        Uložiť
+                        {u.isActive ? <UserX className="w-3 h-3 mr-1" /> : <UserCheck className="w-3 h-3 mr-1" />}
+                        {u.isActive ? "Deaktivovať" : "Aktivovať"}
                       </Button>
-                    </DialogContent>
-                  </Dialog>
-                  {u.id !== currentUser?.id && (
-                    <Button
-                      variant={u.isActive ? "ghost" : "outline"}
-                      size="sm"
-                      className={u.isActive ? "text-xs text-destructive hover:text-destructive" : "text-xs"}
-                      disabled={updateStatusMutation.isPending}
-                      onClick={() => {
-                        const nextIsActive = !u.isActive;
-                        if (nextIsActive || confirm(`Deaktivovať ${u.name}?`)) {
-                          updateStatusMutation.mutate({ id: u.id, isActive: nextIsActive });
-                        }
-                      }}
-                      data-testid={`button-status-user-${u.id}`}
-                    >
-                      {u.isActive ? <UserX className="w-3 h-3 mr-1" /> : <UserCheck className="w-3 h-3 mr-1" />}
-                      {u.isActive ? "Deaktivovať" : "Aktivovať"}
-                    </Button>
-                  )}
-                </div>
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
           ))}

@@ -168,7 +168,7 @@ export default function Dashboard() {
       )}
 
       <div className="grid grid-cols-3 gap-3">
-        <Link href="/admin/members" className="block rounded-lg" data-testid="link-dashboard-players">
+        <Link href="/members" className="block rounded-lg" data-testid="link-dashboard-players">
           <Card className="h-full hover-elevate cursor-pointer">
             <CardContent className="p-4 flex flex-col items-center text-center">
               <Users className="w-5 h-5 text-primary mb-2" />

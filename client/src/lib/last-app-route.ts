@@ -10,6 +10,7 @@ const rememberableRoutePatterns = [
   /^\/files(?:\/tactics\/\d+)?$/,
   /^\/organization$/,
   /^\/statistics$/,
+  /^\/members$/,
   /^\/settings$/,
   /^\/admin\/(?:members|payments|bank|notifications)$/,
 ];
