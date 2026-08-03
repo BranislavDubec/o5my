@@ -9,6 +9,7 @@ import { createPaymentQrPayload, isValidIban, normalizeIban } from "./payment-qr
 import { registerMediaRoutes } from "./media-routes";
 import { getVapidPublicKey, notifyUsers } from "./notifications";
 import { createGoogleCalendarEvent, deleteGoogleCalendarEvent, syncGoogleCalendarEvents, updateGoogleCalendarEvent, updateGoogleCalendarEventAttendance } from "./google-calendar";
+import { getUserEventDescription } from "./google-event-description";
 import {
   insertEventSchema, insertPollSchema, insertPaymentSchema,
   insertTeamResponsibilitySchema, insertTeamInventoryItemSchema,
@@ -309,7 +310,7 @@ export async function registerRoutes(
     const event = storage.updateEvent(eventId, {
       type: body.type,
       title: body.title.trim(),
-      description: typeof body.description === "string" && body.description.trim() ? body.description.trim() : null,
+      description: typeof body.description === "string" ? getUserEventDescription(body.description) : null,
       location: typeof body.location === "string" && body.location.trim() ? body.location.trim() : null,
       startTime: body.startTime,
       endTime: body.endTime || null,

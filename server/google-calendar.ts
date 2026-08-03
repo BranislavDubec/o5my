@@ -1,5 +1,6 @@
 import { createSign } from "node:crypto";
 import { storage } from "./storage";
+import { getUserEventDescription } from "./google-event-description";
 
 interface GoogleCalendarEventItem {
   id?: string;
@@ -174,7 +175,8 @@ function buildGoogleEventDescription(event: WritableGoogleCalendarEvent) {
       : "Tréning";
 
   const descriptionParts = [`Typ: ${eventTypeLabel}`];
-  if (event.description) descriptionParts.push(event.description);
+  const userDescription = getUserEventDescription(event.description);
+  if (userDescription) descriptionParts.push(userDescription);
   if (event.opponent) descriptionParts.push(`Súper: ${event.opponent}`);
   if (event.homeAway) descriptionParts.push(`Strana: ${event.homeAway === "home" ? "Domáci" : "Vypravení"}`);
   return descriptionParts;
@@ -446,7 +448,7 @@ export async function syncGoogleCalendarEvents(options: {
     const eventData = {
       type,
       title: normalizedTitle,
-      description: item.description || undefined,
+      description: getUserEventDescription(item.description) || undefined,
       location: item.location || undefined,
       startTime,
       endTime,
