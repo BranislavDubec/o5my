@@ -14,6 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar, Plus, MapPin, Clock, Filter, RefreshCw } from "lucide-react";
 import { getAttendanceBorderClass, type AttendanceStatus } from "@/lib/event-attendance";
+import { eventEndPrecedesStart, localEventTimeToIso } from "@/lib/event-time";
 import { format, parseISO } from "date-fns";
 import { sk } from "date-fns/locale";
 
@@ -86,8 +87,30 @@ export default function CalendarPage() {
     e.preventDefault();
     const startDate = formData.date;
     const endDate = formData.endDate || startDate;
-    const startTime = `${startDate}T${formData.time}:00`;
-    const endTime = formData.endTime ? `${endDate}T${formData.endTime}:00` : null;
+    let startTime: string;
+    let endTime: string | null;
+
+    try {
+      startTime = localEventTimeToIso(startDate, formData.time);
+      endTime = formData.endTime ? localEventTimeToIso(endDate, formData.endTime) : null;
+    } catch (error) {
+      toast({
+        title: "Neplatný čas akcie",
+        description: error instanceof Error ? error.message : undefined,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (eventEndPrecedesStart(startTime, endTime)) {
+      toast({
+        title: "Neplatný čas akcie",
+        description: "Koniec akcie nemôže byť pred jej začiatkom",
+        variant: "destructive",
+      });
+      return;
+    }
+
     createMutation.mutate({
       type: formData.type,
       title: formData.title,

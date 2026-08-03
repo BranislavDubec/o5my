@@ -3,6 +3,7 @@ import { Link, useParams } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/contexts/auth-context";
 import { useToast } from "@/hooks/use-toast";
+import { eventEndPrecedesStart, localEventTimeToIso } from "@/lib/event-time";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -207,9 +208,30 @@ export default function EventDetailPage() {
 
   const handleEditSubmit = (submitEvent: React.FormEvent) => {
     submitEvent.preventDefault();
-    const startTime = `${editForm.date}T${editForm.time}:00`;
     const endDate = editForm.endDate || editForm.date;
-    const endTime = editForm.endTime ? `${endDate}T${editForm.endTime}:00` : null;
+    let startTime: string;
+    let endTime: string | null;
+
+    try {
+      startTime = localEventTimeToIso(editForm.date, editForm.time);
+      endTime = editForm.endTime ? localEventTimeToIso(endDate, editForm.endTime) : null;
+    } catch (error) {
+      toast({
+        title: "Neplatný čas akcie",
+        description: error instanceof Error ? error.message : undefined,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (eventEndPrecedesStart(startTime, endTime)) {
+      toast({
+        title: "Neplatný čas akcie",
+        description: "Koniec akcie nemôže byť pred jej začiatkom",
+        variant: "destructive",
+      });
+      return;
+    }
 
     updateMutation.mutate({
       type: editForm.type,

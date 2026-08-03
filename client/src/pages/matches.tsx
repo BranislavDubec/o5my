@@ -8,6 +8,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/contexts/auth-context";
 import { useToast } from "@/hooks/use-toast";
 import { getAttendanceBorderClass, type AttendanceStatus } from "@/lib/event-attendance";
+import { eventEndPrecedesStart, localEventTimeToIso } from "@/lib/event-time";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -96,9 +97,9 @@ export default function MatchesPage() {
       const title = form.homeAway === "home"
         ? `Zápas: O5MY vs ${opponent}`
         : `Zápas: ${opponent} vs O5MY`;
-      const startTime = `${form.date}T${form.time}:00`;
-      const endTime = form.endTime ? `${form.date}T${form.endTime}:00` : undefined;
-      if (endTime && new Date(endTime).getTime() < new Date(startTime).getTime()) {
+      const startTime = localEventTimeToIso(form.date, form.time);
+      const endTime = form.endTime ? localEventTimeToIso(form.date, form.endTime) : undefined;
+      if (eventEndPrecedesStart(startTime, endTime)) {
         throw new Error("Koniec zápasu nemôže byť pred jeho začiatkom");
       }
       const response = await apiRequest("POST", "/api/events", {
