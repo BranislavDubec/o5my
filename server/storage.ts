@@ -38,6 +38,8 @@ sqlite.exec(`
     email TEXT NOT NULL UNIQUE,
     password TEXT NOT NULL,
     name TEXT NOT NULL,
+    first_name TEXT,
+    last_name TEXT,
     nickname TEXT,
     phone TEXT,
     role TEXT NOT NULL DEFAULT 'player',
@@ -107,6 +109,28 @@ if (!userColumns.some(column => column.name === "theme")) {
 }
 if (!userColumns.some(column => column.name === "nickname")) {
   sqlite.exec("ALTER TABLE users ADD COLUMN nickname TEXT");
+}
+if (!userColumns.some(column => column.name === "first_name")) {
+  sqlite.exec("ALTER TABLE users ADD COLUMN first_name TEXT");
+  sqlite.exec(`
+    UPDATE users
+    SET first_name = CASE
+      WHEN INSTR(TRIM(name), ' ') > 0 THEN SUBSTR(TRIM(name), 1, INSTR(TRIM(name), ' ') - 1)
+      ELSE TRIM(name)
+    END
+    WHERE first_name IS NULL
+  `);
+}
+if (!userColumns.some(column => column.name === "last_name")) {
+  sqlite.exec("ALTER TABLE users ADD COLUMN last_name TEXT");
+  sqlite.exec(`
+    UPDATE users
+    SET last_name = CASE
+      WHEN INSTR(TRIM(name), ' ') > 0 THEN TRIM(SUBSTR(TRIM(name), INSTR(TRIM(name), ' ') + 1))
+      ELSE ''
+    END
+    WHERE last_name IS NULL
+  `);
 }
 
 sqlite.exec(`
@@ -585,7 +609,7 @@ export interface IStorage {
   updateUserRole(id: number, role: string): User | undefined;
   updateUserActiveStatus(id: number, isActive: boolean): User | undefined;
   updateUserTheme(id: number, theme: "light" | "dark"): User | undefined;
-  updateUserNickname(id: number, nickname: string): User | undefined;
+  updateUserProfile(id: number, firstName: string, lastName: string, nickname: string): User | undefined;
   markUserEmailVerified(id: number): User | undefined;
 
   // Player statistics
@@ -800,8 +824,12 @@ export class DatabaseStorage implements IStorage {
     return db.update(users).set({ theme }).where(eq(users.id, id)).returning().get();
   }
 
-  updateUserNickname(id: number, nickname: string): User | undefined {
-    return db.update(users).set({ nickname }).where(eq(users.id, id)).returning().get();
+  updateUserProfile(id: number, firstName: string, lastName: string, nickname: string): User | undefined {
+    return db.update(users)
+      .set({ firstName, lastName, nickname, name: `${firstName} ${lastName}` })
+      .where(eq(users.id, id))
+      .returning()
+      .get();
   }
 
   markUserEmailVerified(id: number): User | undefined {

@@ -12,7 +12,8 @@ import { apiRequest } from "@/lib/queryClient";
 export default function Register() {
   const { register } = useAuth();
   const { toast } = useToast();
-  const [name, setName] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [nickname, setNickname] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -28,7 +29,7 @@ export default function Register() {
     }
     setIsLoading(true);
     try {
-      await register({ name, nickname, email, phone: phone || undefined, password });
+      await register({ firstName, lastName, nickname, email, phone: phone || undefined, password });
       setRegistrationComplete(true);
     } catch (err: any) {
       toast({ title: "Chyba", description: err.message, variant: "destructive" });
@@ -79,9 +80,15 @@ export default function Register() {
             ) : (
             <>
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Meno a priezvisko</Label>
-                <Input id="name" value={name} onChange={e => setName(e.target.value)} required placeholder="Ján Novák" data-testid="input-name" />
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="first-name">Meno</Label>
+                  <Input id="first-name" value={firstName} onChange={e => setFirstName(e.target.value)} required maxLength={80} placeholder="Ján" data-testid="input-first-name" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="last-name">Priezvisko</Label>
+                  <Input id="last-name" value={lastName} onChange={e => setLastName(e.target.value)} required maxLength={80} placeholder="Novák" data-testid="input-last-name" />
+                </div>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="nickname">Prezývka</Label>

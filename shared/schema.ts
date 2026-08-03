@@ -8,6 +8,8 @@ export const users = sqliteTable("users", {
   email: text("email").notNull().unique(),
   password: text("password").notNull(),
   name: text("name").notNull(),
+  firstName: text("first_name"),
+  lastName: text("last_name"),
   nickname: text("nickname"),
   phone: text("phone"),
   role: text("role").notNull().default("player"), // admin | player
@@ -21,6 +23,8 @@ export const insertUserSchema = createInsertSchema(users).pick({
   email: true,
   password: true,
   name: true,
+  firstName: true,
+  lastName: true,
   nickname: true,
   phone: true,
   role: true,

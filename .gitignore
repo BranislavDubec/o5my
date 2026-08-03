@@ -16,3 +16,6 @@ data.db-journal
 
 *.log
 .DS_Store
+
+
+o5my.json

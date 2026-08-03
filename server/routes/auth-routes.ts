@@ -3,13 +3,22 @@ import { insertUserSchema } from "@shared/schema";
 import { comparePassword, getCurrentUser, hashPassword, requireAuth } from "../auth";
 import { sendEmailVerification, sendRegistrationCompleteEmail, verifyEmailToken } from "../email-verification";
 import { storage } from "../storage";
-import { normalizeNickname } from "../user-profile";
+import { normalizeNickname, normalizePersonName, splitFullName } from "../user-profile";
 
 export function registerAuthRoutes(app: Express) {
   app.post("/api/auth/register", async (req, res) => {
     try {
+      const legacyName = splitFullName(req.body?.name);
+      const firstName = normalizePersonName(req.body?.firstName ?? legacyName.firstName, "Meno");
+      const lastName = normalizePersonName(req.body?.lastName ?? legacyName.lastName, "Priezvisko");
       const nickname = normalizeNickname(req.body?.nickname);
-      const data = insertUserSchema.parse({ ...req.body, nickname });
+      const data = insertUserSchema.parse({
+        ...req.body,
+        name: `${firstName} ${lastName}`,
+        firstName,
+        lastName,
+        nickname,
+      });
       const email = data.email.trim().toLowerCase();
       const existing = storage.getUserByEmail(email);
       if (existing) {
@@ -79,8 +88,10 @@ export function registerAuthRoutes(app: Express) {
 
   app.put("/api/auth/profile", requireAuth, (req, res) => {
     try {
+      const firstName = normalizePersonName(req.body?.firstName, "Meno");
+      const lastName = normalizePersonName(req.body?.lastName, "Priezvisko");
       const nickname = normalizeNickname(req.body?.nickname);
-      const user = storage.updateUserNickname(req.user!.id, nickname);
+      const user = storage.updateUserProfile(req.user!.id, firstName, lastName, nickname);
       if (!user) return res.status(404).json({ message: "Používateľ nenájdený" });
       const { password, ...safeUser } = user;
       res.json(safeUser);

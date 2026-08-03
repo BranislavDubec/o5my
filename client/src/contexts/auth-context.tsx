@@ -5,6 +5,8 @@ interface AuthUser {
   id: number;
   email: string;
   name: string;
+  firstName: string | null;
+  lastName: string | null;
   nickname: string | null;
   phone: string | null;
   role: string;
@@ -18,8 +20,8 @@ interface AuthContextType {
   user: AuthUser | null;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (data: { email: string; password: string; name: string; nickname: string; phone?: string }) => Promise<void>;
-  updateProfile: (data: { nickname: string }) => Promise<void>;
+  register: (data: { email: string; password: string; firstName: string; lastName: string; nickname: string; phone?: string }) => Promise<void>;
+  updateProfile: (data: { firstName: string; lastName: string; nickname: string }) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -43,11 +45,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(data);
   };
 
-  const register = async (data: { email: string; password: string; name: string; nickname: string; phone?: string }) => {
+  const register = async (data: { email: string; password: string; firstName: string; lastName: string; nickname: string; phone?: string }) => {
     await apiRequest("POST", "/api/auth/register", data);
   };
 
-  const updateProfile = async (data: { nickname: string }) => {
+  const updateProfile = async (data: { firstName: string; lastName: string; nickname: string }) => {
     const response = await apiRequest("PUT", "/api/auth/profile", data);
     setUser(await response.json());
   };

@@ -19,6 +19,14 @@ interface NotificationSettings {
   subscriptionCount: number;
 }
 
+function profileNameParts(firstName?: string | null, lastName?: string | null, fullName?: string) {
+  if (firstName || lastName) return { firstName: firstName ?? "", lastName: lastName ?? "" };
+  const normalized = fullName?.trim() ?? "";
+  const separatorIndex = normalized.indexOf(" ");
+  if (separatorIndex < 0) return { firstName: normalized, lastName: "" };
+  return { firstName: normalized.slice(0, separatorIndex), lastName: normalized.slice(separatorIndex + 1) };
+}
+
 function urlBase64ToUint8Array(value: string) {
   const padding = "=".repeat((4 - value.length % 4) % 4);
   const base64 = (value + padding).replace(/-/g, "+").replace(/_/g, "/");
@@ -39,6 +47,9 @@ export default function Settings() {
   const pushSupported = "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
   const [pushSubscribed, setPushSubscribed] = useState(false);
   const [pushStatusLoading, setPushStatusLoading] = useState(pushSupported);
+  const initialName = profileNameParts(user?.firstName, user?.lastName, user?.name);
+  const [firstName, setFirstName] = useState(initialName.firstName);
+  const [lastName, setLastName] = useState(initialName.lastName);
   const [nickname, setNickname] = useState(user?.nickname ?? "");
 
   const { data: settings } = useQuery<NotificationSettings>({
@@ -47,11 +58,14 @@ export default function Settings() {
   const pushActive = pushSubscribed && (settings?.pushEnabled ?? true);
 
   useEffect(() => {
+    const currentName = profileNameParts(user?.firstName, user?.lastName, user?.name);
+    setFirstName(currentName.firstName);
+    setLastName(currentName.lastName);
     setNickname(user?.nickname ?? "");
-  }, [user?.nickname]);
+  }, [user?.firstName, user?.lastName, user?.name, user?.nickname]);
 
   const profileMutation = useMutation({
-    mutationFn: () => updateProfile({ nickname }),
+    mutationFn: () => updateProfile({ firstName, lastName, nickname }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
       queryClient.invalidateQueries({ queryKey: ["/api/statistics"] });
@@ -165,8 +179,32 @@ export default function Settings() {
               profileMutation.mutate();
             }}
           >
-            <Label htmlFor="profile-nickname">Prezývka</Label>
-            <div className="flex flex-col gap-2 sm:flex-row">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="profile-first-name">Meno</Label>
+                <Input
+                  id="profile-first-name"
+                  value={firstName}
+                  onChange={inputEvent => setFirstName(inputEvent.target.value)}
+                  required
+                  maxLength={80}
+                  data-testid="input-profile-first-name"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="profile-last-name">Priezvisko</Label>
+                <Input
+                  id="profile-last-name"
+                  value={lastName}
+                  onChange={inputEvent => setLastName(inputEvent.target.value)}
+                  required
+                  maxLength={80}
+                  data-testid="input-profile-last-name"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="profile-nickname">Prezývka</Label>
               <Input
                 id="profile-nickname"
                 value={nickname}
@@ -177,9 +215,21 @@ export default function Settings() {
                 autoComplete="nickname"
                 data-testid="input-profile-nickname"
               />
+            </div>
+            <div className="flex justify-end">
               <Button
                 type="submit"
-                disabled={profileMutation.isPending || !nickname.trim() || nickname.trim() === (user?.nickname ?? "")}
+                disabled={
+                  profileMutation.isPending
+                  || !firstName.trim()
+                  || !lastName.trim()
+                  || !nickname.trim()
+                  || (
+                    firstName.trim() === (user?.firstName ?? initialName.firstName)
+                    && lastName.trim() === (user?.lastName ?? initialName.lastName)
+                    && nickname.trim() === (user?.nickname ?? "")
+                  )
+                }
                 data-testid="button-save-profile"
               >
                 {profileMutation.isPending ? "Ukladám..." : "Uložiť"}
