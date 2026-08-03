@@ -1,6 +1,6 @@
 import {
   users, playerStatistics, emailVerificationTokens, passwordResetTokens, events, matchResults, matchPlayerStatistics, eventResponses, polls, pollOptions, pollVotes,
-  payments, bankTransactions, cashTransactions, notificationSettings, pushSubscriptions, appSettings, teamResponsibilities,
+  payments, bankTransactions, walletTransactions, cashTransactions, notificationSettings, pushSubscriptions, appSettings, teamResponsibilities,
   teamResponsibilityOwners, teamInventoryItems,
   mediaCollections, mediaFiles,
 } from '@shared/schema';
@@ -12,7 +12,7 @@ import type {
   PollOption, InsertPollOption,
   PollVote, InsertPollVote,
   Payment, InsertPayment,
-  BankTransaction,
+  BankTransaction, WalletTransaction, InsertWalletTransaction,
   CashTransaction, InsertCashTransaction,
   NotificationSettings, InsertNotificationSettings,
   PushSubscriptionRecord,
@@ -225,6 +225,18 @@ sqlite.exec(`
     matched_payment_id INTEGER REFERENCES payments(id),
     synced_at TEXT NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS wallet_transactions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    bank_transaction_id INTEGER UNIQUE REFERENCES bank_transactions(id),
+    amount INTEGER NOT NULL,
+    description TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS wallet_transactions_user_id_idx
+    ON wallet_transactions(user_id);
 
   CREATE TABLE IF NOT EXISTS cash_transactions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -696,6 +708,11 @@ export interface IStorage {
   getUnmatchedBankTransactions(): BankTransaction[];
   createBankTransaction(tx: Omit<BankTransaction, 'id'>): BankTransaction | undefined;
   updateBankTransactionMatch(id: number, paymentId: number | null): void;
+
+  // User wallets
+  getWalletBalance(userId: number): number;
+  getWalletTransactionsByUser(userId: number): WalletTransaction[];
+  createWalletTransaction(transaction: InsertWalletTransaction): WalletTransaction | undefined;
 
   // Cashbox
   getAllCashTransactions(): CashTransaction[];
@@ -1287,6 +1304,32 @@ export class DatabaseStorage implements IStorage {
       .set({ matchedPaymentId: paymentId })
       .where(eq(bankTransactions.id, id))
       .run();
+  }
+
+  // ============ USER WALLETS ============
+  getWalletBalance(userId: number): number {
+    return db.select().from(walletTransactions)
+      .where(eq(walletTransactions.userId, userId))
+      .all()
+      .reduce((balance, transaction) => balance + transaction.amount, 0);
+  }
+
+  getWalletTransactionsByUser(userId: number): WalletTransaction[] {
+    return db.select().from(walletTransactions)
+      .where(eq(walletTransactions.userId, userId))
+      .orderBy(desc(walletTransactions.createdAt), desc(walletTransactions.id))
+      .all();
+  }
+
+  createWalletTransaction(transaction: InsertWalletTransaction): WalletTransaction | undefined {
+    if (transaction.bankTransactionId) {
+      const existing = db.select().from(walletTransactions)
+        .where(eq(walletTransactions.bankTransactionId, transaction.bankTransactionId))
+        .get();
+      if (existing) return undefined;
+    }
+
+    return db.insert(walletTransactions).values(transaction).returning().get();
   }
 
   // ============ CASHBOX ============

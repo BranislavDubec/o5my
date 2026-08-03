@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { CreditCard, CheckCircle2, Clock, AlertCircle, ChevronRight } from "lucide-react";
+import { CreditCard, CheckCircle2, Clock, AlertCircle, ChevronRight, WalletCards } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { sk } from "date-fns/locale";
 
@@ -15,9 +15,30 @@ interface Payment {
   status: string;
 }
 
+interface WalletSummary {
+  balance: number;
+  currency: string;
+  updatedAt: string | null;
+}
+
+function formatWalletBalance(balance: number, currency: string) {
+  try {
+    return new Intl.NumberFormat("sk-SK", {
+      style: "currency",
+      currency,
+      maximumFractionDigits: 0,
+    }).format(balance);
+  } catch {
+    return `${balance} ${currency}`;
+  }
+}
+
 export default function PaymentsPage() {
   const { data: payments = [] } = useQuery<Payment[]>({
     queryKey: ["/api/payments"],
+  });
+  const { data: wallet, isLoading: walletIsLoading, isError: walletHasError } = useQuery<WalletSummary>({
+    queryKey: ["/api/wallet"],
   });
 
   const totalPaid = payments.filter(p => p.status === "paid").reduce((sum, p) => sum + p.amount, 0);
@@ -36,6 +57,30 @@ export default function PaymentsPage() {
         <h1 className="font-serif text-xl font-bold">Platby</h1>
         <p className="text-sm text-muted-foreground mt-1">Tvoj platobný prehľad</p>
       </div>
+
+      <Card className="border-primary/40 bg-primary/5" data-testid="card-wallet">
+        <CardContent className="flex items-center gap-4 p-4">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary">
+            <WalletCards className="h-5 w-5" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Tvoja peňaženka</p>
+            <p className="text-2xl font-bold tabular-nums" data-testid="text-wallet-balance">
+              {walletIsLoading
+                ? "Načítavam..."
+                : walletHasError || !wallet
+                  ? "Nedostupné"
+                  : formatWalletBalance(wallet.balance, wallet.currency)}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {walletHasError
+                ? "Zostatok sa nepodarilo načítať. Skús obnoviť stránku."
+                : "Zostatok je len na čítanie a neskôr sa bude aktualizovať synchronizáciou s bankou."}
+            </p>
+          </div>
+          <Badge variant="outline" className="hidden shrink-0 sm:inline-flex">Len na čítanie</Badge>
+        </CardContent>
+      </Card>
 
       {/* Summary */}
       <div className="grid grid-cols-3 gap-3">

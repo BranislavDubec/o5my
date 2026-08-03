@@ -668,6 +668,15 @@ export async function registerRoutes(
     res.json(payments);
   });
 
+  app.get("/api/wallet", requireAuth, (req, res) => {
+    const transactions = storage.getWalletTransactionsByUser(req.user!.id);
+    res.json({
+      balance: storage.getWalletBalance(req.user!.id),
+      currency: storage.getAppSetting("payment_currency") || "CZK",
+      updatedAt: transactions[0]?.createdAt ?? null,
+    });
+  });
+
   app.get("/api/payments/all", requireAdmin, (_req, res) => {
     const payments = storage.getAllPayments();
     res.json(payments);
