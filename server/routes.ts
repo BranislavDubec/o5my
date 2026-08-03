@@ -619,7 +619,13 @@ export async function registerRoutes(
   app.get("/api/users", requireAuth, (req, res) => {
     const allUsers = storage.getAllUsers();
     if (req.user!.role === "admin") {
-      return res.json(allUsers.map(({ password, ...user }) => user));
+      const walletBalances = storage.getWalletBalances();
+      const walletCurrency = storage.getAppSetting("payment_currency") || "CZK";
+      return res.json(allUsers.map(({ password, ...user }) => ({
+        ...user,
+        walletBalance: walletBalances.get(user.id) ?? 0,
+        walletCurrency,
+      })));
     }
 
     res.json(allUsers

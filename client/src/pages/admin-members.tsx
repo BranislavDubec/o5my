@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Users, UserCheck, UserX, Shield, User as UserIcon } from "lucide-react";
+import { Users, UserCheck, UserX, Shield, User as UserIcon, WalletCards } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 import { useState } from "react";
 import { format, parseISO } from "date-fns";
@@ -21,6 +21,20 @@ interface UserItem {
   role: string;
   isActive: boolean;
   createdAt: string;
+  walletBalance?: number;
+  walletCurrency?: string;
+}
+
+function formatWalletBalance(balance: number, currency: string) {
+  try {
+    return new Intl.NumberFormat("sk-SK", {
+      style: "currency",
+      currency,
+      maximumFractionDigits: 0,
+    }).format(balance);
+  } catch {
+    return `${balance} ${currency}`;
+  }
 }
 
 export default function AdminMembers() {
@@ -93,6 +107,12 @@ export default function AdminMembers() {
                   </div>
                   {isAdmin && u.email && <p className="text-xs text-muted-foreground truncate">{u.email}</p>}
                   {u.nickname && <p className="text-xs font-medium text-primary truncate">@{u.nickname}</p>}
+                  {isAdmin && typeof u.walletBalance === "number" && (
+                    <p className="mt-1 flex items-center gap-1 text-xs font-semibold text-foreground" data-testid={`wallet-user-${u.id}`}>
+                      <WalletCards className="h-3.5 w-3.5 text-primary" />
+                      Peňaženka: {formatWalletBalance(u.walletBalance, u.walletCurrency || "CZK")}
+                    </p>
+                  )}
                   <p className="text-xs text-muted-foreground">Pridaný: {format(parseISO(u.createdAt), "d. MMM yyyy", { locale: sk })}</p>
                 </div>
                 {isAdmin && (

@@ -711,6 +711,7 @@ export interface IStorage {
 
   // User wallets
   getWalletBalance(userId: number): number;
+  getWalletBalances(): Map<number, number>;
   getWalletTransactionsByUser(userId: number): WalletTransaction[];
   createWalletTransaction(transaction: InsertWalletTransaction): WalletTransaction | undefined;
 
@@ -1312,6 +1313,13 @@ export class DatabaseStorage implements IStorage {
       .where(eq(walletTransactions.userId, userId))
       .all()
       .reduce((balance, transaction) => balance + transaction.amount, 0);
+  }
+
+  getWalletBalances(): Map<number, number> {
+    return db.select().from(walletTransactions).all().reduce((balances, transaction) => {
+      balances.set(transaction.userId, (balances.get(transaction.userId) ?? 0) + transaction.amount);
+      return balances;
+    }, new Map<number, number>());
   }
 
   getWalletTransactionsByUser(userId: number): WalletTransaction[] {
