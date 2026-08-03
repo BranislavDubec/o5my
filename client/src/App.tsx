@@ -24,6 +24,7 @@ import PaymentsPage from "@/pages/payments";
 import PaymentDetailPage from "@/pages/payment-detail";
 import MediaPage from "@/pages/media";
 import TacticDetailPage from "@/pages/tactic-detail";
+import TacticPdfPage from "@/pages/tactic-pdf";
 import OrganizationPage from "@/pages/organization";
 import StatisticsPage from "@/pages/statistics";
 import AdminMembers from "@/pages/admin-members";
@@ -119,6 +120,9 @@ function AppRouter() {
       </Route>
       <Route path="/files">
         <ProtectedRoute><MediaPage /></ProtectedRoute>
+      </Route>
+      <Route path="/files/tactics/:id/pdf/:fileId">
+        <ProtectedRoute><TacticPdfPage /></ProtectedRoute>
       </Route>
       <Route path="/files/tactics/:id">
         <ProtectedRoute><TacticDetailPage /></ProtectedRoute>

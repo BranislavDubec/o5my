@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "wouter";
 import { format, parseISO } from "date-fns";
 import { sk } from "date-fns/locale";
-import { ArrowDown, ArrowLeft, ArrowUp, ExternalLink, FileText, FolderOpen, Pencil, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowUp, FileText, FolderOpen, Pencil, Trash2 } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -172,8 +172,12 @@ export default function TacticDetailPage() {
               </div>
               {file.mimeType === "application/pdf" ? (
                 <div>
-                  <div className="h-[70vh] min-h-[480px] bg-muted">
+                  <div className="hidden md:block h-[70vh] min-h-[480px] bg-muted">
                     <iframe src={file.url} title={`${tactic.title} – ${file.originalName}`} className="w-full h-full border-0" />
+                  </div>
+                  <div className="md:hidden p-8 bg-muted text-center">
+                    <FileText className="w-10 h-10 mx-auto mb-3 text-muted-foreground" />
+                    <p className="text-sm text-muted-foreground">PDF otvoríš v prehliadači aplikácie.</p>
                   </div>
                   <div className="p-3 border-t flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2 min-w-0 text-sm">
@@ -181,7 +185,7 @@ export default function TacticDetailPage() {
                       <span className="truncate">{file.originalName}</span>
                     </div>
                     <Button variant="outline" size="sm" asChild>
-                      <a href={file.url} target="_blank" rel="noreferrer"><ExternalLink className="w-4 h-4 mr-1" />Otvoriť PDF</a>
+                      <Link href={`/files/tactics/${tactic.id}/pdf/${file.id}`}><FileText className="w-4 h-4 mr-1" />Otvoriť PDF</Link>
                     </Button>
                   </div>
                 </div>
