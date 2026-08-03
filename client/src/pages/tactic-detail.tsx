@@ -172,12 +172,10 @@ export default function TacticDetailPage() {
               </div>
               {file.mimeType === "application/pdf" ? (
                 <div>
-                  <div className="hidden md:block h-[70vh] min-h-[480px] bg-muted">
-                    <iframe src={file.url} title={`${tactic.title} – ${file.originalName}`} className="w-full h-full border-0" />
-                  </div>
-                  <div className="md:hidden p-8 bg-muted text-center">
+                  <div className="p-8 bg-muted text-center">
                     <FileText className="w-10 h-10 mx-auto mb-3 text-muted-foreground" />
-                    <p className="text-sm text-muted-foreground">PDF otvoríš v prehliadači aplikácie.</p>
+                    <p className="text-sm font-medium">PDF dokument</p>
+                    <p className="mt-1 text-xs text-muted-foreground">Otvor ho tlačidlom nižšie.</p>
                   </div>
                   <div className="p-3 border-t flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2 min-w-0 text-sm">
