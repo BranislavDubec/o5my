@@ -246,6 +246,26 @@ export const bankTransactions = sqliteTable("bank_transactions", {
 
 export type BankTransaction = typeof bankTransactions.$inferSelect;
 
+// ============ USER WALLETS (Ledger entries) ============
+export const walletTransactions = sqliteTable("wallet_transactions", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: integer("user_id").notNull().references(() => users.id),
+  bankTransactionId: integer("bank_transaction_id").unique().references(() => bankTransactions.id),
+  amount: integer("amount").notNull(), // in CZK; balance is the sum of all entries
+  description: text("description").notNull(),
+  createdAt: text("created_at").notNull().$defaultFn(() => new Date().toISOString()),
+});
+
+export const insertWalletTransactionSchema = createInsertSchema(walletTransactions).pick({
+  userId: true,
+  bankTransactionId: true,
+  amount: true,
+  description: true,
+});
+
+export type InsertWalletTransaction = z.infer<typeof insertWalletTransactionSchema>;
+export type WalletTransaction = typeof walletTransactions.$inferSelect;
+
 // ============ CASHBOX ============
 export const cashTransactions = sqliteTable("cash_transactions", {
   id: integer("id").primaryKey({ autoIncrement: true }),
