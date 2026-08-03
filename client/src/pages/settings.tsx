@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Bell, Mail, User as UserIcon, LogOut, Send, Smartphone } from "lucide-react";
+import { Bell, Mail, User as UserIcon, LogOut, Send, Smartphone, LockKeyhole } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { PwaInstallButton } from "@/components/pwa-install-button";
 import { usePwaInstall } from "@/contexts/pwa-install-context";
@@ -51,6 +51,9 @@ export default function Settings() {
   const [firstName, setFirstName] = useState(initialName.firstName);
   const [lastName, setLastName] = useState(initialName.lastName);
   const [nickname, setNickname] = useState(user?.nickname ?? "");
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [passwordConfirmation, setPasswordConfirmation] = useState("");
 
   const { data: settings } = useQuery<NotificationSettings>({
     queryKey: ["/api/settings/notifications"],
@@ -72,6 +75,17 @@ export default function Settings() {
       toast({ title: "Profil uložený" });
     },
     onError: (error: Error) => toast({ title: "Profil sa nepodarilo uložiť", description: error.message, variant: "destructive" }),
+  });
+
+  const passwordMutation = useMutation({
+    mutationFn: () => apiRequest("PUT", "/api/auth/password", { currentPassword, password: newPassword }),
+    onSuccess: () => {
+      setCurrentPassword("");
+      setNewPassword("");
+      setPasswordConfirmation("");
+      toast({ title: "Heslo bolo zmenené" });
+    },
+    onError: (error: Error) => toast({ title: "Heslo sa nepodarilo zmeniť", description: error.message, variant: "destructive" }),
   });
 
   const updateMutation = useMutation({
@@ -236,6 +250,79 @@ export default function Settings() {
               </Button>
             </div>
             {!user?.nickname && <p className="text-xs text-amber-600 dark:text-amber-400">Doplň si prezývku, aby ťa spoluhráči ľahko rozoznali.</p>}
+          </form>
+        </CardContent>
+      </Card>
+
+      {/* Password */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <LockKeyhole className="w-4 h-4" />Zmena hesla
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form
+            className="space-y-4"
+            onSubmit={submitEvent => {
+              submitEvent.preventDefault();
+              if (newPassword !== passwordConfirmation) {
+                toast({ title: "Nové heslá sa nezhodujú", variant: "destructive" });
+                return;
+              }
+              passwordMutation.mutate();
+            }}
+          >
+            <div className="space-y-2">
+              <Label htmlFor="current-password">Aktuálne heslo</Label>
+              <Input
+                id="current-password"
+                type="password"
+                value={currentPassword}
+                onChange={inputEvent => setCurrentPassword(inputEvent.target.value)}
+                required
+                autoComplete="current-password"
+                data-testid="input-current-password"
+              />
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="settings-new-password">Nové heslo</Label>
+                <Input
+                  id="settings-new-password"
+                  type="password"
+                  value={newPassword}
+                  onChange={inputEvent => setNewPassword(inputEvent.target.value)}
+                  required
+                  minLength={8}
+                  autoComplete="new-password"
+                  data-testid="input-settings-new-password"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="settings-confirm-password">Zopakuj nové heslo</Label>
+                <Input
+                  id="settings-confirm-password"
+                  type="password"
+                  value={passwordConfirmation}
+                  onChange={inputEvent => setPasswordConfirmation(inputEvent.target.value)}
+                  required
+                  minLength={8}
+                  autoComplete="new-password"
+                  data-testid="input-settings-confirm-password"
+                />
+              </div>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs text-muted-foreground">Nové heslo musí mať aspoň 8 znakov.</p>
+              <Button
+                type="submit"
+                disabled={passwordMutation.isPending || !currentPassword || newPassword.length < 8 || passwordConfirmation.length < 8}
+                data-testid="button-change-password"
+              >
+                {passwordMutation.isPending ? "Ukladám..." : "Zmeniť heslo"}
+              </Button>
+            </div>
           </form>
         </CardContent>
       </Card>

@@ -12,6 +12,8 @@ import NotFound from "@/pages/not-found";
 import Login from "@/pages/login";
 import Register from "@/pages/register";
 import VerifyEmail from "@/pages/verify-email";
+import ForgotPassword from "@/pages/forgot-password";
+import ResetPassword from "@/pages/reset-password";
 import Dashboard from "@/pages/dashboard";
 import CalendarPage from "@/pages/calendar";
 import MatchesPage from "@/pages/matches";
@@ -82,6 +84,12 @@ function AppRouter() {
       </Route>
       <Route path="/verify-email">
         {user ? <Redirect to="/" /> : <VerifyEmail />}
+      </Route>
+      <Route path="/forgot-password">
+        {user ? <Redirect to="/settings" /> : <ForgotPassword />}
+      </Route>
+      <Route path="/reset-password">
+        <ResetPassword />
       </Route>
 
       {/* Protected routes */}

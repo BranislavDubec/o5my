@@ -1,9 +1,32 @@
 import type { Express } from "express";
 import { insertUserSchema } from "@shared/schema";
 import { comparePassword, getCurrentUser, hashPassword, requireAuth } from "../auth";
-import { sendEmailVerification, sendRegistrationCompleteEmail, verifyEmailToken } from "../email-verification";
+import {
+  resetPasswordWithToken,
+  sendEmailVerification,
+  sendPasswordResetEmail,
+  sendRegistrationCompleteEmail,
+  verifyEmailToken,
+} from "../email-verification";
 import { storage } from "../storage";
 import { normalizeNickname, normalizePersonName, splitFullName } from "../user-profile";
+import { validateNewPassword } from "../password-policy";
+
+const passwordResetCooldowns = new Map<string, number>();
+const PASSWORD_RESET_COOLDOWN_MS = 60 * 1000;
+
+function canSendPasswordReset(email: string) {
+  const now = Date.now();
+  const previousRequest = passwordResetCooldowns.get(email) ?? 0;
+  if (now - previousRequest < PASSWORD_RESET_COOLDOWN_MS) return false;
+  passwordResetCooldowns.set(email, now);
+  if (passwordResetCooldowns.size > 1_000) {
+    for (const [key, requestedAt] of Array.from(passwordResetCooldowns.entries())) {
+      if (now - requestedAt > PASSWORD_RESET_COOLDOWN_MS) passwordResetCooldowns.delete(key);
+    }
+  }
+  return true;
+}
 
 export function registerAuthRoutes(app: Express) {
   app.post("/api/auth/register", async (req, res) => {
@@ -12,8 +35,10 @@ export function registerAuthRoutes(app: Express) {
       const firstName = normalizePersonName(req.body?.firstName ?? legacyName.firstName, "Meno");
       const lastName = normalizePersonName(req.body?.lastName ?? legacyName.lastName, "Priezvisko");
       const nickname = normalizeNickname(req.body?.nickname);
+      const password = validateNewPassword(req.body?.password);
       const data = insertUserSchema.parse({
         ...req.body,
+        password,
         name: `${firstName} ${lastName}`,
         firstName,
         lastName,
@@ -66,6 +91,7 @@ export function registerAuthRoutes(app: Express) {
       }
 
       req.session.userId = user.id;
+      req.session.passwordVersion = user.passwordVersion;
       res.json(getCurrentUser(req));
     } catch (err: any) {
       res.status(400).json({ message: err.message || "Prihlásenie zlyhalo" });
@@ -97,6 +123,54 @@ export function registerAuthRoutes(app: Express) {
       res.json(safeUser);
     } catch (error: any) {
       res.status(400).json({ message: error.message || "Profil sa nepodarilo uložiť" });
+    }
+  });
+
+  app.post("/api/auth/forgot-password", (req, res) => {
+    const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+    if (email && canSendPasswordReset(email)) {
+      const user = storage.getUserByEmail(email);
+      if (user?.isActive && user.emailVerified) {
+        void sendPasswordResetEmail(user).catch(error => {
+          storage.deletePasswordResetTokens(user.id);
+          console.error("Failed to send password reset email", error);
+        });
+      }
+    }
+    res.json({ message: "Ak účet s týmto emailom existuje, poslali sme odkaz na obnovenie hesla." });
+  });
+
+  app.post("/api/auth/reset-password", async (req, res) => {
+    try {
+      const token = typeof req.body?.token === "string" ? req.body.token : "";
+      if (!token) return res.status(400).json({ message: "Odkaz je neplatný alebo expirovaný" });
+      const password = validateNewPassword(req.body?.password);
+      const user = resetPasswordWithToken(token, await hashPassword(password));
+      if (!user) return res.status(400).json({ message: "Odkaz je neplatný alebo expirovaný" });
+      res.json({ message: "Heslo bolo zmenené. Teraz sa môžeš prihlásiť." });
+    } catch (error: any) {
+      res.status(400).json({ message: error.message || "Heslo sa nepodarilo zmeniť" });
+    }
+  });
+
+  app.put("/api/auth/password", requireAuth, async (req, res) => {
+    try {
+      const currentPassword = typeof req.body?.currentPassword === "string" ? req.body.currentPassword : "";
+      const user = storage.getUser(req.user!.id);
+      if (!user || !currentPassword || !(await comparePassword(currentPassword, user.password))) {
+        return res.status(400).json({ message: "Aktuálne heslo nie je správne" });
+      }
+      const password = validateNewPassword(req.body?.password);
+      if (await comparePassword(password, user.password)) {
+        return res.status(400).json({ message: "Nové heslo musí byť odlišné od aktuálneho" });
+      }
+      const updatedUser = storage.updateUserPassword(user.id, await hashPassword(password));
+      if (!updatedUser) return res.status(404).json({ message: "Používateľ nenájdený" });
+      storage.deletePasswordResetTokens(user.id);
+      req.session.passwordVersion = updatedUser.passwordVersion;
+      res.json({ message: "Heslo bolo zmenené" });
+    } catch (error: any) {
+      res.status(400).json({ message: error.message || "Heslo sa nepodarilo zmeniť" });
     }
   });
 

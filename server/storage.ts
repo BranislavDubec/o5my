@@ -1,11 +1,11 @@
 import {
-  users, playerStatistics, emailVerificationTokens, events, matchResults, matchPlayerStatistics, eventResponses, polls, pollOptions, pollVotes,
+  users, playerStatistics, emailVerificationTokens, passwordResetTokens, events, matchResults, matchPlayerStatistics, eventResponses, polls, pollOptions, pollVotes,
   payments, bankTransactions, cashTransactions, notificationSettings, pushSubscriptions, appSettings, teamResponsibilities,
   teamResponsibilityOwners, teamInventoryItems,
   mediaCollections, mediaFiles,
 } from '@shared/schema';
 import type {
-  User, InsertUser, PlayerStatistic, EmailVerificationToken,
+  User, InsertUser, PlayerStatistic, EmailVerificationToken, PasswordResetToken,
   Event, InsertEvent, MatchResult, MatchPlayerStatistic,
   EventResponse, InsertEventResponse,
   Poll, InsertPoll,
@@ -46,6 +46,7 @@ sqlite.exec(`
     is_active INTEGER NOT NULL DEFAULT 1,
     theme TEXT NOT NULL DEFAULT 'light',
     email_verified INTEGER NOT NULL DEFAULT 0,
+    password_version INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL
   );
 
@@ -132,6 +133,9 @@ if (!userColumns.some(column => column.name === "last_name")) {
     WHERE last_name IS NULL
   `);
 }
+if (!userColumns.some(column => column.name === "password_version")) {
+  sqlite.exec("ALTER TABLE users ADD COLUMN password_version INTEGER NOT NULL DEFAULT 0");
+}
 
 sqlite.exec(`
   PRAGMA table_info(events);
@@ -158,6 +162,14 @@ sqlite.exec(`
   );
 
   CREATE TABLE IF NOT EXISTS email_verification_tokens (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    token_hash TEXT NOT NULL UNIQUE,
+    expires_at TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS password_reset_tokens (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL REFERENCES users(id),
     token_hash TEXT NOT NULL UNIQUE,
@@ -610,6 +622,7 @@ export interface IStorage {
   updateUserActiveStatus(id: number, isActive: boolean): User | undefined;
   updateUserTheme(id: number, theme: "light" | "dark"): User | undefined;
   updateUserProfile(id: number, firstName: string, lastName: string, nickname: string): User | undefined;
+  updateUserPassword(id: number, password: string): User | undefined;
   markUserEmailVerified(id: number): User | undefined;
 
   // Player statistics
@@ -620,6 +633,11 @@ export interface IStorage {
   createEmailVerificationToken(userId: number, tokenHash: string, expiresAt: string): EmailVerificationToken;
   getEmailVerificationToken(tokenHash: string): EmailVerificationToken | undefined;
   deleteEmailVerificationTokens(userId: number): void;
+
+  // Password reset
+  createPasswordResetToken(userId: number, tokenHash: string, expiresAt: string): PasswordResetToken;
+  getPasswordResetToken(tokenHash: string): PasswordResetToken | undefined;
+  deletePasswordResetTokens(userId: number): void;
 
   // Events
   getEvent(id: number): Event | undefined;
@@ -832,6 +850,18 @@ export class DatabaseStorage implements IStorage {
       .get();
   }
 
+  updateUserPassword(id: number, password: string): User | undefined {
+    return db.transaction(tx => {
+      const existing = tx.select().from(users).where(eq(users.id, id)).get();
+      if (!existing) return undefined;
+      return tx.update(users)
+        .set({ password, passwordVersion: existing.passwordVersion + 1 })
+        .where(eq(users.id, id))
+        .returning()
+        .get();
+    });
+  }
+
   markUserEmailVerified(id: number): User | undefined {
     return db.update(users).set({ emailVerified: true }).where(eq(users.id, id)).returning().get();
   }
@@ -907,6 +937,27 @@ export class DatabaseStorage implements IStorage {
   deleteEmailVerificationTokens(userId: number): void {
     db.delete(emailVerificationTokens)
       .where(eq(emailVerificationTokens.userId, userId))
+      .run();
+  }
+
+  // ============ PASSWORD RESET ============
+  createPasswordResetToken(userId: number, tokenHash: string, expiresAt: string): PasswordResetToken {
+    this.deletePasswordResetTokens(userId);
+    return db.insert(passwordResetTokens)
+      .values({ userId, tokenHash, expiresAt })
+      .returning()
+      .get();
+  }
+
+  getPasswordResetToken(tokenHash: string): PasswordResetToken | undefined {
+    return db.select().from(passwordResetTokens)
+      .where(eq(passwordResetTokens.tokenHash, tokenHash))
+      .get();
+  }
+
+  deletePasswordResetTokens(userId: number): void {
+    db.delete(passwordResetTokens)
+      .where(eq(passwordResetTokens.userId, userId))
       .run();
   }
 

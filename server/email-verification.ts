@@ -5,6 +5,7 @@ import nodemailer from "nodemailer";
 import { storage } from "./storage";
 
 const TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
+const PASSWORD_RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
 const LOGO_CID = "o5my-team-logo";
 
 function hashToken(token: string) {
@@ -144,6 +145,52 @@ export function verifyEmailToken(token: string) {
   const user = storage.markUserEmailVerified(record.userId);
   storage.deleteEmailVerificationTokens(record.userId);
   return user || null;
+}
+
+export async function sendPasswordResetEmail(user: { id: number; email: string; name: string }) {
+  const token = randomBytes(32).toString("hex");
+  storage.createPasswordResetToken(
+    user.id,
+    hashToken(token),
+    new Date(Date.now() + PASSWORD_RESET_TOKEN_TTL_MS).toISOString(),
+  );
+
+  const resetUrl = `${getAppUrl()}/?token=${encodeURIComponent(token)}#/reset-password`;
+  const safeName = escapeHtml(user.name);
+
+  await createTransport().sendMail({
+    from: process.env.SMTP_FROM || process.env.SMTP_USER,
+    to: user.email,
+    subject: "🔐 Reset your password | O5MY Futsal",
+    text: `Hi ${user.name},\n\nWe received a request to reset your O5MY Futsal password.\n\nSet a new password: ${resetUrl}\n\nThis link is valid for 1 hour and can be used only once. If you did not request this, you can ignore this email.\n\nThe O5MY Team`,
+    html: emailLayout(`
+      <h1 style="margin:0 0 16px;font-size:26px;">Reset your password</h1>
+      <p style="margin:0 0 12px;font-size:15px;line-height:1.6;">Hi ${safeName},</p>
+      <p style="margin:0 0 24px;font-size:16px;line-height:1.6;">We received a request to reset your O5MY Futsal password.</p>
+      ${emailButton("Set a new password", resetUrl)}
+      <p style="margin:0 0 12px;color:#71717a;font-size:13px;">This link is valid for 1 hour and can be used only once.</p>
+      <p style="margin:0;color:#71717a;font-size:13px;">If you did not request this, you can safely ignore this email.</p>
+    `),
+    attachments: getLogoAttachments(),
+  });
+}
+
+export function resetPasswordWithToken(token: string, passwordHash: string) {
+  const record = storage.getPasswordResetToken(hashToken(token));
+  if (!record || new Date(record.expiresAt).getTime() <= Date.now()) {
+    if (record) storage.deletePasswordResetTokens(record.userId);
+    return null;
+  }
+
+  const user = storage.getUser(record.userId);
+  if (!user?.isActive) {
+    storage.deletePasswordResetTokens(record.userId);
+    return null;
+  }
+
+  const updatedUser = storage.updateUserPassword(record.userId, passwordHash);
+  storage.deletePasswordResetTokens(record.userId);
+  return updatedUser || null;
 }
 
 export async function sendRegistrationCompleteEmail(user: { email: string; name: string }) {

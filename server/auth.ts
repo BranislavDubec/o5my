@@ -24,6 +24,10 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
     req.session.destroy(() => {});
     return res.status(403).json({ message: 'Účet je deaktivovaný' });
   }
+  if (req.session.passwordVersion !== user.passwordVersion) {
+    req.session.destroy(() => {});
+    return res.status(401).json({ message: 'Relácia už nie je platná. Prihlás sa znova.' });
+  }
   req.user = { id: user.id, email: user.email, name: user.name, role: user.role };
   next();
 }
@@ -42,7 +46,7 @@ export function requireAdmin(req: Request, res: Response, next: NextFunction) {
 export function getCurrentUser(req: Request) {
   if (!req.session?.userId) return null;
   const user = storage.getUser(req.session.userId);
-  if (!user?.isActive) return null;
+  if (!user?.isActive || req.session.passwordVersion !== user.passwordVersion) return null;
   const { password, ...safeUser } = user;
   return safeUser;
 }

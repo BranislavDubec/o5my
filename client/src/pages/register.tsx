@@ -23,8 +23,8 @@ export default function Register() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (password.length < 6) {
-      toast({ title: "Heslo musí mať aspoň 6 znakov", variant: "destructive" });
+    if (password.length < 8) {
+      toast({ title: "Heslo musí mať aspoň 8 znakov", variant: "destructive" });
       return;
     }
     setIsLoading(true);
@@ -114,7 +114,7 @@ export default function Register() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="password">Heslo</Label>
-                <Input id="password" type="password" value={password} onChange={e => setPassword(e.target.value)} required minLength={6} data-testid="input-password" />
+                <Input id="password" type="password" value={password} onChange={e => setPassword(e.target.value)} required minLength={8} autoComplete="new-password" data-testid="input-password" />
               </div>
               <Button type="submit" className="w-full" disabled={isLoading} data-testid="button-submit">
                 {isLoading ? "Registrujem..." : "Registrovať"}
