@@ -2,7 +2,7 @@
 
 The production stack contains two containers:
 
-- `app`: the Node/Express application with SQLite stored in a named volume.
+- `app`: the Node/Express application with SQLite data and persistent user sessions stored in a named volume.
 - `caddy`: the public reverse proxy with automatic HTTPS certificates.
 
 Only ports 80 and 443 are published. Port 5000 remains inside the Compose network.
@@ -62,6 +62,8 @@ docker compose logs -f app
 
 Caddy requests the TLS certificate after the domain resolves and ports 80 and 443 are reachable.
 
+User sessions are stored in the same SQLite database and survive container rebuilds and restarts. Keep the existing `SESSION_SECRET` unchanged during deployments; changing it intentionally signs everybody out.
+
 ## Updates
 
 ```bash
@@ -83,7 +85,7 @@ Do not run `docker compose down -v`: the `-v` option deletes the SQLite and Cadd
 
 ## SQLite backup
 
-Create a consistent live backup inside the data volume:
+Create a consistent live backup inside the data volume. The database backup also contains persistent user sessions:
 
 ```bash
 docker compose exec app node -e "const Database=require('better-sqlite3'); const db=new Database('/data/data.db'); db.backup('/data/data-backup.db').then(() => console.log('backup complete'))"

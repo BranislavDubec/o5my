@@ -1,10 +1,10 @@
 import type { Express } from "express";
 import session from "express-session";
-import createMemoryStore from "memorystore";
+import { SQLiteSessionStore } from "./sqlite-session-store";
 
-const MemoryStore = createMemoryStore(session);
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const SESSION_MAX_AGE_MS = 7 * ONE_DAY_MS;
+const SESSION_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
 
 function useSecureCookies() {
   if (process.env.SESSION_COOKIE_SECURE !== undefined) {
@@ -14,6 +14,12 @@ function useSecureCookies() {
 }
 
 export function configureSession(app: Express) {
+  const store = new SQLiteSessionStore({
+    databasePath: process.env.DATABASE_PATH || "data.db",
+    defaultTtlMs: SESSION_MAX_AGE_MS,
+    cleanupIntervalMs: SESSION_CLEANUP_INTERVAL_MS,
+  });
+  app.locals.sessionStore = store;
   app.set("trust proxy", 1);
   app.use(
     session({
@@ -26,7 +32,8 @@ export function configureSession(app: Express) {
         sameSite: "lax",
         maxAge: SESSION_MAX_AGE_MS,
       },
-      store: new MemoryStore({ checkPeriod: ONE_DAY_MS }),
+      store,
     }),
   );
+  return store;
 }
