@@ -12,6 +12,7 @@ import {
   Users,
   X,
   Check,
+  Flag,
 } from "lucide-react";
 
 import { apiRequest } from "@/lib/queryClient";
@@ -257,7 +258,7 @@ export default function OpponentsPage() {
       ) : opponents.length === 0 ? (
         <Card>
           <CardContent className="p-8 text-center">
-            <Swords className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
+            <Flag className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
 
             <p className="text-sm text-muted-foreground">
               Zatiaľ nie sú pridaní žiadni súperi
@@ -276,7 +277,7 @@ export default function OpponentsPage() {
               >
                 <CardContent className="p-4 flex items-center gap-3">
                   <div className="w-10 h-10 rounded-full bg-primary/15 text-primary flex items-center justify-center shrink-0">
-                    <Swords className="w-5 h-5" />
+                    <Flag className="w-5 h-5" />
                   </div>
 
                   {isEditing ? (

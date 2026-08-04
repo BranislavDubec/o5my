@@ -16,6 +16,7 @@ import { ArrowLeft, MapPin, Calendar as CalIcon, Check, X, Minus, Users, Trash2,
 import { format, parseISO } from "date-fns";
 import { sk } from "date-fns/locale";
 import { useState } from "react";
+import { Opponent } from "@shared/schema";
 
 interface EventDetail {
   id: number;
@@ -117,7 +118,9 @@ export default function EventDetailPage() {
   const [opponentScore, setOpponentScore] = useState(0);
   const [resultNotes, setResultNotes] = useState("");
   const [resultPlayers, setResultPlayers] = useState<Record<number, ResultPlayerValue>>({});
-
+   const { data: opponents = [], isLoading: opponentsLoading } = useQuery<Opponent[]>({
+      queryKey: ["/api/opponents"],
+    });
   const { data: event } = useQuery<EventDetail>({
     queryKey: ["/api/events", id],
   });
@@ -293,7 +296,6 @@ export default function EventDetailPage() {
   const resultRightName = event.homeAway === "away" ? "O5MY" : event.opponent || "Súper";
   const resultLeftScore = event.homeAway === "away" ? event.matchResult?.opponentScore : event.matchResult?.teamScore;
   const resultRightScore = event.homeAway === "away" ? event.matchResult?.teamScore : event.matchResult?.opponentScore;
-
   const formatFull = (dateStr: string) => {
     try { return format(parseISO(dateStr), "EEEE d. MMMM yyyy 'o' HH:mm", { locale: sk }); } catch { return dateStr; }
   };
@@ -728,21 +730,57 @@ export default function EventDetailPage() {
               />
             </div>
 
-            {editForm.type === "match" && (
+           {editForm.type === "match" && (
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
                   <Label htmlFor="edit-opponent">Súper</Label>
-                  <Input
-                    id="edit-opponent"
+
+                  <Select
                     value={editForm.opponent}
-                    onChange={inputEvent => setEditForm(previous => ({ ...previous, opponent: inputEvent.target.value }))}
-                    data-testid="edit-input-opponent"
-                  />
+                    onValueChange={(opponent) =>
+                      setEditForm((previous) => ({
+                        ...previous,
+                        opponent,
+                      }))
+                    }
+                    disabled={opponentsLoading || opponents.length === 0}
+                  >
+                    <SelectTrigger
+                      id="edit-opponent"
+                      data-testid="edit-select-opponent"
+                    >
+                      <SelectValue placeholder="Vyber súpera" />
+                    </SelectTrigger>
+
+                    <SelectContent>
+                      {opponents.map((opponent) => (
+                        <SelectItem
+                          key={opponent.id}
+                          value={opponent.name}
+                        >
+                          {opponent.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
+
                 <div className="space-y-2">
                   <Label>Domáci/Vypravení</Label>
-                  <Select value={editForm.homeAway} onValueChange={homeAway => setEditForm(previous => ({ ...previous, homeAway }))}>
-                    <SelectTrigger data-testid="edit-select-home-away"><SelectValue /></SelectTrigger>
+
+                  <Select
+                    value={editForm.homeAway}
+                    onValueChange={(homeAway) =>
+                      setEditForm((previous) => ({
+                        ...previous,
+                        homeAway,
+                      }))
+                    }
+                  >
+                    <SelectTrigger data-testid="edit-select-home-away">
+                      <SelectValue />
+                    </SelectTrigger>
+
                     <SelectContent>
                       <SelectItem value="home">Domáci</SelectItem>
                       <SelectItem value="away">Vypravení</SelectItem>

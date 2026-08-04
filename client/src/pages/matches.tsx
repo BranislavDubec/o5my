@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Opponent } from "@shared/schema";
 
 interface MatchResultSummary {
   teamScore: number;
@@ -156,7 +157,9 @@ export default function MatchesPage() {
   const completed = matches.filter(match => match.matchResult);
   const wins = completed.filter(match => match.matchResult!.teamScore > match.matchResult!.opponentScore).length;
   const goals = completed.reduce((sum, match) => sum + (match.matchResult?.teamScore ?? 0), 0);
-
+  const { data: opponents = [], isLoading: opponentsLoading } = useQuery<Opponent[]>({
+    queryKey: ["/api/opponents"],
+  });
   const MatchCard = ({ match }: { match: MatchEvent }) => {
     const resultOutcome = match.matchResult ? outcomeLabel(match.matchResult) : null;
     return (
@@ -175,7 +178,7 @@ export default function MatchesPage() {
                 <div className="flex items-center gap-2 flex-wrap">
                   <p className="font-semibold truncate">O5MY vs {match.opponent || "Súper"}</p>
                   <Badge variant="outline" className="text-[10px]">
-                    {match.homeAway === "away" ? "Vonku" : "Doma"}
+                    {match.homeAway === "away" ? "Vonku" : "Doma"}tc
                   </Badge>
                   {match.source === "google" && <Badge variant="outline" className="text-[10px]">Google</Badge>}
                 </div>
@@ -232,17 +235,52 @@ export default function MatchesPage() {
                   }}
                 >
                   <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-2">
-                      <Label htmlFor="match-opponent">Súper</Label>
-                      <Input
-                        id="match-opponent"
-                        value={form.opponent}
-                        onChange={inputEvent => setForm(previous => ({ ...previous, opponent: inputEvent.target.value }))}
-                        placeholder="Názov súpera"
-                        required
-                        data-testid="input-match-opponent"
-                      />
-                    </div>
+                      <div className="space-y-2">
+                          <Label htmlFor="match-opponent">Súper</Label>
+
+                          <Select
+                            value={form.opponent}
+                            onValueChange={opponent =>
+                              setForm(previous => ({
+                                ...previous,
+                                opponent,
+                              }))
+                            }
+                            disabled={opponentsLoading || opponents.length === 0}
+                          >
+                            <SelectTrigger
+                              id="match-opponent"
+                              data-testid="select-match-opponent"
+                            >
+                              <SelectValue
+                                placeholder={
+                                  opponentsLoading
+                                    ? "Načítavam súperov..."
+                                    : opponents.length === 0
+                                      ? "Žiadni súperi"
+                                      : "Vyber súpera"
+                                }
+                              />
+                            </SelectTrigger>
+
+                            <SelectContent>
+                              {opponents.map(opponent => (
+                                <SelectItem
+                                  key={opponent.id}
+                                  value={opponent.name}
+                                >
+                                  {opponent.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+
+                          {opponents.length === 0 && !opponentsLoading && (
+                            <p className="text-xs text-muted-foreground">
+                              Najprv pridaj súpera v sekcii Súperi.
+                            </p>
+                          )}
+                        </div>
                     <div className="space-y-2">
                       <Label>Miesto zápasu</Label>
                       <Select value={form.homeAway} onValueChange={(homeAway: "home" | "away") => setForm(previous => ({ ...previous, homeAway }))}>

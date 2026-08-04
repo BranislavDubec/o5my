@@ -6,7 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import {
   Calendar, Users, Vote, CreditCard, Settings, LogOut,
-  Shield, Menu, X, Sun, Moon, Home, FolderOpen, BellRing, ClipboardList, Trophy, Swords
+  Shield, Menu, X, Sun, Moon, Home, FolderOpen, BellRing, ClipboardList, Trophy, Swords, Flag
 } from "lucide-react";
 
 interface NavItem {
@@ -20,7 +20,7 @@ const navItems: NavItem[] = [
   { path: "/", label: "Dashboard", icon: <Home className="w-5 h-5" /> },
   { path: "/calendar", label: "Kalendár", icon: <Calendar className="w-5 h-5" /> },
   { path: "/matches", label: "Zápasy", icon: <Swords className="w-5 h-5" /> },
-  { path: "/opponents", label: "Súpery", icon: <Swords className="w-5 h-5" /> },
+  { path: "/opponents", label: "Súpery", icon: <Flag className="w-5 h-5" /> },
   { path: "/polls", label: "Ankety", icon: <Vote className="w-5 h-5" /> },
   { path: "/files", label: "Súbory", icon: <FolderOpen className="w-5 h-5" /> },
   { path: "/payments", label: "Platby", icon: <CreditCard className="w-5 h-5" /> },
