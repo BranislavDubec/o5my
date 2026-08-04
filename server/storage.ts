@@ -205,6 +205,7 @@ sqlite.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL REFERENCES users(id),
     amount INTEGER NOT NULL,
+    wallet_applied_amount INTEGER NOT NULL DEFAULT 0,
     due_date TEXT NOT NULL,
     variable_symbol TEXT,
     description TEXT NOT NULL,
@@ -230,6 +231,7 @@ sqlite.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL REFERENCES users(id),
     bank_transaction_id INTEGER UNIQUE REFERENCES bank_transactions(id),
+    payment_id INTEGER UNIQUE REFERENCES payments(id),
     amount INTEGER NOT NULL,
     description TEXT NOT NULL,
     created_at TEXT NOT NULL
@@ -329,6 +331,21 @@ sqlite.exec(`
     uploaded_by INTEGER NOT NULL REFERENCES users(id),
     created_at TEXT NOT NULL
   );
+`);
+
+const paymentColumns = sqlite.prepare("PRAGMA table_info(payments)").all() as Array<{ name: string }>;
+if (!paymentColumns.some(column => column.name === "wallet_applied_amount")) {
+  sqlite.exec("ALTER TABLE payments ADD COLUMN wallet_applied_amount INTEGER NOT NULL DEFAULT 0");
+}
+
+const walletTransactionColumns = sqlite.prepare("PRAGMA table_info(wallet_transactions)")
+  .all() as Array<{ name: string }>;
+if (!walletTransactionColumns.some(column => column.name === "payment_id")) {
+  sqlite.exec("ALTER TABLE wallet_transactions ADD COLUMN payment_id INTEGER REFERENCES payments(id)");
+}
+sqlite.exec(`
+  CREATE UNIQUE INDEX IF NOT EXISTS wallet_transactions_payment_id_idx
+    ON wallet_transactions(payment_id);
 `);
 
 const responsibilityColumns = sqlite.prepare("PRAGMA table_info(team_responsibilities)")
@@ -830,6 +847,45 @@ function deleteMatchResultInTransaction(tx: any, eventId: number): boolean {
   return true;
 }
 
+function createPaymentWithWalletInTransaction(tx: any, payment: InsertPayment): Payment {
+  if (!Number.isInteger(payment.amount) || payment.amount <= 0) {
+    throw new Error("Suma musí byť kladné celé číslo");
+  }
+
+  const walletBalance = (tx.select().from(walletTransactions)
+    .where(eq(walletTransactions.userId, payment.userId))
+    .all() as WalletTransaction[])
+    .reduce((balance, transaction) => balance + transaction.amount, 0);
+  const walletAppliedAmount = Math.min(Math.max(walletBalance, 0), payment.amount);
+  const status = walletAppliedAmount === payment.amount ? "paid" : "pending";
+
+  const created = tx.insert(payments)
+    .values({
+      ...payment,
+      variableSymbol: null,
+      walletAppliedAmount,
+      status,
+    })
+    .returning()
+    .get() as Payment;
+
+  if (walletAppliedAmount > 0) {
+    tx.insert(walletTransactions).values({
+      userId: payment.userId,
+      bankTransactionId: null,
+      paymentId: created.id,
+      amount: -walletAppliedAmount,
+      description: `Platba #${created.id}: ${payment.description}`,
+    }).run();
+  }
+
+  return tx.update(payments)
+    .set({ variableSymbol: String(created.id) })
+    .where(eq(payments.id, created.id))
+    .returning()
+    .get() as Payment;
+}
+
 export class DatabaseStorage implements IStorage {
   // ============ USERS ============
   getUser(id: number): User | undefined {
@@ -1228,34 +1284,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   createPayment(payment: InsertPayment): Payment {
-    return db.transaction(tx => {
-      const created = tx.insert(payments)
-        .values({ ...payment, variableSymbol: null })
-        .returning()
-        .get();
-
-      return tx.update(payments)
-        .set({ variableSymbol: String(created.id) })
-        .where(eq(payments.id, created.id))
-        .returning()
-        .get();
-    });
+    return db.transaction(tx => createPaymentWithWalletInTransaction(tx, payment));
   }
 
   createPayments(paymentList: InsertPayment[]): Payment[] {
     if (paymentList.length === 0) return [];
-    return db.transaction(tx => {
-      const created = tx.insert(payments)
-        .values(paymentList.map(payment => ({ ...payment, variableSymbol: null })))
-        .returning()
-        .all();
-
-      return created.map(payment => tx.update(payments)
-        .set({ variableSymbol: String(payment.id) })
-        .where(eq(payments.id, payment.id))
-        .returning()
-        .get());
-    });
+    return db.transaction(tx => paymentList.map(payment =>
+      createPaymentWithWalletInTransaction(tx, payment),
+    ));
   }
 
   updatePaymentStatus(id: number, status: string): Payment | undefined {
@@ -1267,7 +1303,16 @@ export class DatabaseStorage implements IStorage {
   }
 
   deletePayment(id: number): void {
-    db.delete(payments).where(eq(payments.id, id)).run();
+    db.transaction(tx => {
+      tx.update(bankTransactions)
+        .set({ matchedPaymentId: null })
+        .where(eq(bankTransactions.matchedPaymentId, id))
+        .run();
+      tx.delete(walletTransactions)
+        .where(eq(walletTransactions.paymentId, id))
+        .run();
+      tx.delete(payments).where(eq(payments.id, id)).run();
+    });
   }
 
   getPendingPaymentsByVariableSymbol(vs: string): Payment[] {
@@ -1333,6 +1378,12 @@ export class DatabaseStorage implements IStorage {
     if (transaction.bankTransactionId) {
       const existing = db.select().from(walletTransactions)
         .where(eq(walletTransactions.bankTransactionId, transaction.bankTransactionId))
+        .get();
+      if (existing) return undefined;
+    }
+    if (transaction.paymentId) {
+      const existing = db.select().from(walletTransactions)
+        .where(eq(walletTransactions.paymentId, transaction.paymentId))
         .get();
       if (existing) return undefined;
     }

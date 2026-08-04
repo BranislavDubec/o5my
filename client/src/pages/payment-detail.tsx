@@ -11,6 +11,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 interface PaymentDetail {
   id: number;
   amount: number;
+  walletAppliedAmount: number;
+  outstandingAmount: number;
   dueDate: string;
   variableSymbol: string | null;
   description: string;
@@ -79,7 +81,7 @@ export default function PaymentDetailPage() {
         </CardHeader>
         <CardContent className="grid grid-cols-2 gap-x-4 gap-y-4 text-sm">
           <div>
-            <p className="text-xs text-muted-foreground">Suma</p>
+            <p className="text-xs text-muted-foreground">Celková suma</p>
             <p className="font-semibold text-lg">{payment.amount} {payment.currency}</p>
           </div>
           <div>
@@ -90,6 +92,18 @@ export default function PaymentDetailPage() {
             <p className="text-xs text-muted-foreground">Variabilný symbol</p>
             <p className="font-mono font-semibold" data-testid="text-payment-vs">{payment.variableSymbol}</p>
           </div>
+          {payment.walletAppliedAmount > 0 && (
+            <div>
+              <p className="text-xs text-muted-foreground">Uhradené z peňaženky</p>
+              <p className="font-semibold text-green-700 dark:text-green-400">{payment.walletAppliedAmount} {payment.currency}</p>
+            </div>
+          )}
+          {payment.outstandingAmount > 0 && payment.walletAppliedAmount > 0 && (
+            <div>
+              <p className="text-xs text-muted-foreground">Zostáva uhradiť</p>
+              <p className="font-semibold text-yellow-700 dark:text-yellow-400">{payment.outstandingAmount} {payment.currency}</p>
+            </div>
+          )}
           <div>
             <p className="text-xs text-muted-foreground">Príjemca</p>
             <p className="font-medium">{payment.recipientName}</p>
@@ -112,8 +126,20 @@ export default function PaymentDetailPage() {
                 <QRCodeSVG value={payment.qrPayload} size={240} level="M" />
               </div>
               <p className="text-xs text-muted-foreground text-center">
-                Naskenuj kód v bankovej aplikácii. Suma, účet aj variabilný symbol sa vyplnia automaticky.
+                Naskenuj kód v bankovej aplikácii. Zostávajúca suma {payment.outstandingAmount} {payment.currency}, účet aj variabilný symbol sa vyplnia automaticky.
               </p>
+            </div>
+          ) : payment.outstandingAmount === 0 ? (
+            <div className="rounded-lg border border-green-600/30 bg-green-600/5 p-5 text-center">
+              <CheckCircle2 className="w-6 h-6 text-green-600 mx-auto mb-2" />
+              <p className="text-sm font-medium">Platba bola celá uhradená z peňaženky</p>
+              <p className="text-xs text-muted-foreground mt-1">Zostáva uhradiť 0 {payment.currency}. Platba zostáva uložená v histórii.</p>
+            </div>
+          ) : payment.status === "paid" ? (
+            <div className="rounded-lg border border-green-600/30 bg-green-600/5 p-5 text-center">
+              <CheckCircle2 className="w-6 h-6 text-green-600 mx-auto mb-2" />
+              <p className="text-sm font-medium">Platba je označená ako zaplatená</p>
+              <p className="text-xs text-muted-foreground mt-1">QR kód už nie je potrebný.</p>
             </div>
           ) : (
             <div className="rounded-lg border border-dashed p-5 text-center">

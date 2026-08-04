@@ -210,6 +210,7 @@ export const payments = sqliteTable("payments", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   userId: integer("user_id").notNull().references(() => users.id),
   amount: integer("amount").notNull(), // in CZK (integer to avoid float issues)
+  walletAppliedAmount: integer("wallet_applied_amount").notNull().default(0),
   dueDate: text("due_date").notNull(),
   variableSymbol: text("variable_symbol"),
   description: text("description").notNull(),
@@ -251,6 +252,7 @@ export const walletTransactions = sqliteTable("wallet_transactions", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   userId: integer("user_id").notNull().references(() => users.id),
   bankTransactionId: integer("bank_transaction_id").unique().references(() => bankTransactions.id),
+  paymentId: integer("payment_id").unique().references(() => payments.id),
   amount: integer("amount").notNull(), // in CZK; balance is the sum of all entries
   description: text("description").notNull(),
   createdAt: text("created_at").notNull().$defaultFn(() => new Date().toISOString()),
@@ -259,6 +261,7 @@ export const walletTransactions = sqliteTable("wallet_transactions", {
 export const insertWalletTransactionSchema = createInsertSchema(walletTransactions).pick({
   userId: true,
   bankTransactionId: true,
+  paymentId: true,
   amount: true,
   description: true,
 });

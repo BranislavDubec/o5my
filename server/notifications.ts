@@ -12,6 +12,11 @@ export interface AppNotification {
   emailButtonLabel?: string;
 }
 
+export interface NotificationDeliveryOptions {
+  push?: boolean;
+  email?: boolean;
+}
+
 let vapidConfigured = false;
 
 function getVapidKeys() {
@@ -80,7 +85,11 @@ async function sendPushToUser(userId: number, notification: AppNotification) {
   }));
 }
 
-export async function notifyUsers(userIds: number[], notification: AppNotification) {
+export async function notifyUsers(
+  userIds: number[],
+  notification: AppNotification,
+  delivery: NotificationDeliveryOptions = {},
+) {
   const uniqueUserIds = Array.from(new Set(userIds));
   const users = uniqueUserIds
     .map(userId => storage.getUser(userId))
@@ -91,10 +100,10 @@ export async function notifyUsers(userIds: number[], notification: AppNotificati
     const settings = storage.getNotificationSettings(user.id);
     const deliveries: Promise<unknown>[] = [];
 
-    if (settings?.pushEnabled ?? true) {
+    if (delivery.push !== false && (settings?.pushEnabled ?? true)) {
       deliveries.push(sendPushToUser(user.id, notification));
     }
-    if ((settings?.emailEnabled ?? true) && isEmailConfigured()) {
+    if (delivery.email !== false && (settings?.emailEnabled ?? true) && isEmailConfigured()) {
       deliveries.push(sendAppNotificationEmail({
         to: user.email,
         name: user.name,

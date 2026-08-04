@@ -25,11 +25,12 @@ function sanitizeSpaydValue(value: string, maxLength: number): string {
 export function createPaymentQrPayload(
   payment: Payment,
   settings: PaymentAccountSettings,
+  amount = payment.amount,
 ): string {
   const fields = [
     "SPD*1.0",
     `ACC:${normalizeIban(settings.iban)}`,
-    `AM:${payment.amount.toFixed(2)}`,
+    `AM:${amount.toFixed(2)}`,
     `CC:${settings.currency.toUpperCase()}`,
     `X-VS:${payment.variableSymbol}`,
   ];

@@ -13,6 +13,7 @@ import { getUserEventDescription } from "./google-event-description";
 import {
   insertEventSchema, insertPollSchema, insertPaymentSchema,
   insertTeamResponsibilitySchema, insertTeamInventoryItemSchema,
+  type Payment,
 } from "@shared/schema";
 
 function formatNotificationDate(value: string) {
@@ -20,6 +21,31 @@ function formatNotificationDate(value: string) {
     dateStyle: "medium",
     timeZone: "Europe/Prague",
   }).format(new Date(value));
+}
+
+function getPaymentNotificationContent(payment: Payment, currency: string) {
+  const remainingAmount = Math.max(0, payment.amount - payment.walletAppliedAmount);
+  const dueDate = formatNotificationDate(payment.dueDate);
+
+  if (remainingAmount === 0) {
+    return {
+      body: `${payment.description} · ${payment.amount} ${currency} · uhradené z peňaženky`,
+      heading: "Platba uhradená z peňaženky",
+      buttonLabel: "Zobraziť platbu",
+    };
+  }
+  if (payment.walletAppliedAmount > 0) {
+    return {
+      body: `${payment.description} · ${payment.walletAppliedAmount} ${currency} z peňaženky · zostáva ${remainingAmount} ${currency} · splatnosť ${dueDate}`,
+      heading: "Nová platba – čiastočne uhradená",
+      buttonLabel: "Zobraziť platbu a QR kód",
+    };
+  }
+  return {
+    body: `${payment.description} · ${payment.amount} ${currency} · splatnosť ${dueDate}`,
+    heading: "Nová platba",
+    buttonLabel: "Zobraziť platbu a QR kód",
+  };
 }
 
 function parseTeamResponsibility(body: unknown) {
@@ -699,16 +725,18 @@ export async function registerRoutes(
         ...data,
         variableSymbol: null,
       });
+      const currency = storage.getAppSetting("payment_currency") || "CZK";
+      const notification = getPaymentNotificationContent(payment, currency);
       res.status(201).json(payment);
       void notifyUsers([payment.userId], {
         title: "Nová platba",
-        body: `${payment.description} · ${payment.amount} CZK · splatnosť ${formatNotificationDate(payment.dueDate)}`,
+        body: notification.body,
         path: `/#/payments/${payment.id}`,
         tag: `payment-${payment.id}`,
         emailSubject: `💳 Nová platba | ${payment.description}`,
-        emailHeading: "Nová platba",
-        emailButtonLabel: "Zobraziť platbu a QR kód",
-      });
+        emailHeading: notification.heading,
+        emailButtonLabel: notification.buttonLabel,
+      }, { push: false });
     } catch (err: any) {
       res.status(400).json({ message: err.message });
     }
@@ -719,6 +747,7 @@ export async function registerRoutes(
       const amount = Number(req.body?.amount);
       const dueDate = typeof req.body?.dueDate === "string" ? req.body.dueDate : "";
       const description = typeof req.body?.description === "string" ? req.body.description.trim() : "";
+      const rawUserIds = req.body?.userIds;
 
       if (!Number.isInteger(amount) || amount <= 0) {
         return res.status(400).json({ message: "Suma musí byť kladné celé číslo" });
@@ -729,29 +758,46 @@ export async function registerRoutes(
       if (!description) {
         return res.status(400).json({ message: "Popis je povinný" });
       }
-
-      const activeUsers = storage.getAllUsers().filter(user => user.isActive);
-      if (activeUsers.length === 0) {
-        return res.status(400).json({ message: "Nie sú žiadni aktívni členovia" });
+      if (!Array.isArray(rawUserIds) || rawUserIds.length === 0) {
+        return res.status(400).json({ message: "Vyber aspoň jedného člena" });
       }
 
-      const paymentList = activeUsers.map(user => insertPaymentSchema.parse({
-        userId: user.id,
+      const userIds = Array.from(new Set(rawUserIds.map(value => Number(value))));
+      if (userIds.length > 500 || userIds.some(id => !Number.isInteger(id) || id <= 0)) {
+        return res.status(400).json({ message: "Neplatný výber členov" });
+      }
+
+      const activeUsersById = new Map(
+        storage.getAllUsers()
+          .filter(user => user.isActive)
+          .map(user => [user.id, user]),
+      );
+      const selectedUsers = userIds.map(userId => activeUsersById.get(userId));
+      if (selectedUsers.some(user => !user)) {
+        return res.status(400).json({ message: "Niektorý vybraný člen neexistuje alebo nie je aktívny" });
+      }
+
+      const paymentList = selectedUsers.map(user => insertPaymentSchema.parse({
+        userId: user!.id,
         amount,
         dueDate,
         description,
       }));
       const createdPayments = storage.createPayments(paymentList);
+      const currency = storage.getAppSetting("payment_currency") || "CZK";
       res.status(201).json({ created: createdPayments.length, payments: createdPayments });
-      void Promise.all(createdPayments.map(payment => notifyUsers([payment.userId], {
-        title: "Nová platba",
-        body: `${payment.description} · ${payment.amount} CZK · splatnosť ${formatNotificationDate(payment.dueDate)}`,
-        path: `/#/payments/${payment.id}`,
-        tag: `payment-${payment.id}`,
-        emailSubject: `💳 Nová platba | ${payment.description}`,
-        emailHeading: "Nová platba",
-        emailButtonLabel: "Zobraziť platbu a QR kód",
-      })));
+      void Promise.all(createdPayments.map(payment => {
+        const notification = getPaymentNotificationContent(payment, currency);
+        return notifyUsers([payment.userId], {
+          title: "Nová platba",
+          body: notification.body,
+          path: `/#/payments/${payment.id}`,
+          tag: `payment-${payment.id}`,
+          emailSubject: `💳 Nová platba | ${payment.description}`,
+          emailHeading: notification.heading,
+          emailButtonLabel: notification.buttonLabel,
+        }, { push: false });
+      }));
     } catch (err: any) {
       res.status(400).json({ message: err.message });
     }
@@ -772,8 +818,9 @@ export async function registerRoutes(
     const iban = storage.getAppSetting('payment_iban') || '';
     const recipientName = storage.getAppSetting('payment_recipient_name') || 'O5MY Futsal';
     const currency = storage.getAppSetting('payment_currency') || 'CZK';
-    const qrPayload = isValidIban(iban)
-      ? createPaymentQrPayload(payment, { iban, recipientName, currency })
+    const outstandingAmount = Math.max(0, payment.amount - payment.walletAppliedAmount);
+    const qrPayload = payment.status !== "paid" && outstandingAmount > 0 && isValidIban(iban)
+      ? createPaymentQrPayload(payment, { iban, recipientName, currency }, outstandingAmount)
       : null;
 
     res.json({
@@ -781,6 +828,7 @@ export async function registerRoutes(
       recipientIban: iban || null,
       recipientName,
       currency,
+      outstandingAmount,
       qrPayload,
     });
   });
@@ -790,7 +838,16 @@ export async function registerRoutes(
     if (!["pending", "paid", "overdue"].includes(status)) {
       return res.status(400).json({ message: "Neplatný status" });
     }
-    const payment = storage.updatePaymentStatus(Number(req.params.id), status);
+    const paymentId = Number(req.params.id);
+    if (!Number.isInteger(paymentId)) {
+      return res.status(400).json({ message: "Neplatné ID platby" });
+    }
+    const existingPayment = storage.getPayment(paymentId);
+    if (!existingPayment) return res.status(404).json({ message: "Platba nenájdená" });
+    if (existingPayment.walletAppliedAmount >= existingPayment.amount && status !== "paid") {
+      return res.status(400).json({ message: "Platba bola celá uhradená z peňaženky" });
+    }
+    const payment = storage.updatePaymentStatus(paymentId, status);
     if (!payment) return res.status(404).json({ message: "Platba nenájdená" });
     res.json(payment);
   });

@@ -9,10 +9,15 @@ import { sk } from "date-fns/locale";
 interface Payment {
   id: number;
   amount: number;
+  walletAppliedAmount: number;
   dueDate: string;
   variableSymbol: string | null;
   description: string;
   status: string;
+}
+
+function getOutstandingAmount(payment: Payment) {
+  return Math.max(0, payment.amount - payment.walletAppliedAmount);
 }
 
 interface WalletSummary {
@@ -42,8 +47,8 @@ export default function PaymentsPage() {
   });
 
   const totalPaid = payments.filter(p => p.status === "paid").reduce((sum, p) => sum + p.amount, 0);
-  const totalPending = payments.filter(p => p.status === "pending").reduce((sum, p) => sum + p.amount, 0);
-  const totalOverdue = payments.filter(p => p.status === "overdue").reduce((sum, p) => sum + p.amount, 0);
+  const totalPending = payments.filter(p => p.status === "pending").reduce((sum, p) => sum + getOutstandingAmount(p), 0);
+  const totalOverdue = payments.filter(p => p.status === "overdue").reduce((sum, p) => sum + getOutstandingAmount(p), 0);
 
   const statusConfig = {
     paid: { label: "Zaplatené", variant: "default" as const, icon: CheckCircle2, color: "text-green-600 dark:text-green-400" },
@@ -117,6 +122,7 @@ export default function PaymentsPage() {
           {payments.map(payment => {
             const cfg = statusConfig[payment.status as keyof typeof statusConfig] || statusConfig.pending;
             const Icon = cfg.icon;
+            const outstandingAmount = getOutstandingAmount(payment);
             return (
               <Link key={payment.id} href={`/payments/${payment.id}`}>
                 <Card className="cursor-pointer transition-colors hover:border-primary/50" data-testid={`card-payment-${payment.id}`}>
@@ -128,6 +134,16 @@ export default function PaymentsPage() {
                       <p className="font-medium text-sm">{payment.description}</p>
                       <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground flex-wrap">
                         <span className="font-semibold text-foreground">{payment.amount} Kč</span>
+                        {payment.walletAppliedAmount > 0 && (
+                          <span className="text-green-700 dark:text-green-400">
+                            Z peňaženky: {payment.walletAppliedAmount} Kč
+                          </span>
+                        )}
+                        {payment.walletAppliedAmount > 0 && outstandingAmount > 0 && (
+                          <span className="font-semibold text-yellow-700 dark:text-yellow-400">
+                            Zostáva: {outstandingAmount} Kč
+                          </span>
+                        )}
                         <span>Splatnosť: {format(parseISO(payment.dueDate), "d. MMM yyyy", { locale: sk })}</span>
                         {payment.variableSymbol && <span>VS: {payment.variableSymbol}</span>}
                       </div>
@@ -145,7 +161,7 @@ export default function PaymentsPage() {
       <Card>
         <CardContent className="p-4">
           <p className="text-xs text-muted-foreground">
-            Platby sa vykonávajú samostatne prevodom na tímový účet. Tu vidíš len prehľad svojich platieb a ich stav.
+            Pri vytvorení platby sa najprv automaticky použije dostupný zostatok peňaženky. Prípadný zvyšok uhradíš prevodom na tímový účet.
           </p>
         </CardContent>
       </Card>
