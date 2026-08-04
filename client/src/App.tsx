@@ -17,6 +17,7 @@ import ResetPassword from "@/pages/reset-password";
 import Dashboard from "@/pages/dashboard";
 import CalendarPage from "@/pages/calendar";
 import MatchesPage from "@/pages/matches";
+import OpponentsPage from "@/pages/opponents";
 import EventDetailPage from "@/pages/event-detail";
 import PollsPage from "@/pages/polls";
 import PollDetailPage from "@/pages/poll-detail";
@@ -102,6 +103,9 @@ function AppRouter() {
       </Route>
       <Route path="/matches">
         <ProtectedRoute><MatchesPage /></ProtectedRoute>
+      </Route>
+      <Route path="/opponents">
+        <ProtectedRoute><OpponentsPage /></ProtectedRoute>
       </Route>
       <Route path="/events/:id">
         <ProtectedRoute><EventDetailPage /></ProtectedRoute>

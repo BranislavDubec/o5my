@@ -4,6 +4,7 @@ const rememberableRoutePatterns = [
   /^\/$/,
   /^\/calendar$/,
   /^\/matches$/,
+  /^\/opponents\/\d+$/,
   /^\/events\/\d+$/,
   /^\/polls(?:\/\d+)?$/,
   /^\/payments(?:\/\d+)?$/,

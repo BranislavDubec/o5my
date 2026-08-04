@@ -2,7 +2,7 @@ import {
   users, playerStatistics, emailVerificationTokens, passwordResetTokens, events, matchResults, matchPlayerStatistics, eventResponses, polls, pollOptions, pollVotes,
   payments, bankTransactions, walletTransactions, cashTransactions, notificationSettings, pushSubscriptions, appSettings, teamResponsibilities,
   teamResponsibilityOwners, teamInventoryItems,
-  mediaCollections, mediaFiles,
+  mediaCollections, mediaFiles, opponents,
 } from '@shared/schema';
 import type {
   User, InsertUser, PlayerStatistic, EmailVerificationToken, PasswordResetToken,
@@ -18,7 +18,8 @@ import type {
   PushSubscriptionRecord,
   AppSetting, TeamResponsibility, InsertTeamResponsibility,
   TeamInventoryItem, InsertTeamInventoryItem,
-  MediaCollection, MediaFile,
+  MediaCollection, MediaFile, Opponent,
+  InsertOpponent,UpdateOpponent,
 } from '@shared/schema';
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import Database from "better-sqlite3";
@@ -1214,6 +1215,22 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(polls).orderBy(desc(polls.createdAt)).all();
   }
 
+  getAllOpponents(): Opponent[]{
+    return db.select().from(opponents).orderBy(asc(opponents.name)).all();
+  }
+  createOpponent(opponent: InsertOpponent): Opponent {
+    return db.insert(opponents).values(opponent).returning().get();
+}
+  updateOpponent(
+  id: number,
+  data: UpdateOpponent,
+): Opponent | undefined {
+  return db.update(opponents).set(data).where(eq(opponents.id, id)).returning().get();  
+}
+  deleteOpponent(id: number): void {
+    db.delete(opponents).where(eq(opponents.id, id)).run();
+  }
+  
   createPoll(poll: InsertPoll): Poll {
     return db.insert(polls).values(poll).returning().get();
   }

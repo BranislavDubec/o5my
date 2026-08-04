@@ -162,6 +162,11 @@ export const polls = sqliteTable("polls", {
   createdAt: text("created_at").notNull().$defaultFn(() => new Date().toISOString()),
 });
 
+export const opponents = sqliteTable("opponents", {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    name: text("name").notNull(),
+});
+
 export const insertPollSchema = createInsertSchema(polls).pick({
   title: true,
   description: true,
@@ -169,8 +174,18 @@ export const insertPollSchema = createInsertSchema(polls).pick({
   createdBy: true,
 });
 
+export const insertOpponentSchema =  createInsertSchema(opponents).pick({
+  name: true
+});
+export type InsertOpponent = z.infer<typeof insertOpponentSchema>;
+
+export const updateOpponentSchema = insertOpponentSchema.partial();
+
+export type UpdateOpponent = z.infer<typeof updateOpponentSchema>;
+
 export type InsertPoll = z.infer<typeof insertPollSchema>;
 export type Poll = typeof polls.$inferSelect;
+export type Opponent = typeof opponents.$inferSelect;
 
 // ============ POLL OPTIONS ============
 export const pollOptions = sqliteTable("poll_options", {
