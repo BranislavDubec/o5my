@@ -331,6 +331,11 @@ sqlite.exec(`
     uploaded_by INTEGER NOT NULL REFERENCES users(id),
     created_at TEXT NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS opponents (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE
+  );
 `);
 
 const paymentColumns = sqlite.prepare("PRAGMA table_info(payments)").all() as Array<{ name: string }>;
