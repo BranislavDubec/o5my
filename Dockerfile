@@ -21,9 +21,14 @@ ENV NODE_ENV=production \
 
 WORKDIR /app
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends sqlite3 \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY --from=builder --chown=node:node /app/package.json ./package.json
 COPY --from=builder --chown=node:node /app/node_modules ./node_modules
 COPY --from=builder --chown=node:node /app/dist ./dist
+COPY --chmod=755 script/db-write.sh /usr/local/bin/o5my-db-write
 
 RUN mkdir -p /data/uploads && chown -R node:node /data
 

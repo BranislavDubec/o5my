@@ -83,6 +83,55 @@ docker compose down
 
 Do not run `docker compose down -v`: the `-v` option deletes the SQLite and Caddy volumes.
 
+## Read-only database console
+
+The runtime image includes the SQLite console. Open the live database in read-only mode:
+
+```bash
+docker compose exec -e SQLITE_HISTORY=/tmp/.sqlite_history app sqlite3 -readonly -cmd ".headers on" -cmd ".mode column" /data/data.db
+```
+
+Useful commands inside the console:
+
+```sql
+.tables
+.headers on
+.mode column
+SELECT id, name, email, role FROM users ORDER BY id;
+.quit
+```
+
+For a shorter command on the VM, add this alias once:
+
+```bash
+echo "alias appdb='cd ~/o5my && docker compose exec -e SQLITE_HISTORY=/tmp/.sqlite_history app sqlite3 -readonly -cmd \".headers on\" -cmd \".mode column\" /data/data.db'" >> ~/.bashrc
+source ~/.bashrc
+```
+
+After that, run `appdb` from any directory.
+
+For intentional database changes, add a separate writable command:
+
+```bash
+echo "alias appdb-write='cd ~/o5my && docker compose exec app o5my-db-write'" >> ~/.bashrc
+source ~/.bashrc
+```
+
+Run `appdb-write` to open the writable console. It creates a timestamped backup such as
+`/data/data-before-write-20260804T120000Z.db` before opening the database. Foreign-key checks
+are enabled and the console waits briefly instead of immediately failing when the app holds a lock.
+
+Prefer a transaction for manual changes so they can be checked before committing:
+
+```sql
+BEGIN IMMEDIATE;
+UPDATE users SET nickname = 'New nickname' WHERE id = 1;
+SELECT id, name, nickname FROM users WHERE id = 1;
+COMMIT;
+```
+
+Use `ROLLBACK;` instead of `COMMIT;` if the result is not correct.
+
 ## SQLite backup
 
 Create a consistent live backup inside the data volume. The database backup also contains persistent user sessions:
