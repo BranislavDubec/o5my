@@ -173,16 +173,22 @@ export default function AdminPayments() {
                 <div className="max-h-48 space-y-1 overflow-y-auto rounded-md border p-2" data-testid="payment-user-list">
                   {activeUsers.length === 0 ? (
                     <p className="p-2 text-sm text-muted-foreground">Nie sú dostupní žiadni aktívni členovia</p>
-                  ) : activeUsers.map(user => (
-                    <label key={user.id} className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-sm hover:bg-muted">
+                  ) : activeUsers.map(user => {
+                    const checkboxId = `payment-user-${user.id}`;
+                    return (
+                    <div key={user.id} className="flex items-center gap-3 rounded-md px-2 hover:bg-muted">
                       <Checkbox
+                        id={checkboxId}
                         checked={form.userIds.includes(user.id)}
                         onCheckedChange={checked => toggleUser(user.id, checked === true)}
                         data-testid={`checkbox-payment-user-${user.id}`}
                       />
-                      <span>{user.name}</span>
-                    </label>
-                  ))}
+                      <Label htmlFor={checkboxId} className="flex-1 cursor-pointer py-2 font-normal">
+                        {user.name}
+                      </Label>
+                    </div>
+                    );
+                  })}
                 </div>
                 <p className="text-xs text-muted-foreground">
                   Pre každého vybraného člena sa vytvorí samostatná platba.
