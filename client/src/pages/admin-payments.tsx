@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Trash2, CreditCard, QrCode } from "lucide-react";
+import { Plus, Trash2, CreditCard, QrCode, Search, X } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { sk } from "date-fns/locale";
 
@@ -43,6 +43,9 @@ export default function AdminPayments() {
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [form, setForm] = useState({ userIds: [] as number[], amount: "", dueDate: "", description: "" });
+  const [userFilter, setUserFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [searchFilter, setSearchFilter] = useState("");
 
   const { data: payments = [] } = useQuery<PaymentWithUser[]>({
     queryKey: ["/api/payments/all"],
@@ -52,6 +55,19 @@ export default function AdminPayments() {
     queryKey: ["/api/users"],
   });
   const activeUsers = users.filter(user => user.isActive);
+  const paymentUsers = Array.from(
+    new Map(payments.map(payment => [payment.user.id, payment.user])).values(),
+  ).sort((a, b) => a.name.localeCompare(b.name, "sk"));
+
+  const normalizedSearch = searchFilter.trim().toLocaleLowerCase("sk");
+  const filteredPayments = payments.filter(payment => {
+    if (userFilter !== "all" && payment.userId !== Number(userFilter)) return false;
+    if (statusFilter !== "all" && payment.status !== statusFilter) return false;
+    if (!normalizedSearch) return true;
+    return [payment.user.name, payment.description, payment.variableSymbol ?? ""]
+      .some(value => value.toLocaleLowerCase("sk").includes(normalizedSearch));
+  });
+  const filtersActive = userFilter !== "all" || statusFilter !== "all" || normalizedSearch.length > 0;
 
   const createMutation = useMutation({
     mutationFn: async (data: Record<string, unknown>) => {
@@ -124,8 +140,14 @@ export default function AdminPayments() {
     }
   };
 
-  const totalPaid = payments.filter(p => p.status === "paid").reduce((s, p) => s + p.amount, 0);
-  const totalPending = payments.filter(p => p.status === "pending").reduce((s, p) => s + getOutstandingAmount(p), 0);
+  const totalPaid = filteredPayments.filter(p => p.status === "paid").reduce((s, p) => s + p.amount, 0);
+  const totalPending = filteredPayments.filter(p => p.status === "pending").reduce((s, p) => s + getOutstandingAmount(p), 0);
+
+  const clearFilters = () => {
+    setUserFilter("all");
+    setStatusFilter("all");
+    setSearchFilter("");
+  };
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -227,6 +249,61 @@ export default function AdminPayments() {
         </Dialog>
       </div>
 
+      <Card data-testid="payment-filters">
+        <CardContent className="p-4 space-y-3">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label>Člen</Label>
+              <Select value={userFilter} onValueChange={setUserFilter}>
+                <SelectTrigger data-testid="filter-payment-user">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Všetci členovia</SelectItem>
+                  {paymentUsers.map(user => (
+                    <SelectItem key={user.id} value={String(user.id)}>{user.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Stav</Label>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger data-testid="filter-payment-status">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Všetky stavy</SelectItem>
+                  <SelectItem value="pending">Čaká na úhradu</SelectItem>
+                  <SelectItem value="paid">Zaplatené</SelectItem>
+                  <SelectItem value="overdue">Po termíne</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={searchFilter}
+                onChange={event => setSearchFilter(event.target.value)}
+                placeholder="Hľadať meno, popis alebo VS"
+                className="pl-9"
+                data-testid="filter-payment-search"
+              />
+            </div>
+            {filtersActive && (
+              <Button type="button" variant="ghost" size="sm" onClick={clearFilters} data-testid="button-clear-payment-filters">
+                <X className="mr-1 h-4 w-4" />Zrušiť filtre
+              </Button>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Zobrazené: {filteredPayments.length} z {payments.length} platieb
+          </p>
+        </CardContent>
+      </Card>
+
       {/* Summary */}
       <div className="grid grid-cols-2 gap-3">
         <Card>
@@ -251,9 +328,19 @@ export default function AdminPayments() {
             <p className="text-sm text-muted-foreground">Žiadne platby</p>
           </CardContent>
         </Card>
+      ) : filteredPayments.length === 0 ? (
+        <Card>
+          <CardContent className="p-8 text-center">
+            <Search className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
+            <p className="text-sm font-medium">Žiadne platby nezodpovedajú filtrom</p>
+            <Button type="button" variant="ghost" size="sm" className="mt-2" onClick={clearFilters}>
+              Zrušiť filtre
+            </Button>
+          </CardContent>
+        </Card>
       ) : (
         <div className="space-y-2">
-          {payments.map(p => {
+          {filteredPayments.map(p => {
             const outstandingAmount = getOutstandingAmount(p);
             return <Card key={p.id} data-testid={`card-payment-${p.id}`}>
               <CardContent className="p-3 flex items-center gap-3">
