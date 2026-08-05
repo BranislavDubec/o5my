@@ -18,6 +18,7 @@ import {
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/contexts/auth-context";
 import { useToast } from "@/hooks/use-toast";
+import { useI18n } from "@/lib/i18n";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -31,6 +32,7 @@ interface Opponent {
 export default function OpponentsPage() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { t } = useI18n();
   const queryClient = useQueryClient();
 
   const isAdmin = user?.role === "admin";
@@ -62,12 +64,12 @@ export default function OpponentsPage() {
       });
 
       toast({
-        title: "Súper bol pridaný",
+        title: t("opponents.added"),
       });
     },
     onError: (error: Error) => {
       toast({
-        title: "Súpera sa nepodarilo pridať",
+        title: t("opponents.addFailed"),
         description: error.message,
         variant: "destructive",
       });
@@ -94,12 +96,12 @@ export default function OpponentsPage() {
       });
 
       toast({
-        title: "Súper bol upravený",
+        title: t("opponents.updated"),
       });
     },
     onError: (error: Error) => {
       toast({
-        title: "Súpera sa nepodarilo upraviť",
+        title: t("opponents.updateFailed"),
         description: error.message,
         variant: "destructive",
       });
@@ -115,12 +117,12 @@ export default function OpponentsPage() {
       });
 
       toast({
-        title: "Súper bol odstránený",
+        title: t("opponents.deleted"),
       });
     },
     onError: (error: Error) => {
       toast({
-        title: "Súpera sa nepodarilo odstrániť",
+        title: t("opponents.deleteFailed"),
         description: error.message,
         variant: "destructive",
       });
@@ -137,7 +139,7 @@ export default function OpponentsPage() {
 
     if (!trimmedName) {
       toast({
-        title: "Zadaj názov súpera",
+        title: t("opponents.nameRequired"),
         variant: "destructive",
       });
 
@@ -162,7 +164,7 @@ export default function OpponentsPage() {
 
     if (!editingOpponentId || !trimmedName) {
       toast({
-        title: "Názov súpera nemôže byť prázdny",
+        title: t("opponents.nameEmpty"),
         variant: "destructive",
       });
 
@@ -177,7 +179,7 @@ export default function OpponentsPage() {
 
   const handleDeleteOpponent = (opponent: Opponent) => {
     const confirmed = window.confirm(
-      `Naozaj chceš odstrániť súpera „${opponent.name}“?`,
+      t("opponents.deleteConfirm", { name: opponent.name }),
     );
 
     if (confirmed) {
@@ -188,9 +190,9 @@ export default function OpponentsPage() {
   return (
     <div className="space-y-6 max-w-4xl">
       <div>
-        <h1 className="font-serif text-xl font-bold">Súperi</h1>
+        <h1 className="font-serif text-xl font-bold">{t("opponents.title")}</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Zoznam súperov tímu O5MY
+          {t("opponents.subtitle")}
         </p>
       </div>
 
@@ -204,7 +206,7 @@ export default function OpponentsPage() {
             <div>
               <p className="text-xl font-bold">{opponents.length}</p>
               <p className="text-xs text-muted-foreground">
-                Počet súperov
+                {t("opponents.count")}
               </p>
             </div>
           </div>
@@ -226,7 +228,7 @@ export default function OpponentsPage() {
                 onChange={(event) =>
                   setNewOpponentName(event.target.value)
                 }
-                placeholder="Názov nového súpera"
+                placeholder={t("opponents.addPlaceholder")}
                 disabled={isMutating}
                 maxLength={100}
               />
@@ -236,7 +238,7 @@ export default function OpponentsPage() {
                 disabled={!newOpponentName.trim() || isMutating}
               >
                 <Plus className="w-4 h-4 mr-2" />
-                Pridať súpera
+                {t("opponents.addButton")}
               </Button>
             </form>
           </CardContent>
@@ -246,13 +248,13 @@ export default function OpponentsPage() {
       {isLoading ? (
         <Card>
           <CardContent className="p-8 text-center text-sm text-muted-foreground">
-            Načítavam súperov…
+            {t("opponents.loading")}
           </CardContent>
         </Card>
       ) : isError ? (
         <Card>
           <CardContent className="p-8 text-center text-sm text-destructive">
-            Súperov sa nepodarilo načítať.
+            {t("opponents.loadFailed")}
           </CardContent>
         </Card>
       ) : opponents.length === 0 ? (
@@ -261,7 +263,7 @@ export default function OpponentsPage() {
             <Flag className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
 
             <p className="text-sm text-muted-foreground">
-              Zatiaľ nie sú pridaní žiadni súperi
+              {t("opponents.none")}
             </p>
           </CardContent>
         </Card>
@@ -317,7 +319,7 @@ export default function OpponentsPage() {
                             className="h-9 w-9"
                             onClick={cancelEditing}
                             disabled={updateMutation.isPending}
-                            aria-label="Zrušiť úpravu"
+                            aria-label={t("opponents.cancelEditAria")}
                           >
                             <X className="w-4 h-4" />
                           </Button>
@@ -331,7 +333,7 @@ export default function OpponentsPage() {
                               !editingOpponentName.trim() ||
                               updateMutation.isPending
                             }
-                            aria-label="Uložiť súpera"
+                            aria-label={t("opponents.saveAria")}
                           >
                             <Check className="w-4 h-4" />
                           </Button>
@@ -345,7 +347,7 @@ export default function OpponentsPage() {
                             className="h-9 w-9"
                             onClick={() => startEditing(opponent)}
                             disabled={isMutating}
-                            aria-label={`Upraviť súpera ${opponent.name}`}
+                            aria-label={t("opponents.editAria", { name: opponent.name })}
                           >
                             <Pencil className="w-4 h-4" />
                           </Button>
@@ -359,7 +361,7 @@ export default function OpponentsPage() {
                               handleDeleteOpponent(opponent)
                             }
                             disabled={isMutating}
-                            aria-label={`Odstrániť súpera ${opponent.name}`}
+                            aria-label={t("opponents.deleteAria", { name: opponent.name })}
                           >
                             <Trash2 className="w-4 h-4" />
                           </Button>

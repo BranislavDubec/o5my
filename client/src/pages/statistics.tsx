@@ -3,6 +3,7 @@ import { Handshake, Minus, Plus, Target, Trophy, Users } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/contexts/auth-context";
 import { useToast } from "@/hooks/use-toast";
+import { useI18n } from "@/lib/i18n";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -24,6 +25,7 @@ interface StatisticChange {
 export default function StatisticsPage() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const isAdmin = user?.role === "admin";
   const { data: statistics = [], isLoading } = useQuery<PlayerStatistic[]>({
@@ -34,7 +36,7 @@ export default function StatisticsPage() {
     mutationFn: ({ userId, goalsDelta = 0, assistsDelta = 0 }: StatisticChange) =>
       apiRequest("PATCH", `/api/statistics/${userId}`, { goalsDelta, assistsDelta }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/statistics"] }),
-    onError: (error: Error) => toast({ title: "Štatistiku sa nepodarilo upraviť", description: error.message, variant: "destructive" }),
+    onError: (error: Error) => toast({ title: t("statistics.adjustFailed"), description: error.message, variant: "destructive" }),
   });
 
   const totalGoals = statistics.reduce((sum, statistic) => sum + statistic.goals, 0);
@@ -60,7 +62,7 @@ export default function StatisticsPage() {
               className="h-8 w-8"
               disabled={value === 0 || adjustMutation.isPending}
               onClick={() => adjustMutation.mutate({ userId: statistic.userId, [deltaKey]: -1 })}
-              aria-label={`Odobrať ${type === "goals" ? "gól" : "asistenciu"} hráčovi ${statistic.name}`}
+              aria-label={t(type === "goals" ? "statistics.removeGoal" : "statistics.removeAssist", { name: statistic.name })}
             >
               <Minus className="w-3.5 h-3.5" />
             </Button>
@@ -73,7 +75,7 @@ export default function StatisticsPage() {
               className="h-8 w-8"
               disabled={adjustMutation.isPending}
               onClick={() => adjustMutation.mutate({ userId: statistic.userId, [deltaKey]: 1 })}
-              aria-label={`Pridať ${type === "goals" ? "gól" : "asistenciu"} hráčovi ${statistic.name}`}
+              aria-label={t(type === "goals" ? "statistics.addGoal" : "statistics.addAssist", { name: statistic.name })}
             >
               <Plus className="w-3.5 h-3.5" />
             </Button>
@@ -86,8 +88,8 @@ export default function StatisticsPage() {
   return (
     <div className="space-y-6 max-w-4xl">
       <div>
-        <h1 className="font-serif text-xl font-bold">Štatistiky</h1>
-        <p className="text-sm text-muted-foreground mt-1">Góly a asistencie hráčov O5MY</p>
+        <h1 className="font-serif text-xl font-bold">{t("statistics.title")}</h1>
+        <p className="text-sm text-muted-foreground mt-1">{t("statistics.subtitle")}</p>
       </div>
 
       <div className="grid grid-cols-3 gap-3">
@@ -95,32 +97,32 @@ export default function StatisticsPage() {
           <CardContent className="p-4 flex flex-col items-center text-center">
             <Target className="w-5 h-5 text-primary mb-2" />
             <span className="text-xl font-bold">{totalGoals}</span>
-            <span className="text-xs text-muted-foreground">Góly</span>
+            <span className="text-xs text-muted-foreground">{t("statistics.goals")}</span>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4 flex flex-col items-center text-center">
             <Handshake className="w-5 h-5 text-primary mb-2" />
             <span className="text-xl font-bold">{totalAssists}</span>
-            <span className="text-xs text-muted-foreground">Asistencie</span>
+            <span className="text-xs text-muted-foreground">{t("statistics.assists")}</span>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4 flex flex-col items-center text-center min-w-0">
             <Trophy className="w-5 h-5 text-amber-500 mb-2" />
             <span className="text-sm font-bold truncate max-w-full">{leader?.name || "—"}</span>
-            <span className="text-xs text-muted-foreground">Líder</span>
+            <span className="text-xs text-muted-foreground">{t("statistics.leader")}</span>
           </CardContent>
         </Card>
       </div>
 
       {isLoading ? (
-        <Card><CardContent className="p-8 text-center text-sm text-muted-foreground">Načítavam štatistiky…</CardContent></Card>
+        <Card><CardContent className="p-8 text-center text-sm text-muted-foreground">{t("statistics.loading")}</CardContent></Card>
       ) : statistics.length === 0 ? (
         <Card>
           <CardContent className="p-8 text-center">
             <Users className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
-            <p className="text-sm text-muted-foreground">Nie sú dostupní žiadni aktívni hráči</p>
+            <p className="text-sm text-muted-foreground">{t("statistics.noPlayers")}</p>
           </CardContent>
         </Card>
       ) : (
@@ -137,12 +139,12 @@ export default function StatisticsPage() {
                   </div>
                   <div className="min-w-0">
                     <p className="font-medium truncate">{statistic.name}</p>
-                    {index === 0 && leader && <Badge variant="secondary" className="mt-1 text-[10px]"><Trophy className="w-3 h-3 mr-1" />Líder</Badge>}
+                    {index === 0 && leader && <Badge variant="secondary" className="mt-1 text-[10px]"><Trophy className="w-3 h-3 mr-1" />{t("statistics.leader")}</Badge>}
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-6 sm:gap-8 shrink-0">
-                  {counter(statistic, "goals", <Target className="w-3.5 h-3.5" />, "Góly")}
-                  {counter(statistic, "assists", <Handshake className="w-3.5 h-3.5" />, "Asistencie")}
+                  {counter(statistic, "goals", <Target className="w-3.5 h-3.5" />, t("statistics.goals"))}
+                  {counter(statistic, "assists", <Handshake className="w-3.5 h-3.5" />, t("statistics.assists"))}
                 </div>
               </CardContent>
             </Card>

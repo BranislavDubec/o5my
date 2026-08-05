@@ -4,7 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { CreditCard, CheckCircle2, Clock, AlertCircle, ChevronRight, WalletCards } from "lucide-react";
 import { format, parseISO } from "date-fns";
-import { sk } from "date-fns/locale";
+import { sk as skLocale, cs as csLocale, enUS as enLocale } from "date-fns/locale";
+import { useI18n } from "@/lib/i18n";
 
 interface Payment {
   id: number;
@@ -26,9 +27,9 @@ interface WalletSummary {
   updatedAt: string | null;
 }
 
-function formatWalletBalance(balance: number, currency: string) {
+function formatWalletBalance(balance: number, currency: string, localeTag: string) {
   try {
-    return new Intl.NumberFormat("sk-SK", {
+    return new Intl.NumberFormat(localeTag, {
       style: "currency",
       currency,
       maximumFractionDigits: 0,
@@ -39,6 +40,9 @@ function formatWalletBalance(balance: number, currency: string) {
 }
 
 export default function PaymentsPage() {
+  const { lang, t } = useI18n();
+  const dateLocale = lang === "sk" ? skLocale : lang === "cz" ? csLocale : enLocale;
+  const localeTag = lang === "cz" ? "cs-CZ" : lang === "en" ? "en-US" : "sk-SK";
   const { data: payments = [] } = useQuery<Payment[]>({
     queryKey: ["/api/payments"],
   });
@@ -51,16 +55,16 @@ export default function PaymentsPage() {
   const totalOverdue = payments.filter(p => p.status === "overdue").reduce((sum, p) => sum + getOutstandingAmount(p), 0);
 
   const statusConfig = {
-    paid: { label: "Zaplatené", variant: "default" as const, icon: CheckCircle2, color: "text-green-600 dark:text-green-400" },
-    pending: { label: "Čaká", variant: "secondary" as const, icon: Clock, color: "text-yellow-600 dark:text-yellow-400" },
-    overdue: { label: "Po termíne", variant: "destructive" as const, icon: AlertCircle, color: "text-red-600 dark:text-red-400" },
+    paid: { label: t("payments.paid"), variant: "default" as const, icon: CheckCircle2, color: "text-green-600 dark:text-green-400" },
+    pending: { label: t("payments.pending"), variant: "secondary" as const, icon: Clock, color: "text-yellow-600 dark:text-yellow-400" },
+    overdue: { label: t("payments.overdue"), variant: "destructive" as const, icon: AlertCircle, color: "text-red-600 dark:text-red-400" },
   };
 
   return (
     <div className="space-y-6 max-w-2xl">
       <div>
-        <h1 className="font-serif text-xl font-bold">Platby</h1>
-        <p className="text-sm text-muted-foreground mt-1">Tvoj platobný prehľad</p>
+        <h1 className="font-serif text-xl font-bold">{t("layout.payments")}</h1>
+        <p className="text-sm text-muted-foreground mt-1">{t("payments.subtitle")}</p>
       </div>
 
       <Card className="border-primary/40 bg-primary/5" data-testid="card-wallet">
@@ -69,21 +73,21 @@ export default function PaymentsPage() {
             <WalletCards className="h-5 w-5" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Tvoja peňaženka</p>
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{t("payments.myWallet")}</p>
             <p className="text-2xl font-bold tabular-nums" data-testid="text-wallet-balance">
               {walletIsLoading
-                ? "Načítavam..."
+                ? t("common.loading")
                 : walletHasError || !wallet
-                  ? "Nedostupné"
-                  : formatWalletBalance(wallet.balance, wallet.currency)}
+                  ? t("payments.unavailable")
+                  : formatWalletBalance(wallet.balance, wallet.currency, localeTag)}
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
               {walletHasError
-                ? "Zostatok sa nepodarilo načítať. Skús obnoviť stránku."
-                : "Zostatok je len na čítanie a neskôr sa bude aktualizovať synchronizáciou s bankou."}
+                ? t("payments.balanceLoadFailed")
+                : t("payments.readOnlyHint")}
             </p>
           </div>
-          <Badge variant="outline" className="hidden shrink-0 sm:inline-flex">Len na čítanie</Badge>
+          <Badge variant="outline" className="hidden shrink-0 sm:inline-flex">{t("payments.readOnly")}</Badge>
         </CardContent>
       </Card>
 
@@ -91,19 +95,19 @@ export default function PaymentsPage() {
       <div className="grid grid-cols-3 gap-3">
         <Card>
           <CardContent className="p-3 text-center">
-            <p className="text-xs text-muted-foreground">Zaplatené</p>
+            <p className="text-xs text-muted-foreground">{t("payments.paid")}</p>
             <p className="text-base font-bold text-green-600 dark:text-green-400" data-testid="text-paid-amount">{totalPaid} Kč</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-3 text-center">
-            <p className="text-xs text-muted-foreground">Čaká</p>
+            <p className="text-xs text-muted-foreground">{t("payments.pending")}</p>
             <p className="text-base font-bold text-yellow-600 dark:text-yellow-400" data-testid="text-pending-amount">{totalPending} Kč</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-3 text-center">
-            <p className="text-xs text-muted-foreground">Po termíne</p>
+            <p className="text-xs text-muted-foreground">{t("payments.overdue")}</p>
             <p className="text-base font-bold text-red-600 dark:text-red-400" data-testid="text-overdue-amount">{totalOverdue} Kč</p>
           </CardContent>
         </Card>
@@ -114,7 +118,7 @@ export default function PaymentsPage() {
         <Card>
           <CardContent className="p-8 text-center">
             <CreditCard className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
-            <p className="text-sm text-muted-foreground">Žiadne platby</p>
+            <p className="text-sm text-muted-foreground">{t("payments.none")}</p>
           </CardContent>
         </Card>
       ) : (
@@ -136,15 +140,15 @@ export default function PaymentsPage() {
                         <span className="font-semibold text-foreground">{payment.amount} Kč</span>
                         {payment.walletAppliedAmount > 0 && (
                           <span className="text-green-700 dark:text-green-400">
-                            Z peňaženky: {payment.walletAppliedAmount} Kč
+                            {t("payments.fromWallet", { amount: payment.walletAppliedAmount })}
                           </span>
                         )}
                         {payment.walletAppliedAmount > 0 && outstandingAmount > 0 && (
                           <span className="font-semibold text-yellow-700 dark:text-yellow-400">
-                            Zostáva: {outstandingAmount} Kč
+                            {t("payments.remaining", { amount: outstandingAmount })}
                           </span>
                         )}
-                        <span>Splatnosť: {format(parseISO(payment.dueDate), "d. MMM yyyy", { locale: sk })}</span>
+                        <span>{t("payments.due", { date: format(parseISO(payment.dueDate), "d. MMM yyyy", { locale: dateLocale }) })}</span>
                         {payment.variableSymbol && <span>VS: {payment.variableSymbol}</span>}
                       </div>
                     </div>
@@ -161,7 +165,7 @@ export default function PaymentsPage() {
       <Card>
         <CardContent className="p-4">
           <p className="text-xs text-muted-foreground">
-            Pri vytvorení platby sa najprv automaticky použije dostupný zostatok peňaženky. Prípadný zvyšok uhradíš prevodom na tímový účet.
+            {t("payments.walletExplain")}
           </p>
         </CardContent>
       </Card>

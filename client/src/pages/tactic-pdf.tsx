@@ -6,6 +6,7 @@ import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist/legacy/build/pdf.m
 import pdfWorkerUrl from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { useI18n } from "@/lib/i18n";
 
 interface TacticWithFiles {
   id: number;
@@ -19,6 +20,7 @@ interface TacticWithFiles {
 }
 
 function AppPdfViewer({ url, title }: { url: string; title: string }) {
+  const { t } = useI18n();
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [document, setDocument] = useState<PDFDocumentProxy | null>(null);
@@ -61,7 +63,7 @@ function AppPdfViewer({ url, title }: { url: string; title: string }) {
       .catch(loadError => {
         if (cancelled) return;
         console.error("PDF loading failed", loadError);
-        setError("PDF sa nepodarilo načítať.");
+        setError(t("tacticPdf.loadFailed"));
         setIsLoading(false);
       });
 
@@ -96,7 +98,7 @@ function AppPdfViewer({ url, title }: { url: string; title: string }) {
     }).catch(renderError => {
       if (cancelled || (renderError instanceof Error && renderError.name === "RenderingCancelledException")) return;
       console.error("PDF page rendering failed", renderError);
-      setError("Stranu PDF sa nepodarilo zobraziť.");
+      setError(t("tacticPdf.renderFailed"));
     });
 
     return () => {
@@ -114,12 +116,12 @@ function AppPdfViewer({ url, title }: { url: string; title: string }) {
           className="h-8 w-8"
           disabled={!document || pageNumber <= 1}
           onClick={() => setPageNumber(current => Math.max(1, current - 1))}
-          aria-label="Predchádzajúca strana"
+          aria-label={t("tacticPdf.prevPage")}
         >
           <ChevronLeft className="h-4 w-4" />
         </Button>
         <span className="text-xs font-medium text-muted-foreground">
-          {document ? `Strana ${pageNumber} z ${document.numPages}` : "Načítavam PDF..."}
+          {document ? t("tacticPdf.pageXOfY", { page: pageNumber, total: document.numPages }) : t("tacticPdf.loading")}
         </span>
         <Button
           variant="outline"
@@ -127,13 +129,13 @@ function AppPdfViewer({ url, title }: { url: string; title: string }) {
           className="h-8 w-8"
           disabled={!document || pageNumber >= document.numPages}
           onClick={() => setPageNumber(current => document ? Math.min(document.numPages, current + 1) : current)}
-          aria-label="Nasledujúca strana"
+          aria-label={t("tacticPdf.nextPage")}
         >
           <ChevronRight className="h-4 w-4" />
         </Button>
       </div>
       <CardContent ref={containerRef} className="min-h-[55vh] overflow-auto bg-muted p-2">
-        {isLoading && <p className="p-8 text-center text-sm text-muted-foreground">Načítavam PDF...</p>}
+        {isLoading && <p className="p-8 text-center text-sm text-muted-foreground">{t("tacticPdf.loading")}</p>}
         {error && <p className="p-8 text-center text-sm text-destructive">{error}</p>}
         <canvas
           ref={canvasRef}
@@ -148,6 +150,7 @@ function AppPdfViewer({ url, title }: { url: string; title: string }) {
 export default function TacticPdfPage() {
   const { id, fileId } = useParams<{ id: string; fileId: string }>();
   const [, navigate] = useLocation();
+  const { t } = useI18n();
   const { data: tactic, isLoading, error } = useQuery<TacticWithFiles>({
     queryKey: ["/api/media/tactics", id],
   });
@@ -155,17 +158,17 @@ export default function TacticPdfPage() {
   const tacticUrl = `/files/tactics/${id}`;
 
   if (isLoading) {
-    return <p className="p-8 text-center text-muted-foreground">Načítavam PDF...</p>;
+    return <p className="p-8 text-center text-muted-foreground">{t("tacticPdf.loading")}</p>;
   }
 
   if (error || !tactic || !file || file.mimeType !== "application/pdf") {
     return (
       <div className="space-y-4">
         <Button variant="ghost" size="sm" onClick={() => navigate(tacticUrl, { replace: true })}>
-          <ArrowLeft className="w-4 h-4 mr-1" />Späť na taktiku
+          <ArrowLeft className="w-4 h-4 mr-1" />{t("tacticPdf.backToTactic")}
         </Button>
         <Card>
-          <CardContent className="p-8 text-center text-sm text-destructive">PDF sa nepodarilo načítať.</CardContent>
+          <CardContent className="p-8 text-center text-sm text-destructive">{t("tacticPdf.loadFailed")}</CardContent>
         </Card>
       </div>
     );
@@ -175,11 +178,11 @@ export default function TacticPdfPage() {
     <div className="space-y-3 max-w-5xl">
       <div className="flex items-center justify-between gap-3">
         <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => navigate(tacticUrl, { replace: true })}>
-          <ArrowLeft className="w-4 h-4 mr-1" />Späť na taktiku
+          <ArrowLeft className="w-4 h-4 mr-1" />{t("tacticPdf.backToTactic")}
         </Button>
         <Button variant="outline" size="sm" asChild>
           <a href={file.url} download={file.originalName}>
-            <Download className="w-4 h-4 mr-1" />Stiahnuť
+            <Download className="w-4 h-4 mr-1" />{t("tacticPdf.download")}
           </a>
         </Button>
       </div>

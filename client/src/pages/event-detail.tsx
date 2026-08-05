@@ -14,8 +14,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { ArrowLeft, MapPin, Calendar as CalIcon, Check, X, Minus, Users, Trash2, Pencil, Trophy } from "lucide-react";
 import { format, parseISO } from "date-fns";
-import { sk } from "date-fns/locale";
+import { sk as skLocale, cs as csLocale, enUS as enLocale } from "date-fns/locale";
 import { useState } from "react";
+import { useI18n } from "@/lib/i18n";
 import { Opponent } from "@shared/schema";
 
 interface EventDetail {
@@ -109,6 +110,8 @@ export default function EventDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
   const { toast } = useToast();
+  const { lang, t } = useI18n();
+  const dateLocale = lang === "sk" ? skLocale : lang === "cz" ? csLocale : enLocale;
   const queryClient = useQueryClient();
   const [note, setNote] = useState("");
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -141,7 +144,7 @@ export default function EventDetailPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/events", id, "responses"] });
       queryClient.invalidateQueries({ queryKey: ["/api/events"] });
       queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
-      toast({ title: "Účasť aktualizovaná" });
+      toast({ title: t("eventDetail.attendanceUpdated") });
     },
   });
 
@@ -149,7 +152,7 @@ export default function EventDetailPage() {
     mutationFn: () => apiRequest("DELETE", `/api/events/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/events"] });
-      toast({ title: "Event zmazaný" });
+      toast({ title: t("eventDetail.eventDeleted") });
       window.location.hash = "#/calendar";
     },
   });
@@ -164,13 +167,13 @@ export default function EventDetailPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/events"] });
       queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
       toast({
-        title: "Event aktualizovaný",
+        title: t("eventDetail.eventUpdated"),
         description: updatedEvent.googleSyncWarning,
       });
       setEditDialogOpen(false);
     },
     onError: (error: Error) => {
-      toast({ title: "Event sa nepodarilo upraviť", description: error.message, variant: "destructive" });
+      toast({ title: t("eventDetail.eventUpdateFailed"), description: error.message, variant: "destructive" });
     },
   });
 
@@ -187,11 +190,11 @@ export default function EventDetailPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/events", id] });
       queryClient.invalidateQueries({ queryKey: ["/api/events"] });
       queryClient.invalidateQueries({ queryKey: ["/api/statistics"] });
-      toast({ title: "Výsledok uložený" });
+      toast({ title: t("eventDetail.resultSaved") });
       setResultDialogOpen(false);
     },
     onError: (error: Error) => {
-      toast({ title: "Výsledok sa nepodarilo uložiť", description: error.message, variant: "destructive" });
+      toast({ title: t("eventDetail.resultSaveFailed"), description: error.message, variant: "destructive" });
     },
   });
 
@@ -201,11 +204,11 @@ export default function EventDetailPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/events", id] });
       queryClient.invalidateQueries({ queryKey: ["/api/events"] });
       queryClient.invalidateQueries({ queryKey: ["/api/statistics"] });
-      toast({ title: "Výsledok zmazaný" });
+      toast({ title: t("eventDetail.resultDeleted") });
       setResultDialogOpen(false);
     },
     onError: (error: Error) => {
-      toast({ title: "Výsledok sa nepodarilo zmazať", description: error.message, variant: "destructive" });
+      toast({ title: t("eventDetail.resultDeleteFailed"), description: error.message, variant: "destructive" });
     },
   });
 
@@ -220,7 +223,7 @@ export default function EventDetailPage() {
       endTime = editForm.endTime ? localEventTimeToIso(endDate, editForm.endTime) : null;
     } catch (error) {
       toast({
-        title: "Neplatný čas akcie",
+        title: t("eventDetail.invalidTime"),
         description: error instanceof Error ? error.message : undefined,
         variant: "destructive",
       });
@@ -229,8 +232,8 @@ export default function EventDetailPage() {
 
     if (eventEndPrecedesStart(startTime, endTime)) {
       toast({
-        title: "Neplatný čas akcie",
-        description: "Koniec akcie nemôže byť pred jej začiatkom",
+        title: t("eventDetail.invalidTime"),
+        description: t("eventDetail.endBeforeStart"),
         variant: "destructive",
       });
       return;
@@ -276,7 +279,7 @@ export default function EventDetailPage() {
   if (!event) {
     return (
       <div className="flex items-center justify-center p-8">
-        <p className="text-muted-foreground">Načítavam...</p>
+        <p className="text-muted-foreground">{t("common.loading")}</p>
       </div>
     );
   }
@@ -289,15 +292,15 @@ export default function EventDetailPage() {
   const existingResultUserIds = new Set(event.matchResult?.players.map(player => player.userId) ?? []);
   const resultUsers = adminUsers
     .filter(resultUser => (resultUser.isActive && resultUser.emailVerified) || existingResultUserIds.has(resultUser.id))
-    .sort((first, second) => Number(goingUserIds.has(second.id)) - Number(goingUserIds.has(first.id)) || first.name.localeCompare(second.name, "sk"));
+    .sort((first, second) => Number(goingUserIds.has(second.id)) - Number(goingUserIds.has(first.id)) || first.name.localeCompare(second.name, lang === "cz" ? "cs" : lang));
   const isWin = event.matchResult && event.matchResult.teamScore > event.matchResult.opponentScore;
   const isDraw = event.matchResult && event.matchResult.teamScore === event.matchResult.opponentScore;
-  const resultLeftName = event.homeAway === "away" ? event.opponent || "Súper" : "O5MY";
-  const resultRightName = event.homeAway === "away" ? "O5MY" : event.opponent || "Súper";
+  const resultLeftName = event.homeAway === "away" ? event.opponent || t("eventDetail.opponentFallback") : "O5MY";
+  const resultRightName = event.homeAway === "away" ? "O5MY" : event.opponent || t("eventDetail.opponentFallback");
   const resultLeftScore = event.homeAway === "away" ? event.matchResult?.opponentScore : event.matchResult?.teamScore;
   const resultRightScore = event.homeAway === "away" ? event.matchResult?.teamScore : event.matchResult?.opponentScore;
   const formatFull = (dateStr: string) => {
-    try { return format(parseISO(dateStr), "EEEE d. MMMM yyyy 'o' HH:mm", { locale: sk }); } catch { return dateStr; }
+    try { return format(parseISO(dateStr), "EEEE d. MMMM yyyy 'o' HH:mm", { locale: dateLocale }); } catch { return dateStr; }
   };
 
   const openEditDialog = () => {
@@ -323,12 +326,12 @@ export default function EventDetailPage() {
       <div className="flex items-center justify-between gap-3">
         <Link href="/calendar">
           <Button variant="ghost" size="sm" className="text-muted-foreground">
-            <ArrowLeft className="w-4 h-4 mr-1" />Späť
+            <ArrowLeft className="w-4 h-4 mr-1" />{t("common.back")}
           </Button>
         </Link>
         {user?.role === "admin" && (
           <Button variant="outline" size="sm" onClick={openEditDialog} data-testid="button-edit-event">
-            <Pencil className="w-4 h-4 mr-1" />Upraviť
+            <Pencil className="w-4 h-4 mr-1" />{t("common.edit")}
           </Button>
         )}
       </div>
@@ -336,17 +339,17 @@ export default function EventDetailPage() {
       <div>
         <div className="flex items-center gap-2 mb-2 flex-wrap">
           <Badge variant={event.type === "match" ? "default" : "secondary"}>
-            {event.type === "match" ? "⚽ Zápas" : event.type === "teambuilding" ? "🎉 Team building" : "🏃 Tréning"}
+            {event.type === "match" ? "⚽ " + t("eventTypes.match") : event.type === "teambuilding" ? "🎉 " + t("eventTypes.teambuilding") : "🏃 " + t("eventTypes.training")}
           </Badge>
           {event.homeAway && (
-            <Badge variant="outline">{event.homeAway === "home" ? "Domáci" : "Vypravení"}</Badge>
+            <Badge variant="outline">{event.homeAway === "home" ? t("eventDetail.home") : t("eventDetail.away")}</Badge>
           )}
           {event.source === "google" && (
-            <Badge variant="outline">Google sync</Badge>
+            <Badge variant="outline">{t("eventDetail.googleSync")}</Badge>
           )}
         </div>
         <h1 className="font-serif text-xl font-bold" data-testid="text-event-title">{event.title}</h1>
-        {event.opponent && <p className="text-sm text-muted-foreground mt-1">Proti: {event.opponent}</p>}
+        {event.opponent && <p className="text-sm text-muted-foreground mt-1">{t("eventDetail.against", { opponent: event.opponent })}</p>}
       </div>
 
       <Card>
@@ -355,7 +358,7 @@ export default function EventDetailPage() {
             <CalIcon className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
             <div>
               <p className="text-sm font-medium">{formatFull(event.startTime)}</p>
-              {event.endTime && <p className="text-xs text-muted-foreground">do {format(parseISO(event.endTime), "HH:mm")}</p>}
+              {event.endTime && <p className="text-xs text-muted-foreground">{t("eventDetail.until", { time: format(parseISO(event.endTime), "HH:mm") })}</p>}
             </div>
           </div>
           {event.location && (
@@ -377,12 +380,12 @@ export default function EventDetailPage() {
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between gap-3">
               <CardTitle className="text-base flex items-center gap-2">
-                <Trophy className="w-4 h-4" />Výsledok zápasu
+                <Trophy className="w-4 h-4" />{t("eventDetail.resultTitle")}
               </CardTitle>
               {user?.role === "admin" && (
                 <Button variant="outline" size="sm" onClick={openResultDialog} data-testid="button-edit-result">
                   <Pencil className="w-4 h-4 mr-1" />
-                  {event.matchResult ? "Upraviť" : "Zapísať výsledok"}
+                  {event.matchResult ? t("common.edit") : t("eventDetail.enterResult")}
                 </Button>
               )}
             </div>
@@ -401,7 +404,7 @@ export default function EventDetailPage() {
                 </div>
                 <div className="flex justify-center">
                   <Badge variant={isWin ? "default" : "secondary"}>
-                    {isWin ? "Výhra" : isDraw ? "Remíza" : "Prehra"}
+                    {isWin ? t("matches.win") : isDraw ? t("matches.draw") : t("matches.loss")}
                   </Badge>
                 </div>
                 {event.matchResult.players.length > 0 && (
@@ -410,9 +413,9 @@ export default function EventDetailPage() {
                       <div key={player.userId} className="flex items-center justify-between gap-3 text-sm">
                         <span>{player.user.name}</span>
                         <span className="text-muted-foreground">
-                          {player.goals > 0 && `${player.goals} ${player.goals === 1 ? "gól" : "góly"}`}
+                          {player.goals > 0 && `${player.goals} ${player.goals === 1 ? t("eventDetail.goalOne") : t("eventDetail.goalMany")}`}
                           {player.goals > 0 && player.assists > 0 && " · "}
-                          {player.assists > 0 && `${player.assists} ${player.assists === 1 ? "asistencia" : "asistencie"}`}
+                          {player.assists > 0 && `${player.assists} ${player.assists === 1 ? t("eventDetail.assistOne") : t("eventDetail.assistMany")}`}
                         </span>
                       </div>
                     ))}
@@ -423,7 +426,7 @@ export default function EventDetailPage() {
                 )}
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground">Výsledok zatiaľ nie je zapísaný.</p>
+              <p className="text-sm text-muted-foreground">{t("eventDetail.noResultYet")}</p>
             )}
           </CardContent>
         </Card>
@@ -432,7 +435,7 @@ export default function EventDetailPage() {
       {/* Attendance */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Tvoja účasť</CardTitle>
+          <CardTitle className="text-base">{t("eventDetail.myAttendance")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex gap-2" data-testid="attendance-buttons">
@@ -443,7 +446,7 @@ export default function EventDetailPage() {
               className="flex-1"
               data-testid="button-going"
             >
-              <Check className="w-4 h-4 mr-1" />Idem
+              <Check className="w-4 h-4 mr-1" />{t("eventDetail.going")}
             </Button>
             <Button
               variant={myResponse?.status === "maybe" ? "default" : "outline"}
@@ -452,7 +455,7 @@ export default function EventDetailPage() {
               className="flex-1"
               data-testid="button-maybe"
             >
-              <Minus className="w-4 h-4 mr-1" />Možno
+              <Minus className="w-4 h-4 mr-1" />{t("eventDetail.maybe")}
             </Button>
             <Button
               variant={myResponse?.status === "not_going" ? "destructive" : "outline"}
@@ -461,11 +464,11 @@ export default function EventDetailPage() {
               className="flex-1"
               data-testid="button-not-going"
             >
-              <X className="w-4 h-4 mr-1" />Neidem
+              <X className="w-4 h-4 mr-1" />{t("eventDetail.notGoing")}
             </Button>
           </div>
           <Textarea
-            placeholder="Poznámka (voliteľné)"
+            placeholder={t("eventDetail.notePlaceholder", { optional: t("common.optional") })}
             value={note}
             onChange={e => setNote(e.target.value)}
             rows={2}
@@ -478,41 +481,41 @@ export default function EventDetailPage() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
-            <Users className="w-4 h-4" />Účasť ({responses.length})
+            <Users className="w-4 h-4" />{t("eventDetail.attendanceCount", { count: responses.length })}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div>
-            <p className="text-xs font-medium text-green-600 dark:text-green-400 mb-1">Idú ({going.length})</p>
+            <p className="text-xs font-medium text-green-600 dark:text-green-400 mb-1">{t("eventDetail.goingCount", { count: going.length })}</p>
             <div className="flex flex-wrap gap-1.5">
               {going.map(r => (
                 <Badge key={r.id} variant="secondary" className="bg-green-500/10 text-green-600 dark:text-green-400">
                   {r.user.name}
                 </Badge>
               ))}
-              {going.length === 0 && <span className="text-xs text-muted-foreground">Nikto</span>}
+              {going.length === 0 && <span className="text-xs text-muted-foreground">{t("eventDetail.nobody")}</span>}
             </div>
           </div>
           <div>
-            <p className="text-xs font-medium text-yellow-600 dark:text-yellow-400 mb-1">Možno ({maybe.length})</p>
+            <p className="text-xs font-medium text-yellow-600 dark:text-yellow-400 mb-1">{t("eventDetail.maybeCount", { count: maybe.length })}</p>
             <div className="flex flex-wrap gap-1.5">
               {maybe.map(r => (
                 <Badge key={r.id} variant="secondary" className="bg-yellow-500/10 text-yellow-600 dark:text-yellow-400">
                   {r.user.name}
                 </Badge>
               ))}
-              {maybe.length === 0 && <span className="text-xs text-muted-foreground">Nikto</span>}
+              {maybe.length === 0 && <span className="text-xs text-muted-foreground">{t("eventDetail.nobody")}</span>}
             </div>
           </div>
           <div>
-            <p className="text-xs font-medium text-red-600 dark:text-red-400 mb-1">Nejdú ({notGoing.length})</p>
+            <p className="text-xs font-medium text-red-600 dark:text-red-400 mb-1">{t("eventDetail.notGoingCount", { count: notGoing.length })}</p>
             <div className="flex flex-wrap gap-1.5">
               {notGoing.map(r => (
                 <Badge key={r.id} variant="secondary" className="bg-red-500/10 text-red-600 dark:text-red-400">
                   {r.user.name}
                 </Badge>
               ))}
-              {notGoing.length === 0 && <span className="text-xs text-muted-foreground">Nikto</span>}
+              {notGoing.length === 0 && <span className="text-xs text-muted-foreground">{t("eventDetail.nobody")}</span>}
             </div>
           </div>
         </CardContent>
@@ -521,7 +524,7 @@ export default function EventDetailPage() {
       <Dialog open={resultDialogOpen} onOpenChange={setResultDialogOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>{event.matchResult ? "Upraviť výsledok" : "Zapísať výsledok"}</DialogTitle>
+            <DialogTitle>{event.matchResult ? t("eventDetail.editResult") : t("eventDetail.enterResult")}</DialogTitle>
           </DialogHeader>
           <form
             className="space-y-5"
@@ -545,7 +548,7 @@ export default function EventDetailPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="result-opponent-score">{event.opponent || "Súper"}</Label>
+                <Label htmlFor="result-opponent-score">{event.opponent || t("eventDetail.opponentFallback")}</Label>
                 <Input
                   id="result-opponent-score"
                   type="number"
@@ -561,22 +564,22 @@ export default function EventDetailPage() {
 
             <div className="space-y-2">
               <div className="grid grid-cols-[1fr_72px_72px] gap-2 px-1 text-xs font-medium text-muted-foreground">
-                <span>Hráč</span>
-                <span className="text-center">Góly</span>
-                <span className="text-center">Asist.</span>
+                <span>{t("eventDetail.player")}</span>
+                <span className="text-center">{t("eventDetail.goals")}</span>
+                <span className="text-center">{t("eventDetail.assistsShort")}</span>
               </div>
               <div className="divide-y rounded-md border">
                 {resultUsers.map(resultUser => (
                   <div key={resultUser.id} className="grid grid-cols-[1fr_72px_72px] items-center gap-2 p-2">
                     <div className="min-w-0">
                       <p className="text-sm font-medium truncate">{resultUser.name}</p>
-                      {goingUserIds.has(resultUser.id) && <p className="text-[11px] text-green-600">Potvrdil účasť</p>}
+                      {goingUserIds.has(resultUser.id) && <p className="text-[11px] text-green-600">{t("eventDetail.confirmedAttendance")}</p>}
                     </div>
                     <Input
                       type="number"
                       min={0}
                       max={100}
-                      aria-label={`Góly – ${resultUser.name}`}
+                      aria-label={t("eventDetail.goalsAria", { name: resultUser.name })}
                       value={resultPlayers[resultUser.id]?.goals ?? 0}
                       onChange={inputEvent => updateResultPlayer(resultUser.id, "goals", inputEvent.target.value)}
                       className="text-center px-2"
@@ -585,7 +588,7 @@ export default function EventDetailPage() {
                       type="number"
                       min={0}
                       max={100}
-                      aria-label={`Asistencie – ${resultUser.name}`}
+                      aria-label={t("eventDetail.assistsAria", { name: resultUser.name })}
                       value={resultPlayers[resultUser.id]?.assists ?? 0}
                       onChange={inputEvent => updateResultPlayer(resultUser.id, "assists", inputEvent.target.value)}
                       className="text-center px-2"
@@ -593,21 +596,21 @@ export default function EventDetailPage() {
                   </div>
                 ))}
                 {resultUsers.length === 0 && (
-                  <p className="p-4 text-sm text-muted-foreground">Nie sú dostupní žiadni aktívni hráči.</p>
+                  <p className="p-4 text-sm text-muted-foreground">{t("eventDetail.noActivePlayers")}</p>
                 )}
               </div>
-              <p className="text-xs text-muted-foreground">Nevyplnené góly môžu predstavovať vlastné góly súpera.</p>
+              <p className="text-xs text-muted-foreground">{t("eventDetail.ownGoalsHint")}</p>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="result-notes">Poznámka</Label>
+              <Label htmlFor="result-notes">{t("calendar.note")}</Label>
               <Textarea
                 id="result-notes"
                 value={resultNotes}
                 onChange={inputEvent => setResultNotes(inputEvent.target.value)}
                 rows={3}
                 maxLength={2000}
-                placeholder="Krátke zhodnotenie zápasu..."
+                placeholder={t("eventDetail.resultNotesPlaceholder")}
               />
             </div>
 
@@ -620,18 +623,18 @@ export default function EventDetailPage() {
                     className="text-destructive"
                     disabled={deleteResultMutation.isPending}
                     onClick={() => {
-                      if (confirm("Zmazať výsledok a odpočítať jeho štatistiky?")) deleteResultMutation.mutate();
+                      if (confirm(t("eventDetail.deleteResultConfirm"))) deleteResultMutation.mutate();
                     }}
                     data-testid="button-delete-result"
                   >
-                    <Trash2 className="w-4 h-4 mr-1" />Zmazať výsledok
+                    <Trash2 className="w-4 h-4 mr-1" />{t("eventDetail.deleteResult")}
                   </Button>
                 )}
               </div>
               <div className="flex gap-2">
-                <Button type="button" variant="outline" onClick={() => setResultDialogOpen(false)}>Zrušiť</Button>
+                <Button type="button" variant="outline" onClick={() => setResultDialogOpen(false)}>{t("common.cancel")}</Button>
                 <Button type="submit" disabled={saveResultMutation.isPending} data-testid="button-save-result">
-                  {saveResultMutation.isPending ? "Ukladám..." : "Uložiť výsledok"}
+                  {saveResultMutation.isPending ? t("common.saving") : t("eventDetail.saveResult")}
                 </Button>
               </div>
             </DialogFooter>
@@ -642,23 +645,23 @@ export default function EventDetailPage() {
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Upraviť event</DialogTitle>
+            <DialogTitle>{t("eventDetail.editEvent")}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleEditSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label>Typ</Label>
+              <Label>{t("calendar.type")}</Label>
               <Select value={editForm.type} onValueChange={type => setEditForm(previous => ({ ...previous, type }))}>
                 <SelectTrigger data-testid="edit-select-type"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="training">Tréning</SelectItem>
-                  <SelectItem value="match">Zápas</SelectItem>
-                  <SelectItem value="teambuilding">Team building</SelectItem>
+                  <SelectItem value="training">{t("eventTypes.training")}</SelectItem>
+                  <SelectItem value="match">{t("eventTypes.match")}</SelectItem>
+                  <SelectItem value="teambuilding">{t("eventTypes.teambuilding")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="edit-title">Názov</Label>
+              <Label htmlFor="edit-title">{t("calendar.name")}</Label>
               <Input
                 id="edit-title"
                 value={editForm.title}
@@ -670,7 +673,7 @@ export default function EventDetailPage() {
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
-                <Label htmlFor="edit-date">Dátum začiatku</Label>
+                <Label htmlFor="edit-date">{t("calendar.startDate")}</Label>
                 <Input
                   id="edit-date"
                   type="date"
@@ -685,7 +688,7 @@ export default function EventDetailPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="edit-time">Čas začiatku</Label>
+                <Label htmlFor="edit-time">{t("calendar.startTime")}</Label>
                 <Input
                   id="edit-time"
                   type="time"
@@ -699,7 +702,7 @@ export default function EventDetailPage() {
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
-                <Label htmlFor="edit-end-date">Dátum konca</Label>
+                <Label htmlFor="edit-end-date">{t("calendar.endDate")}</Label>
                 <Input
                   id="edit-end-date"
                   type="date"
@@ -709,7 +712,7 @@ export default function EventDetailPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="edit-end-time">Čas konca</Label>
+                <Label htmlFor="edit-end-time">{t("eventDetail.editEndTime")}</Label>
                 <Input
                   id="edit-end-time"
                   type="time"
@@ -721,7 +724,7 @@ export default function EventDetailPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="edit-location">Miesto</Label>
+              <Label htmlFor="edit-location">{t("calendar.location")}</Label>
               <Input
                 id="edit-location"
                 value={editForm.location}
@@ -733,7 +736,7 @@ export default function EventDetailPage() {
            {editForm.type === "match" && (
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
-                  <Label htmlFor="edit-opponent">Súper</Label>
+                  <Label htmlFor="edit-opponent">{t("calendar.opponent")}</Label>
 
                   <Select
                     value={editForm.opponent}
@@ -749,7 +752,7 @@ export default function EventDetailPage() {
                       id="edit-opponent"
                       data-testid="edit-select-opponent"
                     >
-                      <SelectValue placeholder="Vyber súpera" />
+                      <SelectValue placeholder={t("eventDetail.selectOpponent")} />
                     </SelectTrigger>
 
                     <SelectContent>
@@ -766,7 +769,7 @@ export default function EventDetailPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Domáci/Vypravení</Label>
+                  <Label>{t("eventDetail.homeAway")}</Label>
 
                   <Select
                     value={editForm.homeAway}
@@ -782,8 +785,8 @@ export default function EventDetailPage() {
                     </SelectTrigger>
 
                     <SelectContent>
-                      <SelectItem value="home">Domáci</SelectItem>
-                      <SelectItem value="away">Vypravení</SelectItem>
+                      <SelectItem value="home">{t("eventDetail.home")}</SelectItem>
+                      <SelectItem value="away">{t("eventDetail.away")}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -791,7 +794,7 @@ export default function EventDetailPage() {
             )}
 
             <div className="space-y-2">
-              <Label htmlFor="edit-description">Poznámka</Label>
+              <Label htmlFor="edit-description">{t("calendar.note")}</Label>
               <Textarea
                 id="edit-description"
                 value={editForm.description}
@@ -803,10 +806,10 @@ export default function EventDetailPage() {
 
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setEditDialogOpen(false)}>
-                Zrušiť
+                {t("common.cancel")}
               </Button>
               <Button type="submit" disabled={updateMutation.isPending} data-testid="button-save-event">
-                {updateMutation.isPending ? "Ukladám..." : "Uložiť zmeny"}
+                {updateMutation.isPending ? t("common.saving") : t("eventDetail.saveChanges")}
               </Button>
             </DialogFooter>
           </form>
@@ -818,10 +821,10 @@ export default function EventDetailPage() {
           variant="outline"
           size="sm"
           className="text-destructive"
-          onClick={() => { if (confirm("Zmazať tento event?")) deleteMutation.mutate(); }}
+          onClick={() => { if (confirm(t("eventDetail.deleteEventConfirm"))) deleteMutation.mutate(); }}
           data-testid="button-delete-event"
         >
-          <Trash2 className="w-4 h-4 mr-1" />Zmazať event
+          <Trash2 className="w-4 h-4 mr-1" />{t("eventDetail.deleteEvent")}
         </Button>
       )}
     </div>

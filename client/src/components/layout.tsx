@@ -4,6 +4,7 @@ import { useAuth } from "@/contexts/auth-context";
 import { useTheme } from "@/contexts/theme-context";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { LanguageToggle, useI18n } from "@/lib/i18n";
 import {
   Calendar, Users, Vote, CreditCard, Settings, LogOut,
   Shield, Menu, X, Sun, Moon, Home, FolderOpen, BellRing, ClipboardList, Trophy, Swords, Flag
@@ -15,23 +16,6 @@ interface NavItem {
   icon: ReactNode;
   adminOnly?: boolean;
 }
-
-const navItems: NavItem[] = [
-  { path: "/", label: "Dashboard", icon: <Home className="w-5 h-5" /> },
-  { path: "/calendar", label: "Kalendár", icon: <Calendar className="w-5 h-5" /> },
-  { path: "/matches", label: "Zápasy", icon: <Swords className="w-5 h-5" /> },
-  { path: "/opponents", label: "Súpery", icon: <Flag className="w-5 h-5" /> },
-  { path: "/polls", label: "Ankety", icon: <Vote className="w-5 h-5" /> },
-  { path: "/files", label: "Súbory", icon: <FolderOpen className="w-5 h-5" /> },
-  { path: "/payments", label: "Platby", icon: <CreditCard className="w-5 h-5" /> },
-  { path: "/organization", label: "Organizácia", icon: <ClipboardList className="w-5 h-5" /> },
-  { path: "/statistics", label: "Štatistiky", icon: <Trophy className="w-5 h-5" /> },
-  { path: "/members", label: "Členovia", icon: <Users className="w-5 h-5" /> },
-  { path: "/admin/payments", label: "Správa platieb", icon: <CreditCard className="w-5 h-5" />, adminOnly: true },
-  { path: "/admin/bank", label: "Banka", icon: <Shield className="w-5 h-5" />, adminOnly: true },
-  { path: "/admin/notifications", label: "Notifikácie", icon: <BellRing className="w-5 h-5" />, adminOnly: true },
-  { path: "/settings", label: "Nastavenia", icon: <Settings className="w-5 h-5" /> },
-];
 
 function Logo() {
   return (
@@ -49,6 +33,7 @@ function Logo() {
 function ThemeToggle() {
   const { theme, updateTheme, isSaving } = useTheme();
   const { toast } = useToast();
+  const { t } = useI18n();
   const isDark = theme === "dark";
 
   const toggle = async () => {
@@ -56,7 +41,7 @@ function ThemeToggle() {
       await updateTheme(isDark ? "light" : "dark");
     } catch (error) {
       toast({
-        title: "Režim sa nepodarilo uložiť",
+        title: t("layout.themeSaveError"),
         description: error instanceof Error ? error.message : undefined,
         variant: "destructive",
       });
@@ -68,7 +53,7 @@ function ThemeToggle() {
       onClick={toggle}
       disabled={isSaving}
       className="p-2 rounded-lg hover-elevate text-muted-foreground hover:text-foreground transition-colors"
-      aria-label={isDark ? "Prepnúť na svetlý režim" : "Prepnúť na tmavý režim"}
+      aria-label={isDark ? t("layout.themeLight") : t("layout.themeDark")}
       aria-pressed={isDark}
       data-testid="button-theme-toggle"
     >
@@ -79,8 +64,26 @@ function ThemeToggle() {
 
 export function Layout({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
+  const { t } = useI18n();
   const [location] = useLocation();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
+  const navItems: NavItem[] = [
+    { path: "/", label: t("layout.dashboard"), icon: <Home className="w-5 h-5" /> },
+    { path: "/calendar", label: t("layout.calendar"), icon: <Calendar className="w-5 h-5" /> },
+    { path: "/matches", label: t("layout.matches"), icon: <Swords className="w-5 h-5" /> },
+    { path: "/opponents", label: t("layout.opponents"), icon: <Flag className="w-5 h-5" /> },
+    { path: "/polls", label: t("layout.polls"), icon: <Vote className="w-5 h-5" /> },
+    { path: "/files", label: t("layout.files"), icon: <FolderOpen className="w-5 h-5" /> },
+    { path: "/payments", label: t("layout.payments"), icon: <CreditCard className="w-5 h-5" /> },
+    { path: "/organization", label: t("layout.organization"), icon: <ClipboardList className="w-5 h-5" /> },
+    { path: "/statistics", label: t("layout.statistics"), icon: <Trophy className="w-5 h-5" /> },
+    { path: "/members", label: t("layout.members"), icon: <Users className="w-5 h-5" /> },
+    { path: "/admin/payments", label: t("layout.adminPayments"), icon: <CreditCard className="w-5 h-5" />, adminOnly: true },
+    { path: "/admin/bank", label: t("layout.adminBank"), icon: <Shield className="w-5 h-5" />, adminOnly: true },
+    { path: "/admin/notifications", label: t("layout.adminNotifications"), icon: <BellRing className="w-5 h-5" />, adminOnly: true },
+    { path: "/settings", label: t("layout.settings"), icon: <Settings className="w-5 h-5" /> },
+  ];
 
   const visibleNavItems = navItems.filter(item => !item.adminOnly || user?.role === "admin");
   const isActive = (path: string) => path === "/" ? location === "/" : location === path || location.startsWith(`${path}/`);
@@ -117,8 +120,11 @@ export function Layout({ children }: { children: ReactNode }) {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium truncate">{user?.nickname || user?.name}</p>
-              <p className="text-xs text-muted-foreground truncate">{user?.nickname ? user.name : user?.role === "admin" ? "Admin" : "Hráč"}</p>
+              <p className="text-xs text-muted-foreground truncate">{user?.nickname ? user.name : user?.role === "admin" ? t("layout.roleAdmin") : t("layout.rolePlayer")}</p>
             </div>
+          </div>
+          <div className="px-3">
+            <LanguageToggle className="w-full justify-center" />
           </div>
           <button
             onClick={logout}
@@ -126,7 +132,7 @@ export function Layout({ children }: { children: ReactNode }) {
             data-testid="button-logout"
           >
             <LogOut className="w-5 h-5" />
-            Odhlásiť
+            {t("layout.logout")}
           </button>
         </div>
       </aside>
@@ -136,11 +142,12 @@ export function Layout({ children }: { children: ReactNode }) {
         <header className="md:hidden flex items-center justify-between p-4 border-b border-border bg-background sticky top-0 z-40">
           <Logo />
           <div className="flex items-center gap-1">
+            <LanguageToggle />
             <ThemeToggle />
             <button
               onClick={() => setMobileNavOpen(!mobileNavOpen)}
               className="p-2 rounded-lg hover-elevate"
-              aria-label="Menu"
+              aria-label={t("layout.menuOpen")}
               data-testid="button-mobile-menu"
             >
               {mobileNavOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
@@ -151,7 +158,10 @@ export function Layout({ children }: { children: ReactNode }) {
         {/* Desktop Header */}
         <header className="hidden md:flex items-center justify-between px-6 py-3 border-b border-border bg-background">
           <div />
-          <ThemeToggle />
+          <div className="flex items-center gap-2">
+            <LanguageToggle />
+            <ThemeToggle />
+          </div>
         </header>
 
         {/* Mobile Nav Overlay */}
@@ -162,7 +172,7 @@ export function Layout({ children }: { children: ReactNode }) {
               <button
                 onClick={() => setMobileNavOpen(false)}
                 className="p-2 rounded-lg hover-elevate"
-                aria-label="Zavrieť menu"
+                aria-label={t("layout.menuClose")}
               >
                 <X className="w-5 h-5" />
               </button>
@@ -189,7 +199,7 @@ export function Layout({ children }: { children: ReactNode }) {
                 className="flex items-center gap-3 w-full px-4 py-3 rounded-lg text-sm font-medium text-destructive hover:bg-destructive/10"
               >
                 <LogOut className="w-5 h-5" />
-                Odhlásiť
+                {t("layout.logout")}
               </button>
             </nav>
           </div>

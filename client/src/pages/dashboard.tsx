@@ -5,8 +5,9 @@ import { Badge } from "@/components/ui/badge";
 import { Users, Calendar, Vote, ArrowRight, MapPin, Clock, CreditCard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getAttendanceBorderClass, type AttendanceStatus } from "@/lib/event-attendance";
+import { useI18n } from "@/lib/i18n";
 import { format, parseISO } from "date-fns";
-import { sk } from "date-fns/locale";
+import { sk as skLocale, cs as csLocale, enUS as enLocale } from "date-fns/locale";
 
 interface DashboardEvent {
   id: number;
@@ -45,6 +46,8 @@ export default function Dashboard() {
   const { data: stats } = useQuery<Stats>({
     queryKey: ["/api/stats"],
   });
+  const { t, lang } = useI18n();
+  const dateLocale = lang === "sk" ? skLocale : lang === "cz" ? csLocale : enLocale;
 
   const upcomingEvents = stats?.upcomingEvents || [];
   const unansweredEvents = stats?.unansweredEvents || [];
@@ -54,7 +57,7 @@ export default function Dashboard() {
 
   const formatEventDate = (dateStr: string) => {
     try {
-      return format(parseISO(dateStr), "EEE d. MMMM", { locale: sk });
+      return format(parseISO(dateStr), "EEE d. MMMM", { locale: dateLocale });
     } catch {
       return dateStr;
     }
@@ -70,17 +73,20 @@ export default function Dashboard() {
 
   const formatDueDate = (dateStr: string) => {
     try {
-      return format(parseISO(dateStr), "d. MMM yyyy", { locale: sk });
+      return format(parseISO(dateStr), "d. MMM yyyy", { locale: dateLocale });
     } catch {
       return dateStr;
     }
   };
 
+  const typeLabel = (type: string) =>
+    type === "match" ? t("eventTypes.match") : type === "teambuilding" ? t("eventTypes.teambuilding") : t("eventTypes.training");
+
   return (
     <div className="space-y-6 max-w-4xl">
       <div>
-        <h1 className="font-serif text-xl font-bold">Dashboard</h1>
-        <p className="text-sm text-muted-foreground mt-1">Prehľad tímu a toho, čo čaká na tvoju reakciu</p>
+        <h1 className="font-serif text-xl font-bold">{t("dashboard.title")}</h1>
+        <p className="text-sm text-muted-foreground mt-1">{t("dashboard.subtitle")}</p>
       </div>
 
       {outstandingPayments.length > 0 && (
@@ -88,11 +94,11 @@ export default function Dashboard() {
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-base flex items-center gap-2">
               <CreditCard className="w-4 h-4 text-primary" />
-              Platby
+              {t("dashboard.payments")}
             </CardTitle>
             <Link href="/payments">
               <Button variant="ghost" size="sm" className="text-primary">
-                Všetko <ArrowRight className="w-4 h-4 ml-1" />
+                {t("dashboard.all")} <ArrowRight className="w-4 h-4 ml-1" />
               </Button>
             </Link>
           </CardHeader>
@@ -111,11 +117,11 @@ export default function Dashboard() {
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-sm truncate">{payment.description}</p>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      {payment.amount} Kč · splatnosť {formatDueDate(payment.dueDate)}
+                      {t("dashboard.amountDue", { amount: payment.amount, date: formatDueDate(payment.dueDate) })}
                     </p>
                   </div>
                   <Badge variant={payment.status === "overdue" ? "destructive" : "secondary"}>
-                    {payment.status === "overdue" ? "Po termíne" : "Čaká"}
+                    {payment.status === "overdue" ? t("dashboard.overdue") : t("dashboard.pending")}
                   </Badge>
                 </div>
               </Link>
@@ -129,7 +135,7 @@ export default function Dashboard() {
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
               <Vote className="w-4 h-4 text-orange-500" />
-              Hlasovania bez odpovede
+              {t("dashboard.unansweredVotes")}
             </CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-2">
@@ -146,7 +152,7 @@ export default function Dashboard() {
                       {formatEventDate(event.startTime)} · {formatEventTime(event.startTime)}
                     </p>
                   </div>
-                  <Badge variant="outline">Účasť</Badge>
+                  <Badge variant="outline">{t("dashboard.attendance")}</Badge>
                 </div>
               </Link>
             ))}
@@ -159,7 +165,7 @@ export default function Dashboard() {
                 >
                   <Vote className="w-5 h-5 text-orange-500 shrink-0" />
                   <p className="font-medium text-sm flex-1 min-w-0 truncate">{poll.title}</p>
-                  <Badge variant="outline">Anketa</Badge>
+                  <Badge variant="outline">{t("dashboard.poll")}</Badge>
                 </div>
               </Link>
             ))}
@@ -173,7 +179,7 @@ export default function Dashboard() {
             <CardContent className="p-4 flex flex-col items-center text-center">
               <Users className="w-5 h-5 text-primary mb-2" />
               <span className="text-xl font-bold" data-testid="stat-players">{stats?.playerCount ?? "—"}</span>
-              <span className="text-xs text-muted-foreground">Hráči</span>
+              <span className="text-xs text-muted-foreground">{t("dashboard.players")}</span>
             </CardContent>
           </Card>
         </Link>
@@ -182,7 +188,7 @@ export default function Dashboard() {
             <CardContent className="p-4 flex flex-col items-center text-center">
               <Calendar className="w-5 h-5 text-primary mb-2" />
               <span className="text-xl font-bold" data-testid="stat-events">{stats?.eventCount ?? "—"}</span>
-              <span className="text-xs text-muted-foreground">Akcie</span>
+              <span className="text-xs text-muted-foreground">{t("dashboard.events")}</span>
             </CardContent>
           </Card>
         </Link>
@@ -191,7 +197,7 @@ export default function Dashboard() {
             <CardContent className="p-4 flex flex-col items-center text-center">
               <Vote className="w-5 h-5 text-primary mb-2" />
               <span className="text-xl font-bold" data-testid="stat-polls">{stats?.activePolls ?? "—"}</span>
-              <span className="text-xs text-muted-foreground">Ankety</span>
+              <span className="text-xs text-muted-foreground">{t("dashboard.polls")}</span>
             </CardContent>
           </Card>
         </Link>
@@ -199,16 +205,16 @@ export default function Dashboard() {
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="text-base">Nadchádzajúce akcie</CardTitle>
+          <CardTitle className="text-base">{t("dashboard.upcoming")}</CardTitle>
           <Link href="/calendar">
             <Button variant="ghost" size="sm" className="text-primary">
-              Všetko <ArrowRight className="w-4 h-4 ml-1" />
+              {t("dashboard.all")} <ArrowRight className="w-4 h-4 ml-1" />
             </Button>
           </Link>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           {upcomingEvents.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-6">Žiadne nadchádzajúce akcie</p>
+            <p className="text-sm text-muted-foreground text-center py-6">{t("dashboard.noUpcoming")}</p>
           ) : (
             upcomingEvents.map(event => (
               <Link key={event.id} href={`/events/${event.id}`}>
@@ -230,7 +236,7 @@ export default function Dashboard() {
                     <div className="flex items-center gap-2">
                       <p className="font-medium text-sm truncate">{event.title}</p>
                       <Badge variant={event.type === "match" ? "default" : "secondary"} className="text-xs shrink-0">
-                        {event.type === "match" ? "Zápas" : event.type === "teambuilding" ? "Team building" : "Tréning"}
+                        {typeLabel(event.type)}
                       </Badge>
                     </div>
                     <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">

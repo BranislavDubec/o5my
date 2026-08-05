@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/contexts/auth-context";
 import { useToast } from "@/hooks/use-toast";
+import { useI18n } from "@/lib/i18n";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,6 +44,7 @@ export default function Settings() {
   const { user, updateProfile, logout } = useAuth();
   const { platform, isInstalled } = usePwaInstall();
   const { toast } = useToast();
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const pushSupported = "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
   const [pushSubscribed, setPushSubscribed] = useState(false);
@@ -72,9 +74,9 @@ export default function Settings() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
       queryClient.invalidateQueries({ queryKey: ["/api/statistics"] });
-      toast({ title: "Profil uložený" });
+      toast({ title: t("settings.profileSaved") });
     },
-    onError: (error: Error) => toast({ title: "Profil sa nepodarilo uložiť", description: error.message, variant: "destructive" }),
+    onError: (error: Error) => toast({ title: t("settings.profileSaveFailed"), description: error.message, variant: "destructive" }),
   });
 
   const passwordMutation = useMutation({
@@ -83,9 +85,9 @@ export default function Settings() {
       setCurrentPassword("");
       setNewPassword("");
       setPasswordConfirmation("");
-      toast({ title: "Heslo bolo zmenené" });
+      toast({ title: t("settings.passwordChanged") });
     },
-    onError: (error: Error) => toast({ title: "Heslo sa nepodarilo zmeniť", description: error.message, variant: "destructive" }),
+    onError: (error: Error) => toast({ title: t("settings.passwordChangeFailed"), description: error.message, variant: "destructive" }),
   });
 
   const updateMutation = useMutation({
@@ -93,9 +95,9 @@ export default function Settings() {
       apiRequest("PUT", "/api/settings/notifications", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/settings/notifications"] });
-      toast({ title: "Nastavenia uložené" });
+      toast({ title: t("settings.settingsSaved") });
     },
-    onError: (error: Error) => toast({ title: "Nastavenia sa nepodarilo uložiť", description: error.message, variant: "destructive" }),
+    onError: (error: Error) => toast({ title: t("settings.settingsSaveFailed"), description: error.message, variant: "destructive" }),
   });
 
   useEffect(() => {
@@ -112,7 +114,7 @@ export default function Settings() {
   const pushMutation = useMutation({
     mutationFn: async (enabled: boolean) => {
       if (!pushSupported || !window.isSecureContext) {
-        throw new Error("Push notifikácie vyžadujú HTTPS alebo localhost a podporovaný prehliadač.");
+        throw new Error(t("settings.pushRequiresHttps"));
       }
 
       const registration = await getServiceWorkerRegistration();
@@ -121,7 +123,7 @@ export default function Settings() {
       if (enabled) {
         const permission = await Notification.requestPermission();
         if (permission !== "granted") {
-          throw new Error("Povoľ notifikácie v nastaveniach prehliadača alebo telefónu.");
+          throw new Error(t("settings.pushPermissionNeeded"));
         }
         if (!subscription) {
           const keyResponse = await apiRequest("GET", "/api/notifications/vapid-public-key");
@@ -146,29 +148,29 @@ export default function Settings() {
     onSuccess: enabled => {
       setPushSubscribed(enabled);
       queryClient.invalidateQueries({ queryKey: ["/api/settings/notifications"] });
-      toast({ title: enabled ? "Push notifikácie sú aktívne" : "Push notifikácie sú vypnuté" });
+      toast({ title: enabled ? t("settings.pushEnabled") : t("settings.pushDisabled") });
     },
-    onError: (error: Error) => toast({ title: "Push notifikácie sa nepodarilo nastaviť", description: error.message, variant: "destructive" }),
+    onError: (error: Error) => toast({ title: t("settings.pushSetupFailed"), description: error.message, variant: "destructive" }),
   });
 
   const testNotificationMutation = useMutation({
     mutationFn: () => apiRequest("POST", "/api/notifications/test"),
-    onSuccess: () => toast({ title: "Test bol odoslaný", description: "Push sa môže zobraziť o niekoľko sekúnd; skontroluj aj email." }),
-    onError: (error: Error) => toast({ title: "Test zlyhal", description: error.message, variant: "destructive" }),
+    onSuccess: () => toast({ title: t("settings.testSent"), description: t("settings.testSentHint") }),
+    onError: (error: Error) => toast({ title: t("settings.testFailed"), description: error.message, variant: "destructive" }),
   });
 
   return (
     <div className="space-y-6 max-w-2xl">
       <div>
-        <h1 className="font-serif text-xl font-bold">Nastavenia</h1>
-        <p className="text-sm text-muted-foreground mt-1">Spravuj svoj účet a notifikácie</p>
+        <h1 className="font-serif text-xl font-bold">{t("settings.title")}</h1>
+        <p className="text-sm text-muted-foreground mt-1">{t("settings.subtitle")}</p>
       </div>
 
       {/* Profile */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
-            <UserIcon className="w-4 h-4" />Profil
+            <UserIcon className="w-4 h-4" />{t("settings.profile")}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -184,7 +186,7 @@ export default function Settings() {
             </div>
           </div>
           <div className="pt-2">
-            <Badge variant="secondary">{user?.role === "admin" ? "Admin" : "Hráč"}</Badge>
+            <Badge variant="secondary">{user?.role === "admin" ? t("layout.roleAdmin") : t("layout.rolePlayer")}</Badge>
           </div>
           <form
             className="space-y-2 border-t pt-4"
@@ -195,7 +197,7 @@ export default function Settings() {
           >
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="profile-first-name">Meno</Label>
+                <Label htmlFor="profile-first-name">{t("auth.firstName")}</Label>
                 <Input
                   id="profile-first-name"
                   value={firstName}
@@ -206,7 +208,7 @@ export default function Settings() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="profile-last-name">Priezvisko</Label>
+                <Label htmlFor="profile-last-name">{t("auth.lastName")}</Label>
                 <Input
                   id="profile-last-name"
                   value={lastName}
@@ -218,14 +220,14 @@ export default function Settings() {
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="profile-nickname">Prezývka</Label>
+              <Label htmlFor="profile-nickname">{t("auth.nickname")}</Label>
               <Input
                 id="profile-nickname"
                 value={nickname}
                 onChange={inputEvent => setNickname(inputEvent.target.value)}
                 required
                 maxLength={30}
-                placeholder="Ako ťa volá tím?"
+                placeholder={t("settings.nicknamePlaceholder")}
                 autoComplete="nickname"
                 data-testid="input-profile-nickname"
               />
@@ -246,10 +248,10 @@ export default function Settings() {
                 }
                 data-testid="button-save-profile"
               >
-                {profileMutation.isPending ? "Ukladám..." : "Uložiť"}
+                {profileMutation.isPending ? t("common.saving") : t("common.save")}
               </Button>
             </div>
-            {!user?.nickname && <p className="text-xs text-amber-600 dark:text-amber-400">Doplň si prezývku, aby ťa spoluhráči ľahko rozoznali.</p>}
+            {!user?.nickname && <p className="text-xs text-amber-600 dark:text-amber-400">{t("settings.nicknameHint")}</p>}
           </form>
         </CardContent>
       </Card>
@@ -258,7 +260,7 @@ export default function Settings() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
-            <LockKeyhole className="w-4 h-4" />Zmena hesla
+            <LockKeyhole className="w-4 h-4" />{t("settings.passwordChange")}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -267,14 +269,14 @@ export default function Settings() {
             onSubmit={submitEvent => {
               submitEvent.preventDefault();
               if (newPassword !== passwordConfirmation) {
-                toast({ title: "Nové heslá sa nezhodujú", variant: "destructive" });
+                toast({ title: t("settings.passwordsMismatch"), variant: "destructive" });
                 return;
               }
               passwordMutation.mutate();
             }}
           >
             <div className="space-y-2">
-              <Label htmlFor="current-password">Aktuálne heslo</Label>
+              <Label htmlFor="current-password">{t("settings.currentPassword")}</Label>
               <Input
                 id="current-password"
                 type="password"
@@ -287,7 +289,7 @@ export default function Settings() {
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="settings-new-password">Nové heslo</Label>
+                <Label htmlFor="settings-new-password">{t("auth.password")}</Label>
                 <Input
                   id="settings-new-password"
                   type="password"
@@ -300,7 +302,7 @@ export default function Settings() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="settings-confirm-password">Zopakuj nové heslo</Label>
+                <Label htmlFor="settings-confirm-password">{t("auth.confirmPassword")}</Label>
                 <Input
                   id="settings-confirm-password"
                   type="password"
@@ -314,13 +316,13 @@ export default function Settings() {
               </div>
             </div>
             <div className="flex items-center justify-between gap-3">
-              <p className="text-xs text-muted-foreground">Nové heslo musí mať aspoň 8 znakov.</p>
+              <p className="text-xs text-muted-foreground">{t("settings.passwordHint")}</p>
               <Button
                 type="submit"
                 disabled={passwordMutation.isPending || !currentPassword || newPassword.length < 8 || passwordConfirmation.length < 8}
                 data-testid="button-change-password"
               >
-                {passwordMutation.isPending ? "Ukladám..." : "Zmeniť heslo"}
+                {passwordMutation.isPending ? t("common.saving") : t("settings.changePassword")}
               </Button>
             </div>
           </form>
@@ -331,7 +333,7 @@ export default function Settings() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
-            <Bell className="w-4 h-4" />Notifikácie
+            <Bell className="w-4 h-4" />{t("settings.notifications")}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -339,15 +341,15 @@ export default function Settings() {
             <div className="flex items-center gap-3">
               <Bell className="w-4 h-4 text-muted-foreground" />
               <div>
-                <Label htmlFor="push-toggle" className="text-sm">Push notifikácie</Label>
+                <Label htmlFor="push-toggle" className="text-sm">{t("settings.pushNotifications")}</Label>
                 <p className="text-xs text-muted-foreground">
                   {!pushSupported
-                    ? "Tento prehliadač push notifikácie nepodporuje"
+                    ? t("settings.pushUnsupported")
                     : pushActive
-                      ? "Aktívne na tomto zariadení"
+                      ? t("settings.pushActive")
                       : platform === "ios" && !isInstalled
-                        ? "Na iPhone najprv nainštaluj aplikáciu na plochu"
-                        : "Upozornenia na nové platby a správy od administrátora"}
+                        ? t("settings.pushInstallFirst")
+                        : t("settings.pushOffHint")}
                 </p>
               </div>
             </div>
@@ -363,8 +365,8 @@ export default function Settings() {
             <div className="flex items-center gap-3">
               <Mail className="w-4 h-4 text-muted-foreground" />
               <div>
-                <Label htmlFor="email-toggle" className="text-sm">Email notifikácie</Label>
-                <p className="text-xs text-muted-foreground">Emaily o nových platbách a správy od administrátora</p>
+                <Label htmlFor="email-toggle" className="text-sm">{t("settings.emailNotifications")}</Label>
+                <p className="text-xs text-muted-foreground">{t("settings.emailOffHint")}</p>
               </div>
             </div>
             <Switch
@@ -381,7 +383,7 @@ export default function Settings() {
               onClick={() => testNotificationMutation.mutate()}
               disabled={testNotificationMutation.isPending || (!pushActive && !settings?.emailEnabled)}
             >
-              <Send className="w-4 h-4 mr-1.5" />{testNotificationMutation.isPending ? "Odosielam..." : "Poslať testovaciu notifikáciu"}
+              <Send className="w-4 h-4 mr-1.5" />{testNotificationMutation.isPending ? t("settings.testSending") : t("settings.testNotification")}
             </Button>
           </div>
         </CardContent>
@@ -391,12 +393,12 @@ export default function Settings() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
-            <Smartphone className="w-4 h-4" />Aplikácia
+            <Smartphone className="w-4 h-4" />{t("settings.app")}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            Pridaj si O5MY Futsal na plochu a otvor ho ako bežnú mobilnú aplikáciu.
+            {t("settings.appHint")}
           </p>
           <PwaInstallButton showInstalledState className="w-full sm:w-auto" />
         </CardContent>
@@ -409,7 +411,7 @@ export default function Settings() {
         onClick={logout}
         data-testid="button-logout-settings"
       >
-        <LogOut className="w-4 h-4 mr-2" />Odhlásiť sa
+        <LogOut className="w-4 h-4 mr-2" />{t("settings.logoutButton")}
       </Button>
     </div>
   );

@@ -10,8 +10,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { AuthProvider, useAuth } from "@/contexts/auth-context";
 import { PwaInstallProvider } from "@/contexts/pwa-install-context";
 import { ThemeProvider } from "@/contexts/theme-context";
+import { I18nProvider } from "@/lib/i18n";
 import { Layout } from "@/components/layout";
-import { TERMS_INTRO, TERMS_SECTIONS, TERMS_VERSION } from "@shared/terms";
+import { TERMS_INTRO, TERMS_INTRO_CZ, TERMS_INTRO_EN, TERMS_SECTIONS, TERMS_SECTIONS_CZ, TERMS_SECTIONS_EN, TERMS_VERSION } from "@shared/terms";
+import { TermsLanguageToggle, useTermsLanguage } from "@/lib/terms-language";
 import NotFound from "@/pages/not-found";
 import Login from "@/pages/login";
 import Register from "@/pages/register";
@@ -77,8 +79,14 @@ function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) {
 // the terms (existing accounts were created before terms tracking existed).
 function TermsGate() {
   const { acceptTerms, logout } = useAuth();
+  const { lang, change } = useTermsLanguage();
   const [isAccepting, setIsAccepting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const isEn = lang === "en";
+  const isCz = lang === "cz";
+  const intro = isEn ? TERMS_INTRO_EN : isCz ? TERMS_INTRO_CZ : TERMS_INTRO;
+  const sections = isEn ? TERMS_SECTIONS_EN : isCz ? TERMS_SECTIONS_CZ : TERMS_SECTIONS;
 
   const handleAccept = async () => {
     setIsAccepting(true);
@@ -86,7 +94,14 @@ function TermsGate() {
     try {
       await acceptTerms();
     } catch (err: any) {
-      setError(err.message || "Súhlas sa nepodarilo uložiť");
+      setError(
+        err.message ||
+          (isEn
+            ? "Failed to save your acceptance"
+            : isCz
+              ? "Souhlas se nepodařilo uložit"
+              : "Súhlas sa nepodarilo uložiť"),
+      );
       setIsAccepting(false);
     }
   };
@@ -98,17 +113,21 @@ function TermsGate() {
           <img src="/logo.jpg" alt="O5MY" className="w-16 h-16 rounded-full object-cover" />
           <h1 className="font-serif text-2xl font-bold tracking-tight">O5MY Futsal</h1>
           <p className="text-sm text-muted-foreground">
-            Aktualizovali sme podmienky používania (verzia {TERMS_VERSION}). Pred pokračovaním si ich
-            prečítaj a odsúhlas.
+            {isEn
+              ? `We've updated the Terms of Service (version ${TERMS_VERSION}). Please read and accept them to continue.`
+              : isCz
+                ? `Aktualizovali jsme podmínky používání (verze ${TERMS_VERSION}). Před pokračováním si je přečti a odsouhlas.`
+                : `Aktualizovali sme podmienky používania (verzia ${TERMS_VERSION}). Pred pokračovaním si ich prečítaj a odsúhlas.`}
           </p>
+          <TermsLanguageToggle lang={lang} onChange={change} />
           <p className="text-sm italic text-muted-foreground bg-muted rounded-lg px-4 py-3 max-w-xl">
-            {TERMS_INTRO}
+            {intro}
           </p>
         </div>
 
         <Card>
           <CardContent className="py-6 space-y-6 max-h-[50vh] overflow-y-auto">
-            {TERMS_SECTIONS.map((section) => (
+            {sections.map((section) => (
               <section key={section.title} className="space-y-2">
                 <h2 className="text-base font-semibold">{section.title}</h2>
                 {section.paragraphs.map((paragraph, index) => (
@@ -125,10 +144,20 @@ function TermsGate() {
 
         <div className="flex flex-col items-center gap-2 pb-4">
           <Button className="w-full max-w-sm" onClick={handleAccept} disabled={isAccepting}>
-            {isAccepting ? "Ukladám..." : "Súhlasím s podmienkami používania"}
+            {isAccepting
+              ? isEn
+                ? "Saving..."
+                : isCz
+                  ? "Ukládám..."
+                  : "Ukladám..."
+              : isEn
+                ? "I agree to the terms of use"
+                : isCz
+                  ? "Souhlasím s podmínkami používání"
+                  : "Súhlasím s podmienkami používania"}
           </Button>
           <Button variant="ghost" onClick={logout} disabled={isAccepting}>
-            Odhlásiť sa
+            {isEn ? "Log out" : isCz ? "Odhlásit se" : "Odhlásiť sa"}
           </Button>
         </div>
       </div>
@@ -242,18 +271,20 @@ function AppRouter() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <PwaInstallProvider>
-        <TooltipProvider>
-          <Toaster />
-          <AuthProvider>
-            <ThemeProvider>
-              <Router hook={useAppHashLocation}>
-                <AppRouter />
-              </Router>
-            </ThemeProvider>
-          </AuthProvider>
-        </TooltipProvider>
-      </PwaInstallProvider>
+      <I18nProvider>
+        <PwaInstallProvider>
+          <TooltipProvider>
+            <Toaster />
+            <AuthProvider>
+              <ThemeProvider>
+                <Router hook={useAppHashLocation}>
+                  <AppRouter />
+                </Router>
+              </ThemeProvider>
+            </AuthProvider>
+          </TooltipProvider>
+        </PwaInstallProvider>
+      </I18nProvider>
     </QueryClientProvider>
   );
 }

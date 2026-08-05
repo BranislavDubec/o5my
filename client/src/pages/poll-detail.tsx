@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n";
 
 interface PollDetail {
   id: number;
@@ -23,6 +24,7 @@ export default function PollDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
   const { toast } = useToast();
+  const { t } = useI18n();
   const queryClient = useQueryClient();
 
   const { data: poll } = useQuery<PollDetail>({
@@ -35,12 +37,12 @@ export default function PollDetailPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/polls", id] });
       queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
-      toast({ title: "Hlas zaznamenaný" });
+      toast({ title: t("pollDetail.voteRecorded") });
     },
   });
 
   if (!poll) {
-    return <div className="flex items-center justify-center p-8"><p className="text-muted-foreground">Načítavam...</p></div>;
+    return <div className="flex items-center justify-center p-8"><p className="text-muted-foreground">{t("common.loading")}</p></div>;
   }
 
   const isClosed = !!poll.closesAt && new Date(poll.closesAt) < new Date();
@@ -55,14 +57,14 @@ export default function PollDetailPage() {
     <div className="space-y-6 max-w-2xl">
       <Link href="/polls">
         <Button variant="ghost" size="sm" className="text-muted-foreground">
-          <ArrowLeft className="w-4 h-4 mr-1" />Späť
+          <ArrowLeft className="w-4 h-4 mr-1" />{t("common.back")}
         </Button>
       </Link>
 
       <div>
         <div className="flex items-center gap-2 mb-2">
-          {isClosed ? <Badge variant="secondary">Uzavretá</Badge> : <Badge variant="default">Aktívna</Badge>}
-          <span className="text-xs text-muted-foreground">{totalVotes} hlasov</span>
+          {isClosed ? <Badge variant="secondary">{t("polls.closed")}</Badge> : <Badge variant="default">{t("polls.active")}</Badge>}
+          <span className="text-xs text-muted-foreground">{totalVotes} {totalVotes === 1 ? t("pollDetail.voteOne") : t("pollDetail.voteMany")}</span>
         </div>
         <h1 className="font-serif text-xl font-bold" data-testid="text-poll-title">{poll.title}</h1>
         {poll.description && <p className="text-sm text-muted-foreground mt-2">{poll.description}</p>}
@@ -117,10 +119,10 @@ export default function PollDetailPage() {
       </div>
 
       {!isClosed && !poll.userVote && (
-        <p className="text-sm text-muted-foreground text-center">Klikni na možnosť pre hlasovanie</p>
+        <p className="text-sm text-muted-foreground text-center">{t("pollDetail.voteHint")}</p>
       )}
       {poll.userVote && !isClosed && (
-        <p className="text-sm text-muted-foreground text-center">Hlasoval si. Klikni na inú možnosť pre zmenu.</p>
+        <p className="text-sm text-muted-foreground text-center">{t("pollDetail.votedHint")}</p>
       )}
     </div>
   );

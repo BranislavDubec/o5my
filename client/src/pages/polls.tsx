@@ -13,7 +13,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Plus, Vote, Trash2 } from "lucide-react";
 import { format, parseISO } from "date-fns";
-import { sk } from "date-fns/locale";
+import { sk as skLocale, cs as csLocale, enUS as enLocale } from "date-fns/locale";
+import { useI18n } from "@/lib/i18n";
 
 interface Poll {
   id: number;
@@ -26,6 +27,8 @@ interface Poll {
 export default function PollsPage() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { lang, t } = useI18n();
+  const dateLocale = lang === "sk" ? skLocale : lang === "cz" ? csLocale : enLocale;
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [form, setForm] = useState({ title: "", description: "", options: ["", ""] });
@@ -39,11 +42,11 @@ export default function PollsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/polls"] });
       queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
-      toast({ title: "Anketa vytvorená" });
+      toast({ title: t("polls.created") });
       setDialogOpen(false);
       setForm({ title: "", description: "", options: ["", ""] });
     },
-    onError: (err: any) => toast({ title: "Chyba", description: err.message, variant: "destructive" }),
+    onError: (err: any) => toast({ title: t("common.error"), description: err.message, variant: "destructive" }),
   });
 
   const deleteMutation = useMutation({
@@ -51,7 +54,7 @@ export default function PollsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/polls"] });
       queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
-      toast({ title: "Anketa zmazaná" });
+      toast({ title: t("polls.deleted") });
     },
   });
 
@@ -59,7 +62,7 @@ export default function PollsPage() {
     e.preventDefault();
     const options = form.options.filter(o => o.trim());
     if (options.length < 2) {
-      toast({ title: "Pridaj aspoň 2 možnosti", variant: "destructive" });
+      toast({ title: t("polls.needTwoOptions"), variant: "destructive" });
       return;
     }
     createMutation.mutate({
@@ -75,29 +78,29 @@ export default function PollsPage() {
     <div className="space-y-6 max-w-2xl">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-serif text-xl font-bold">Ankety</h1>
-          <p className="text-sm text-muted-foreground mt-1">Hlasuj a rozhoduj s tímom</p>
+          <h1 className="font-serif text-xl font-bold">{t("polls.title")}</h1>
+          <p className="text-sm text-muted-foreground mt-1">{t("polls.subtitle")}</p>
         </div>
         {user?.role === "admin" && (
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
-              <Button size="sm" data-testid="button-add-poll"><Plus className="w-4 h-4 mr-1" />Nová anketa</Button>
+              <Button size="sm" data-testid="button-add-poll"><Plus className="w-4 h-4 mr-1" />{t("polls.newPoll")}</Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Nová anketa</DialogTitle>
+                <DialogTitle>{t("polls.newPoll")}</DialogTitle>
               </DialogHeader>
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="title">Otázka</Label>
-                  <Input id="title" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} required placeholder="Kedy hráme zápas?" data-testid="input-poll-title" />
+                  <Label htmlFor="title">{t("polls.question")}</Label>
+                  <Input id="title" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} required placeholder={t("polls.questionPlaceholder")} data-testid="input-poll-title" />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="description">Popis (voliteľné)</Label>
+                  <Label htmlFor="description">{t("polls.description", { optional: t("common.optional") })}</Label>
                   <Textarea id="description" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} rows={2} data-testid="input-poll-description" />
                 </div>
                 <div className="space-y-2">
-                  <Label>Možnosti</Label>
+                  <Label>{t("polls.options")}</Label>
                   {form.options.map((opt, i) => (
                     <div key={i} className="flex gap-2">
                       <Input
@@ -107,7 +110,7 @@ export default function PollsPage() {
                           opts[i] = e.target.value;
                           setForm({ ...form, options: opts });
                         }}
-                        placeholder={`Možnosť ${i + 1}`}
+                        placeholder={t("polls.optionPlaceholder", { number: i + 1 })}
                         data-testid={`input-option-${i}`}
                       />
                       {form.options.length > 2 && (
@@ -118,12 +121,12 @@ export default function PollsPage() {
                     </div>
                   ))}
                   <Button type="button" variant="outline" size="sm" onClick={() => setForm({ ...form, options: [...form.options, ""] })}>
-                    <Plus className="w-3 h-3 mr-1" />Pridať možnosť
+                    <Plus className="w-3 h-3 mr-1" />{t("polls.addOption")}
                   </Button>
                 </div>
                 <DialogFooter>
                   <Button type="submit" disabled={createMutation.isPending} data-testid="button-submit-poll">
-                    {createMutation.isPending ? "Vytváram..." : "Vytvoriť"}
+                    {createMutation.isPending ? t("calendar.creating") : t("calendar.create")}
                   </Button>
                 </DialogFooter>
               </form>
@@ -136,7 +139,7 @@ export default function PollsPage() {
         <Card>
           <CardContent className="p-8 text-center">
             <Vote className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
-            <p className="text-sm text-muted-foreground">Žiadne ankety</p>
+            <p className="text-sm text-muted-foreground">{t("polls.none")}</p>
           </CardContent>
         </Card>
       ) : (
@@ -150,21 +153,21 @@ export default function PollsPage() {
                       <p className="font-medium text-sm">{poll.title}</p>
                       {poll.description && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{poll.description}</p>}
                       <p className="text-xs text-muted-foreground mt-2">
-                        {format(parseISO(poll.createdAt), "d. MMM yyyy", { locale: sk })}
+                        {format(parseISO(poll.createdAt), "d. MMM yyyy", { locale: dateLocale })}
                       </p>
                     </div>
                     <div className="flex flex-col items-end gap-1 shrink-0">
                       {isClosed(poll.closesAt) ? (
-                        <Badge variant="secondary">Uzavretá</Badge>
+                        <Badge variant="secondary">{t("polls.closed")}</Badge>
                       ) : (
-                        <Badge variant="default">Aktívna</Badge>
+                        <Badge variant="default">{t("polls.active")}</Badge>
                       )}
                       {user?.role === "admin" && (
                         <Button
                           variant="ghost"
                           size="icon"
                           className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); if (confirm("Zmazať anketu?")) deleteMutation.mutate(poll.id); }}
+                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); if (confirm(t("polls.deleteConfirm"))) deleteMutation.mutate(poll.id); }}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </Button>

@@ -9,10 +9,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Link } from "wouter";
 import { MailCheck } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
+import { LanguageToggle, useI18n } from "@/lib/i18n";
 
 export default function Register() {
   const { register } = useAuth();
   const { toast } = useToast();
+  const { t } = useI18n();
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [nickname, setNickname] = useState("");
@@ -26,11 +28,11 @@ export default function Register() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!acceptedTerms) {
-      toast({ title: "Je potrebné súhlasiť s podmienkami", variant: "destructive" });
+      toast({ title: t("auth.needTerms"), variant: "destructive" });
       return;
     }
     if (password.length < 8) {
-      toast({ title: "Heslo musí mať aspoň 8 znakov", variant: "destructive" });
+      toast({ title: t("auth.passwordTooShort"), variant: "destructive" });
       return;
     }
     setIsLoading(true);
@@ -38,7 +40,7 @@ export default function Register() {
       await register({ firstName, lastName, nickname, email, phone: phone || undefined, password, acceptedTerms: true });
       setRegistrationComplete(true);
     } catch (err: any) {
-      toast({ title: "Chyba", description: err.message, variant: "destructive" });
+      toast({ title: t("common.error"), description: err.message, variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
@@ -48,16 +50,17 @@ export default function Register() {
     setIsLoading(true);
     try {
       await apiRequest("POST", "/api/auth/resend-verification", { email });
-      toast({ title: "Overovací email bol znovu odoslaný" });
+      toast({ title: t("auth.resendSentAgain") });
     } catch (err: any) {
-      toast({ title: "Chyba", description: err.message, variant: "destructive" });
+      toast({ title: t("common.error"), description: err.message, variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-background">
+    <div className="min-h-screen flex items-center justify-center p-4 bg-background relative">
+      <LanguageToggle className="absolute top-4 right-4" />
       <div className="w-full max-w-sm space-y-6">
         <div className="flex flex-col items-center gap-3">
           <img
@@ -65,39 +68,39 @@ export default function Register() {
             alt="Futbal App"
           />
           <h1 className="font-serif text-2xl font-bold tracking-tight">O5MY Futsal</h1>
-          <p className="text-sm text-muted-foreground">Vytvor si účet</p>
+          <p className="text-sm text-muted-foreground">{t("auth.registerSubtitle")}</p>
         </div>
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Registrácia</CardTitle>
+            <CardTitle className="text-lg">{t("auth.registerTitle")}</CardTitle>
           </CardHeader>
           <CardContent>
             {registrationComplete ? (
               <div className="space-y-4 text-center">
                 <MailCheck className="mx-auto h-12 w-12 text-primary" />
-                <p>Na adresu <strong>{email}</strong> sme poslali potvrdzovací odkaz.</p>
-                <p className="text-sm text-muted-foreground">Odkaz platí 24 hodín.</p>
+                <p>{t("auth.verificationSent", { email })}</p>
+                <p className="text-sm text-muted-foreground">{t("auth.linkValid24h")}</p>
                 <Button type="button" variant="outline" className="w-full" onClick={resendVerification} disabled={isLoading}>
-                  {isLoading ? "Odosielam…" : "Poslať email znova"}
+                  {isLoading ? t("auth.sending") : t("auth.resendEmail")}
                 </Button>
-                <Button asChild className="w-full"><Link href="/login">Prejsť na prihlásenie</Link></Button>
+                <Button asChild className="w-full"><Link href="/login">{t("auth.goToLogin")}</Link></Button>
               </div>
             ) : (
             <>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
-                  <Label htmlFor="first-name">Meno</Label>
+                  <Label htmlFor="first-name">{t("auth.firstName")}</Label>
                   <Input id="first-name" value={firstName} onChange={e => setFirstName(e.target.value)} required maxLength={80} placeholder="Ján" data-testid="input-first-name" />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="last-name">Priezvisko</Label>
+                  <Label htmlFor="last-name">{t("auth.lastName")}</Label>
                   <Input id="last-name" value={lastName} onChange={e => setLastName(e.target.value)} required maxLength={80} placeholder="Novák" data-testid="input-last-name" />
                 </div>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="nickname">Prezývka</Label>
+                <Label htmlFor="nickname">{t("auth.nickname")}</Label>
                 <Input
                   id="nickname"
                   value={nickname}
@@ -108,18 +111,18 @@ export default function Register() {
                   autoComplete="nickname"
                   data-testid="input-nickname"
                 />
-                <p className="text-xs text-muted-foreground">Meno, pod ktorým ťa pozná tím.</p>
+                <p className="text-xs text-muted-foreground">{t("auth.nicknameHint")}</p>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email">{t("auth.email")}</Label>
                 <Input id="email" type="email" value={email} onChange={e => setEmail(e.target.value)} required placeholder="meno@example.com" data-testid="input-email" />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="phone">Telefón (voliteľné)</Label>
+                <Label htmlFor="phone">{t("auth.phone", { optional: t("common.optional") })}</Label>
                 <Input id="phone" value={phone} onChange={e => setPhone(e.target.value)} placeholder="+420 123 456 789" data-testid="input-phone" />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="password">Heslo</Label>
+                <Label htmlFor="password">{t("auth.password")}</Label>
                 <Input id="password" type="password" value={password} onChange={e => setPassword(e.target.value)} required minLength={8} autoComplete="new-password" data-testid="input-password" />
               </div>
               <div className="flex items-start gap-2">
@@ -132,20 +135,20 @@ export default function Register() {
                   className="mt-0.5"
                 />
                 <Label htmlFor="accepted-terms" className="text-sm text-muted-foreground font-normal leading-snug">
-                  Súhlasím s{" "}
+                  {t("auth.agreeTermsPrefix")}{" "}
                   <a href="/#/terms" target="_blank" rel="noopener noreferrer" className="text-primary font-medium hover:underline">
-                    podmienkami používania
+                    {t("auth.termsLink")}
                   </a>
                 </Label>
               </div>
               <Button type="submit" className="w-full" disabled={isLoading} data-testid="button-submit">
-                {isLoading ? "Registrujem..." : "Registrovať"}
+                {isLoading ? t("auth.registering") : t("auth.register")}
               </Button>
             </form>
             <p className="text-sm text-muted-foreground text-center mt-4">
-              Máš už účet?{" "}
+              {t("auth.haveAccount")}{" "}
               <Link href="/login" className="text-primary font-medium hover:underline">
-                Prihlásiť
+                {t("auth.signIn")}
               </Link>
             </p>
             </>

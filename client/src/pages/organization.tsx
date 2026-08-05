@@ -7,6 +7,7 @@ import {
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/contexts/auth-context";
 import { useToast } from "@/hooks/use-toast";
+import { useI18n } from "@/lib/i18n";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -99,12 +100,6 @@ const emptyInventoryForm: InventoryItemForm = {
   notes: "",
 };
 
-const statusLabels: Record<ResponsibilityStatus, string> = {
-  ok: "OK",
-  attention: "Treba vybaviť",
-  done: "Hotovo",
-};
-
 function statusBadgeClass(status: ResponsibilityStatus) {
   return status === "ok"
     ? "border-emerald-500/60 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
@@ -117,7 +112,15 @@ export default function OrganizationPage() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
   const { toast } = useToast();
+  const { t } = useI18n();
   const queryClient = useQueryClient();
+
+  const statusLabel = (status: ResponsibilityStatus) =>
+    status === "ok"
+      ? t("organization.statusOk")
+      : status === "attention"
+        ? t("organization.statusAttention")
+        : t("organization.statusDone");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [form, setForm] = useState<ResponsibilityForm>(emptyForm);
@@ -148,25 +151,25 @@ export default function OrganizationPage() {
       apiRequest(id === null ? "POST" : "PUT", id === null ? "/api/organization" : `/api/organization/${id}`, data),
     onSuccess: (_response, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/organization"] });
-      toast({ title: variables.id === null ? "Položka bola pridaná" : "Položka bola upravená" });
+      toast({ title: variables.id === null ? t("organization.itemAdded") : t("organization.itemUpdated") });
       closeDialog();
     },
-    onError: (error: Error) => toast({ title: "Položku sa nepodarilo uložiť", description: error.message, variant: "destructive" }),
+    onError: (error: Error) => toast({ title: t("organization.itemSaveFailed"), description: error.message, variant: "destructive" }),
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => apiRequest("DELETE", `/api/organization/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/organization"] });
-      toast({ title: "Položka bola zmazaná" });
+      toast({ title: t("organization.itemDeleted") });
     },
-    onError: (error: Error) => toast({ title: "Položku sa nepodarilo zmazať", description: error.message, variant: "destructive" }),
+    onError: (error: Error) => toast({ title: t("organization.itemDeleteFailed"), description: error.message, variant: "destructive" }),
   });
 
   const reorderMutation = useMutation({
     mutationFn: (ids: number[]) => apiRequest("PUT", "/api/organization/order", { ids }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/organization"] }),
-    onError: (error: Error) => toast({ title: "Poradie sa nepodarilo uložiť", description: error.message, variant: "destructive" }),
+    onError: (error: Error) => toast({ title: t("organization.orderSaveFailed"), description: error.message, variant: "destructive" }),
   });
 
   const remindMutation = useMutation({
@@ -174,8 +177,8 @@ export default function OrganizationPage() {
       const response = await apiRequest("POST", `/api/organization/${item.id}/remind`);
       return response.json() as Promise<{ recipientCount: number }>;
     },
-    onSuccess: result => toast({ title: "Pripomienka bola odoslaná", description: `Príjemcovia: ${result.recipientCount}` }),
-    onError: (error: Error) => toast({ title: "Pripomienku sa nepodarilo odoslať", description: error.message, variant: "destructive" }),
+    onSuccess: result => toast({ title: t("organization.reminderSent"), description: t("organization.reminderRecipients", { count: result.recipientCount }) }),
+    onError: (error: Error) => toast({ title: t("organization.reminderSendFailed"), description: error.message, variant: "destructive" }),
   });
 
   const saveInventoryMutation = useMutation({
@@ -187,10 +190,10 @@ export default function OrganizationPage() {
       ),
     onSuccess: (_response, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/organization"] });
-      toast({ title: variables.itemId === null ? "Vec bola pridaná" : "Vec bola upravená" });
+      toast({ title: variables.itemId === null ? t("organization.thingAdded") : t("organization.thingUpdated") });
       closeInventoryDialog();
     },
-    onError: (error: Error) => toast({ title: "Vec sa nepodarilo uložiť", description: error.message, variant: "destructive" }),
+    onError: (error: Error) => toast({ title: t("organization.thingSaveFailed"), description: error.message, variant: "destructive" }),
   });
 
   const deleteInventoryMutation = useMutation({
@@ -198,16 +201,16 @@ export default function OrganizationPage() {
       apiRequest("DELETE", `/api/organization/${parentId}/inventory/${itemId}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/organization"] });
-      toast({ title: "Vec bola zmazaná" });
+      toast({ title: t("organization.thingDeleted") });
     },
-    onError: (error: Error) => toast({ title: "Vec sa nepodarilo zmazať", description: error.message, variant: "destructive" }),
+    onError: (error: Error) => toast({ title: t("organization.thingDeleteFailed"), description: error.message, variant: "destructive" }),
   });
 
   const reorderInventoryMutation = useMutation({
     mutationFn: ({ parentId, ids }: { parentId: number; ids: number[] }) =>
       apiRequest("PUT", `/api/organization/${parentId}/inventory/order`, { ids }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/organization"] }),
-    onError: (error: Error) => toast({ title: "Poradie vecí sa nepodarilo uložiť", description: error.message, variant: "destructive" }),
+    onError: (error: Error) => toast({ title: t("organization.thingsOrderSaveFailed"), description: error.message, variant: "destructive" }),
   });
 
   function closeDialog() {
@@ -316,23 +319,23 @@ export default function OrganizationPage() {
     <div className="space-y-6 max-w-4xl">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="font-serif text-xl font-bold">Organizácia</h1>
-          <p className="text-sm text-muted-foreground mt-1">Zodpovednosti, tímová výbava a prevádzkové poznámky</p>
+          <h1 className="font-serif text-xl font-bold">{t("organization.title")}</h1>
+          <p className="text-sm text-muted-foreground mt-1">{t("organization.subtitle")}</p>
         </div>
         {isAdmin && (
           <Button size="sm" onClick={openCreateDialog} data-testid="button-add-responsibility">
-            <Plus className="w-4 h-4 mr-1" />Pridať
+            <Plus className="w-4 h-4 mr-1" />{t("organization.add")}
           </Button>
         )}
       </div>
 
       {isLoading ? (
-        <Card><CardContent className="p-8 text-center text-sm text-muted-foreground">Načítavam organizáciu…</CardContent></Card>
+        <Card><CardContent className="p-8 text-center text-sm text-muted-foreground">{t("organization.loading")}</CardContent></Card>
       ) : groupedResponsibilities.length === 0 ? (
         <Card>
           <CardContent className="p-8 text-center">
             <ClipboardList className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
-            <p className="text-sm text-muted-foreground">Zatiaľ tu nie sú žiadne položky</p>
+            <p className="text-sm text-muted-foreground">{t("organization.none")}</p>
           </CardContent>
         </Card>
       ) : (
@@ -344,10 +347,10 @@ export default function OrganizationPage() {
               <Badge variant="secondary">{group.items.length}</Badge>
               {isAdmin && (
                 <div className="flex items-center ml-auto">
-                  <Button variant="ghost" size="icon" className="h-8 w-8" disabled={sectionIndex === 0 || reorderMutation.isPending} onClick={() => moveSection(sectionIndex, -1)} aria-label={`Posunúť oblasť ${group.section} vyššie`}>
+                  <Button variant="ghost" size="icon" className="h-8 w-8" disabled={sectionIndex === 0 || reorderMutation.isPending} onClick={() => moveSection(sectionIndex, -1)} aria-label={t("organization.moveSectionUp", { section: group.section })}>
                     <ArrowUp className="w-4 h-4" />
                   </Button>
-                  <Button variant="ghost" size="icon" className="h-8 w-8" disabled={sectionIndex === groupedResponsibilities.length - 1 || reorderMutation.isPending} onClick={() => moveSection(sectionIndex, 1)} aria-label={`Posunúť oblasť ${group.section} nižšie`}>
+                  <Button variant="ghost" size="icon" className="h-8 w-8" disabled={sectionIndex === groupedResponsibilities.length - 1 || reorderMutation.isPending} onClick={() => moveSection(sectionIndex, 1)} aria-label={t("organization.moveSectionDown", { section: group.section })}>
                     <ArrowDown className="w-4 h-4" />
                   </Button>
                 </div>
@@ -368,11 +371,11 @@ export default function OrganizationPage() {
                           <CardTitle className="text-base leading-snug">{item.title}</CardTitle>
                           <div className="flex flex-wrap gap-1.5">
                             {item.kind === "responsibility" ? (
-                              <Badge variant="outline" className={statusBadgeClass(item.status)}>{statusLabels[item.status]}</Badge>
+                              <Badge variant="outline" className={statusBadgeClass(item.status)}>{statusLabel(item.status)}</Badge>
                             ) : (
                               <>
-                                <Badge variant="secondary"><Boxes className="w-3 h-3 mr-1" />Inventár · {item.inventoryItems.length}</Badge>
-                                {inventoryNeedsAttention && <Badge variant="outline" className={statusBadgeClass("attention")}>Treba vybaviť</Badge>}
+                                <Badge variant="secondary"><Boxes className="w-3 h-3 mr-1" />{t("organization.inventoryBadge", { count: item.inventoryItems.length })}</Badge>
+                                {inventoryNeedsAttention && <Badge variant="outline" className={statusBadgeClass("attention")}>{t("organization.statusAttention")}</Badge>}
                               </>
                             )}
                           </div>
@@ -384,27 +387,27 @@ export default function OrganizationPage() {
                               size="icon"
                               className="h-8 w-8"
                               disabled={item.owners.length === 0 || remindMutation.isPending}
-                              onClick={() => confirm(`Poslať pripomienku členom: ${item.owners.map(owner => owner.name).join(", ")}?`) && remindMutation.mutate(item)}
-                              aria-label={`Poslať pripomienku pre ${item.title}`}
-                              title={item.owners.length === 0 ? "Najprv priraď člena s účtom" : "Poslať pripomienku"}
+                              onClick={() => confirm(t("organization.remindConfirm", { names: item.owners.map(owner => owner.name).join(", ") })) && remindMutation.mutate(item)}
+                              aria-label={t("organization.remindAria", { title: item.title })}
+                              title={item.owners.length === 0 ? t("organization.remindTitleEmpty") : t("organization.remindTitle")}
                             >
                               <BellRing className="w-4 h-4" />
                             </Button>
                             {item.kind === "inventory" && (
-                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openCreateInventoryDialog(item.id)} aria-label={`Pridať vec do ${item.title}`} title="Pridať vec">
+                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openCreateInventoryDialog(item.id)} aria-label={t("organization.addThingTo", { title: item.title })} title={t("organization.addThing")}>
                                 <Plus className="w-4 h-4" />
                               </Button>
                             )}
-                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditDialog(item)} aria-label={`Upraviť ${item.title}`}>
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditDialog(item)} aria-label={t("organization.editAria", { title: item.title })}>
                               <Pencil className="w-4 h-4" />
                             </Button>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => confirm(`Zmazať „${item.title}“?`) && deleteMutation.mutate(item.id)} aria-label={`Zmazať ${item.title}`}>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => confirm(t("organization.deleteConfirm", { title: item.title })) && deleteMutation.mutate(item.id)} aria-label={t("organization.deleteAria", { title: item.title })}>
                               <Trash2 className="w-4 h-4" />
                             </Button>
-                            <Button variant="ghost" size="icon" className="h-8 w-8" disabled={itemIndex === 0 || reorderMutation.isPending} onClick={() => moveItem(sectionIndex, itemIndex, -1)} aria-label={`Posunúť ${item.title} vyššie`}>
+                            <Button variant="ghost" size="icon" className="h-8 w-8" disabled={itemIndex === 0 || reorderMutation.isPending} onClick={() => moveItem(sectionIndex, itemIndex, -1)} aria-label={t("organization.moveUp", { title: item.title })}>
                               <ArrowUp className="w-4 h-4" />
                             </Button>
-                            <Button variant="ghost" size="icon" className="h-8 w-8" disabled={itemIndex === group.items.length - 1 || reorderMutation.isPending} onClick={() => moveItem(sectionIndex, itemIndex, 1)} aria-label={`Posunúť ${item.title} nižšie`}>
+                            <Button variant="ghost" size="icon" className="h-8 w-8" disabled={itemIndex === group.items.length - 1 || reorderMutation.isPending} onClick={() => moveItem(sectionIndex, itemIndex, 1)} aria-label={t("organization.moveDown", { title: item.title })}>
                               <ArrowDown className="w-4 h-4" />
                             </Button>
                           </div>
@@ -413,7 +416,7 @@ export default function OrganizationPage() {
                       {ownerNames.length > 0 && (
                         <div className="flex items-center gap-1.5 text-sm text-muted-foreground pt-1">
                           <UserRound className="w-4 h-4 shrink-0" />
-                          <span>Zodpovedá: <strong className="font-medium text-foreground">{ownerNames.join(", ")}</strong></span>
+                          <span>{t("organization.responsibleFor")}: <strong className="font-medium text-foreground">{ownerNames.join(", ")}</strong></span>
                         </div>
                       )}
                     </CardHeader>
@@ -422,15 +425,15 @@ export default function OrganizationPage() {
                         {item.kind === "inventory" && (
                           <div className="space-y-2">
                             <div className="flex items-center justify-between gap-3">
-                              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Veci v inventári</p>
+                              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{t("organization.thingsInInventory")}</p>
                               {isAdmin && (
                                 <Button variant="outline" size="sm" className="h-8" onClick={() => openCreateInventoryDialog(item.id)}>
-                                  <Plus className="w-3.5 h-3.5 mr-1" />Pridať vec
+                                  <Plus className="w-3.5 h-3.5 mr-1" />{t("organization.addThing")}
                                 </Button>
                               )}
                             </div>
                             {item.inventoryItems.length === 0 ? (
-                              <div className="rounded-md border border-dashed p-4 text-center text-sm text-muted-foreground">Inventár je zatiaľ prázdny</div>
+                              <div className="rounded-md border border-dashed p-4 text-center text-sm text-muted-foreground">{t("organization.inventoryEmpty")}</div>
                             ) : (
                               <div className="grid gap-2 sm:grid-cols-2">
                                 {item.inventoryItems.map((inventoryItem, inventoryIndex) => (
@@ -438,28 +441,28 @@ export default function OrganizationPage() {
                                     <div className="flex items-start justify-between gap-2">
                                       <div className="min-w-0">
                                         <p className="text-sm font-medium leading-snug">{inventoryItem.name}</p>
-                                        <Badge variant="outline" className={`mt-1.5 ${statusBadgeClass(inventoryItem.status)}`}>{statusLabels[inventoryItem.status]}</Badge>
+                                        <Badge variant="outline" className={`mt-1.5 ${statusBadgeClass(inventoryItem.status)}`}>{statusLabel(inventoryItem.status)}</Badge>
                                       </div>
                                       {isAdmin && (
                                         <div className="flex flex-wrap justify-end gap-0.5 shrink-0 max-w-20">
-                                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEditInventoryDialog(item.id, inventoryItem)} aria-label={`Upraviť ${inventoryItem.name}`}>
+                                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEditInventoryDialog(item.id, inventoryItem)} aria-label={t("organization.editAria", { title: inventoryItem.name })}>
                                             <Pencil className="w-3.5 h-3.5" />
                                           </Button>
-                                          <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => confirm(`Zmazať „${inventoryItem.name}“?`) && deleteInventoryMutation.mutate({ parentId: item.id, itemId: inventoryItem.id })} aria-label={`Zmazať ${inventoryItem.name}`}>
+                                          <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => confirm(t("organization.deleteConfirm", { title: inventoryItem.name })) && deleteInventoryMutation.mutate({ parentId: item.id, itemId: inventoryItem.id })} aria-label={t("organization.deleteAria", { title: inventoryItem.name })}>
                                             <Trash2 className="w-3.5 h-3.5" />
                                           </Button>
-                                          <Button variant="ghost" size="icon" className="h-7 w-7" disabled={inventoryIndex === 0 || reorderInventoryMutation.isPending} onClick={() => moveInventoryItem(item.id, item.inventoryItems, inventoryIndex, -1)} aria-label={`Posunúť ${inventoryItem.name} vyššie`}>
+                                          <Button variant="ghost" size="icon" className="h-7 w-7" disabled={inventoryIndex === 0 || reorderInventoryMutation.isPending} onClick={() => moveInventoryItem(item.id, item.inventoryItems, inventoryIndex, -1)} aria-label={t("organization.moveUp", { title: inventoryItem.name })}>
                                             <ArrowUp className="w-3.5 h-3.5" />
                                           </Button>
-                                          <Button variant="ghost" size="icon" className="h-7 w-7" disabled={inventoryIndex === item.inventoryItems.length - 1 || reorderInventoryMutation.isPending} onClick={() => moveInventoryItem(item.id, item.inventoryItems, inventoryIndex, 1)} aria-label={`Posunúť ${inventoryItem.name} nižšie`}>
+                                          <Button variant="ghost" size="icon" className="h-7 w-7" disabled={inventoryIndex === item.inventoryItems.length - 1 || reorderInventoryMutation.isPending} onClick={() => moveInventoryItem(item.id, item.inventoryItems, inventoryIndex, 1)} aria-label={t("organization.moveDown", { title: inventoryItem.name })}>
                                             <ArrowDown className="w-3.5 h-3.5" />
                                           </Button>
                                         </div>
                                       )}
                                     </div>
                                     <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                                      {inventoryItem.quantity !== null && <span>Počet: <strong className="text-foreground">{inventoryItem.quantity}</strong></span>}
-                                      {inventoryItem.usableQuantity !== null && <span>Použiteľné: <strong className="text-foreground">{inventoryItem.usableQuantity}</strong></span>}
+                                      {inventoryItem.quantity !== null && <span>{t("organization.quantity")}: <strong className="text-foreground">{inventoryItem.quantity}</strong></span>}
+                                      {inventoryItem.usableQuantity !== null && <span>{t("organization.usable")}: <strong className="text-foreground">{inventoryItem.usableQuantity}</strong></span>}
                                       {inventoryItem.location && <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{inventoryItem.location}</span>}
                                     </div>
                                     {inventoryItem.notes && <p className="text-xs leading-relaxed text-muted-foreground whitespace-pre-line">{inventoryItem.notes}</p>}
@@ -471,7 +474,7 @@ export default function OrganizationPage() {
                         )}
                         {item.notes && (
                           <div className="border-t pt-3">
-                            <p className="text-xs font-medium text-muted-foreground mb-1">Všeobecná poznámka</p>
+                            <p className="text-xs font-medium text-muted-foreground mb-1">{t("organization.generalNote")}</p>
                             <p className="text-sm leading-relaxed text-muted-foreground whitespace-pre-line">{item.notes}</p>
                           </div>
                         )}
@@ -488,51 +491,51 @@ export default function OrganizationPage() {
       <Dialog open={dialogOpen} onOpenChange={open => open ? setDialogOpen(true) : closeDialog()}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editingId === null ? "Nová položka" : "Upraviť položku"}</DialogTitle>
+            <DialogTitle>{editingId === null ? t("organization.newItem") : t("organization.editItem")}</DialogTitle>
           </DialogHeader>
           <form onSubmit={submit} className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="responsibility-section">Oblasť</Label>
-                <Input id="responsibility-section" list="organization-sections" value={form.section} onChange={event => setForm({ ...form, section: event.target.value })} maxLength={80} placeholder="Napr. Výbava" required data-testid="input-responsibility-section" />
+                <Label htmlFor="responsibility-section">{t("organization.sectionLabel")}</Label>
+                <Input id="responsibility-section" list="organization-sections" value={form.section} onChange={event => setForm({ ...form, section: event.target.value })} maxLength={80} placeholder={t("organization.sectionPlaceholder")} required data-testid="input-responsibility-section" />
                 <datalist id="organization-sections">{sectionNames.map(section => <option key={section} value={section} />)}</datalist>
               </div>
               <div className="space-y-2">
-                <Label>Typ</Label>
+                <Label>{t("organization.kindLabel")}</Label>
                 <Select value={form.kind} onValueChange={value => setForm({ ...form, kind: value as ResponsibilityKind })}>
                   <SelectTrigger data-testid="select-responsibility-kind"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="responsibility">Zodpovednosť / úloha</SelectItem>
-                    <SelectItem value="inventory">Inventár</SelectItem>
+                    <SelectItem value="responsibility">{t("organization.kindResponsibility")}</SelectItem>
+                    <SelectItem value="inventory">{t("organization.kindInventory")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="responsibility-title">Názov</Label>
-              <Input id="responsibility-title" value={form.title} onChange={event => setForm({ ...form, title: event.target.value })} maxLength={160} placeholder="Čo treba spravovať" required data-testid="input-responsibility-title" />
+              <Label htmlFor="responsibility-title">{t("calendar.name")}</Label>
+              <Input id="responsibility-title" value={form.title} onChange={event => setForm({ ...form, title: event.target.value })} maxLength={160} placeholder={t("organization.titlePlaceholder")} required data-testid="input-responsibility-title" />
             </div>
 
             {form.kind === "responsibility" && (
               <div className="space-y-2">
-                <Label>Stav</Label>
+                <Label>{t("organization.statusLabel")}</Label>
                 <Select value={form.status} onValueChange={value => setForm({ ...form, status: value as ResponsibilityStatus })}>
                   <SelectTrigger data-testid="select-responsibility-status"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="ok">OK</SelectItem>
-                    <SelectItem value="attention">Treba vybaviť</SelectItem>
-                    <SelectItem value="done">Hotovo</SelectItem>
+                    <SelectItem value="ok">{t("organization.statusOk")}</SelectItem>
+                    <SelectItem value="attention">{t("organization.statusAttention")}</SelectItem>
+                    <SelectItem value="done">{t("organization.statusDone")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             )}
 
             <div className="space-y-2">
-              <Label>Zodpovední členovia</Label>
+              <Label>{t("organization.ownersLabel")}</Label>
               <div className="rounded-md border p-3 max-h-40 overflow-y-auto space-y-2">
                 {activeUsers.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Nie sú dostupní žiadni aktívni členovia</p>
+                  <p className="text-sm text-muted-foreground">{t("organization.noActiveMembers")}</p>
                 ) : activeUsers.map(candidate => (
                   <label key={candidate.id} className="flex items-center gap-2 text-sm cursor-pointer">
                     <Checkbox checked={form.ownerIds.includes(candidate.id)} onCheckedChange={checked => toggleOwner(candidate.id, checked === true)} />
@@ -540,28 +543,28 @@ export default function OrganizationPage() {
                   </label>
                 ))}
               </div>
-              <p className="text-xs text-muted-foreground">Týmto členom možno poslať pripomienku priamo z položky.</p>
+              <p className="text-xs text-muted-foreground">{t("organization.ownersHint")}</p>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="responsibility-owner">Ďalšie mená bez účtu (voliteľné)</Label>
-              <Input id="responsibility-owner" value={form.owner} onChange={event => setForm({ ...form, owner: event.target.value })} maxLength={160} placeholder="Napr. externý vedúci" data-testid="input-responsibility-owner" />
+              <Label htmlFor="responsibility-owner">{t("organization.ownerFieldLabel", { optional: t("common.optional") })}</Label>
+              <Input id="responsibility-owner" value={form.owner} onChange={event => setForm({ ...form, owner: event.target.value })} maxLength={160} placeholder={t("organization.ownerPlaceholder")} data-testid="input-responsibility-owner" />
             </div>
 
             {form.kind === "inventory" && (
               <div className="rounded-lg border bg-muted/40 p-3 text-sm text-muted-foreground">
-                Po uložení inventára doň pridáš jednotlivé veci. Každá vec má vlastný počet, stav a umiestnenie.
+                {t("organization.inventoryHint")}
               </div>
             )}
 
             <div className="space-y-2">
-              <Label htmlFor="responsibility-notes">Poznámky a zoznam</Label>
-              <Textarea id="responsibility-notes" value={form.notes} onChange={event => setForm({ ...form, notes: event.target.value })} maxLength={10_000} rows={8} placeholder={"• prvá položka\n• druhá položka"} data-testid="input-responsibility-notes" />
+              <Label htmlFor="responsibility-notes">{t("organization.notesLabel")}</Label>
+              <Textarea id="responsibility-notes" value={form.notes} onChange={event => setForm({ ...form, notes: event.target.value })} maxLength={10_000} rows={8} placeholder={t("organization.notesPlaceholder")} data-testid="input-responsibility-notes" />
             </div>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={closeDialog}>Zrušiť</Button>
+              <Button type="button" variant="outline" onClick={closeDialog}>{t("common.cancel")}</Button>
               <Button type="submit" disabled={saveMutation.isPending} data-testid="button-save-responsibility">
-                {saveMutation.isPending ? "Ukladám…" : "Uložiť"}
+                {saveMutation.isPending ? t("common.saving") : t("common.save")}
               </Button>
             </DialogFooter>
           </form>
@@ -571,46 +574,46 @@ export default function OrganizationPage() {
       <Dialog open={inventoryDialogOpen} onOpenChange={open => open ? setInventoryDialogOpen(true) : closeInventoryDialog()}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editingInventoryId === null ? "Pridať vec do inventára" : "Upraviť vec"}</DialogTitle>
+            <DialogTitle>{editingInventoryId === null ? t("organization.newThing") : t("organization.editThing")}</DialogTitle>
           </DialogHeader>
           <form onSubmit={submitInventoryItem} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="inventory-item-name">Názov veci</Label>
-              <Input id="inventory-item-name" value={inventoryForm.name} onChange={event => setInventoryForm({ ...inventoryForm, name: event.target.value })} maxLength={160} placeholder="Napr. náhradný dres" required data-testid="input-inventory-item-name" />
+              <Label htmlFor="inventory-item-name">{t("organization.thingNameLabel")}</Label>
+              <Input id="inventory-item-name" value={inventoryForm.name} onChange={event => setInventoryForm({ ...inventoryForm, name: event.target.value })} maxLength={160} placeholder={t("organization.thingNamePlaceholder")} required data-testid="input-inventory-item-name" />
             </div>
             <div className="space-y-2">
-              <Label>Stav</Label>
+              <Label>{t("organization.statusLabel")}</Label>
               <Select value={inventoryForm.status} onValueChange={value => setInventoryForm({ ...inventoryForm, status: value as ResponsibilityStatus })}>
                 <SelectTrigger data-testid="select-inventory-item-status"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="ok">OK</SelectItem>
-                  <SelectItem value="attention">Treba vybaviť</SelectItem>
-                  <SelectItem value="done">Hotovo</SelectItem>
+                  <SelectItem value="ok">{t("organization.statusOk")}</SelectItem>
+                  <SelectItem value="attention">{t("organization.statusAttention")}</SelectItem>
+                  <SelectItem value="done">{t("organization.statusDone")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="inventory-item-quantity">Celkový počet</Label>
+                <Label htmlFor="inventory-item-quantity">{t("organization.totalQuantity")}</Label>
                 <Input id="inventory-item-quantity" type="number" min="0" step="1" value={inventoryForm.quantity} onChange={event => setInventoryForm({ ...inventoryForm, quantity: event.target.value })} data-testid="input-inventory-item-quantity" />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="inventory-item-usable-quantity">Použiteľné kusy</Label>
+                <Label htmlFor="inventory-item-usable-quantity">{t("organization.usableQuantity")}</Label>
                 <Input id="inventory-item-usable-quantity" type="number" min="0" step="1" value={inventoryForm.usableQuantity} onChange={event => setInventoryForm({ ...inventoryForm, usableQuantity: event.target.value })} data-testid="input-inventory-item-usable-quantity" />
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="inventory-item-location">Umiestnenie</Label>
-              <Input id="inventory-item-location" value={inventoryForm.location} onChange={event => setInventoryForm({ ...inventoryForm, location: event.target.value })} maxLength={200} placeholder="Napr. v taške alebo u Braňa" data-testid="input-inventory-item-location" />
+              <Label htmlFor="inventory-item-location">{t("organization.locationLabel")}</Label>
+              <Input id="inventory-item-location" value={inventoryForm.location} onChange={event => setInventoryForm({ ...inventoryForm, location: event.target.value })} maxLength={200} placeholder={t("organization.locationPlaceholder")} data-testid="input-inventory-item-location" />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="inventory-item-notes">Poznámka</Label>
-              <Textarea id="inventory-item-notes" value={inventoryForm.notes} onChange={event => setInventoryForm({ ...inventoryForm, notes: event.target.value })} maxLength={2_000} rows={4} placeholder="Veľkosť, stav alebo čo treba doplniť" data-testid="input-inventory-item-notes" />
+              <Label htmlFor="inventory-item-notes">{t("organization.notesLabelShort")}</Label>
+              <Textarea id="inventory-item-notes" value={inventoryForm.notes} onChange={event => setInventoryForm({ ...inventoryForm, notes: event.target.value })} maxLength={2_000} rows={4} placeholder={t("organization.notesPlaceholderShort")} data-testid="input-inventory-item-notes" />
             </div>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={closeInventoryDialog}>Zrušiť</Button>
+              <Button type="button" variant="outline" onClick={closeInventoryDialog}>{t("common.cancel")}</Button>
               <Button type="submit" disabled={saveInventoryMutation.isPending} data-testid="button-save-inventory-item">
-                {saveInventoryMutation.isPending ? "Ukladám…" : "Uložiť"}
+                {saveInventoryMutation.isPending ? t("common.saving") : t("common.save")}
               </Button>
             </DialogFooter>
           </form>

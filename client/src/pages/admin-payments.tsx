@@ -14,7 +14,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Trash2, CreditCard, QrCode, Search, X } from "lucide-react";
 import { format, parseISO } from "date-fns";
-import { sk } from "date-fns/locale";
+import { sk as skLocale, cs as csLocale, enUS as enLocale } from "date-fns/locale";
+import { useI18n } from "@/lib/i18n";
 
 interface PaymentWithUser {
   id: number;
@@ -39,6 +40,7 @@ interface UserItem {
 }
 
 export default function AdminPayments() {
+  const { t, lang } = useI18n();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -46,6 +48,8 @@ export default function AdminPayments() {
   const [userFilter, setUserFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [searchFilter, setSearchFilter] = useState("");
+  const dateLocale = lang === "sk" ? skLocale : lang === "cz" ? csLocale : enLocale;
+  const sortLang = lang === "cz" ? "cs" : lang;
 
   const { data: payments = [] } = useQuery<PaymentWithUser[]>({
     queryKey: ["/api/payments/all"],
@@ -57,15 +61,15 @@ export default function AdminPayments() {
   const activeUsers = users.filter(user => user.isActive);
   const paymentUsers = Array.from(
     new Map(payments.map(payment => [payment.user.id, payment.user])).values(),
-  ).sort((a, b) => a.name.localeCompare(b.name, "sk"));
+  ).sort((a, b) => a.name.localeCompare(b.name, sortLang));
 
-  const normalizedSearch = searchFilter.trim().toLocaleLowerCase("sk");
+  const normalizedSearch = searchFilter.trim().toLocaleLowerCase(sortLang);
   const filteredPayments = payments.filter(payment => {
     if (userFilter !== "all" && payment.userId !== Number(userFilter)) return false;
     if (statusFilter !== "all" && payment.status !== statusFilter) return false;
     if (!normalizedSearch) return true;
     return [payment.user.name, payment.description, payment.variableSymbol ?? ""]
-      .some(value => value.toLocaleLowerCase("sk").includes(normalizedSearch));
+      .some(value => value.toLocaleLowerCase(sortLang).includes(normalizedSearch));
   });
   const filtersActive = userFilter !== "all" || statusFilter !== "all" || normalizedSearch.length > 0;
 
@@ -81,12 +85,12 @@ export default function AdminPayments() {
       queryClient.invalidateQueries({ queryKey: ["/api/wallet"] });
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
       toast({
-        title: result.created === 1 ? "Platba vytvorená" : `${result.created ?? 0} platieb vytvorených`,
+        title: result.created === 1 ? t("adminPayments.paymentCreated") : t("adminPayments.paymentsCreated", { count: result.created ?? 0 }),
       });
       setDialogOpen(false);
       setForm({ userIds: [], amount: "", dueDate: "", description: "" });
     },
-    onError: (err: any) => toast({ title: "Chyba", description: err.message, variant: "destructive" }),
+    onError: (err: any) => toast({ title: t("common.error"), description: err.message, variant: "destructive" }),
   });
 
   const updateStatusMutation = useMutation({
@@ -96,7 +100,7 @@ export default function AdminPayments() {
       queryClient.invalidateQueries({ queryKey: ["/api/payments/all"] });
       queryClient.invalidateQueries({ queryKey: ["/api/payments"] });
       queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
-      toast({ title: "Status aktualizovaný" });
+      toast({ title: t("adminPayments.statusUpdated") });
     },
   });
 
@@ -108,7 +112,7 @@ export default function AdminPayments() {
       queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/wallet"] });
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
-      toast({ title: "Platba zmazaná" });
+      toast({ title: t("adminPayments.paymentDeleted") });
     },
   });
 
@@ -134,9 +138,9 @@ export default function AdminPayments() {
 
   const statusBadge = (status: string) => {
     switch (status) {
-      case "paid": return <Badge variant="default" className="bg-green-600">Zaplatené</Badge>;
-      case "overdue": return <Badge variant="destructive">Po termíne</Badge>;
-      default: return <Badge variant="secondary">Čaká</Badge>;
+      case "paid": return <Badge variant="default" className="bg-green-600">{t("payments.paid")}</Badge>;
+      case "overdue": return <Badge variant="destructive">{t("payments.overdue")}</Badge>;
+      default: return <Badge variant="secondary">{t("payments.pending")}</Badge>;
     }
   };
 
@@ -153,21 +157,21 @@ export default function AdminPayments() {
     <div className="space-y-6 max-w-3xl">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-serif text-xl font-bold">Správa platieb</h1>
-          <p className="text-sm text-muted-foreground mt-1">Vytváraj a sleduj platby členov</p>
+          <h1 className="font-serif text-xl font-bold">{t("adminPayments.title")}</h1>
+          <p className="text-sm text-muted-foreground mt-1">{t("adminPayments.subtitle")}</p>
         </div>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
-            <Button size="sm" data-testid="button-add-payment"><Plus className="w-4 h-4 mr-1" />Pridať</Button>
+            <Button size="sm" data-testid="button-add-payment"><Plus className="w-4 h-4 mr-1" />{t("adminPayments.add")}</Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Nová platba</DialogTitle>
+              <DialogTitle>{t("adminPayments.newPayment")}</DialogTitle>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <div className="flex items-center justify-between gap-3">
-                  <Label>Členovia ({form.userIds.length} vybraných)</Label>
+                  <Label>{t("adminPayments.membersSelected", { count: form.userIds.length })}</Label>
                   <div className="flex items-center gap-1">
                     <Button
                       type="button"
@@ -177,7 +181,7 @@ export default function AdminPayments() {
                       onClick={() => setForm(previous => ({ ...previous, userIds: activeUsers.map(user => user.id) }))}
                       disabled={activeUsers.length === 0 || form.userIds.length === activeUsers.length}
                     >
-                      Vybrať všetkých
+                      {t("adminPayments.selectAll")}
                     </Button>
                     {form.userIds.length > 0 && (
                       <Button
@@ -187,14 +191,14 @@ export default function AdminPayments() {
                         className="h-7 px-2 text-xs"
                         onClick={() => setForm(previous => ({ ...previous, userIds: [] }))}
                       >
-                        Zrušiť
+                        {t("common.cancel")}
                       </Button>
                     )}
                   </div>
                 </div>
                 <div className="max-h-48 space-y-1 overflow-y-auto rounded-md border p-2" data-testid="payment-user-list">
                   {activeUsers.length === 0 ? (
-                    <p className="p-2 text-sm text-muted-foreground">Nie sú dostupní žiadni aktívni členovia</p>
+                    <p className="p-2 text-sm text-muted-foreground">{t("adminPayments.noActiveMembers")}</p>
                   ) : activeUsers.map(user => {
                     const checkboxId = `payment-user-${user.id}`;
                     return (
@@ -213,35 +217,35 @@ export default function AdminPayments() {
                   })}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Pre každého vybraného člena sa vytvorí samostatná platba.
+                  {t("adminPayments.perMemberHint")}
                 </p>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
-                  <Label htmlFor="amount">Suma (Kč)</Label>
+                  <Label htmlFor="amount">{t("adminPayments.amount")}</Label>
                   <Input id="amount" type="number" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} required data-testid="input-amount" />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="dueDate">Splatnosť</Label>
+                  <Label htmlFor="dueDate">{t("adminPayments.dueDate")}</Label>
                   <Input id="dueDate" type="date" value={form.dueDate} onChange={e => setForm({ ...form, dueDate: e.target.value })} required data-testid="input-due-date" />
                 </div>
               </div>
               <div className="space-y-2">
                 <p className="text-xs text-muted-foreground">
-                  Variabilný symbol sa vygeneruje automaticky ako jedinečné číslo platby.
+                  {t("adminPayments.vsHint")}
                 </p>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="desc">Popis</Label>
-                <Textarea id="desc" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} required rows={2} placeholder="Členské poplatky, dresy,..." data-testid="input-description" />
+                <Label htmlFor="desc">{t("adminPayments.description")}</Label>
+                <Textarea id="desc" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} required rows={2} placeholder={t("adminPayments.descriptionPlaceholder")} data-testid="input-description" />
               </div>
               <DialogFooter>
                 <Button type="submit" disabled={createMutation.isPending || form.userIds.length === 0} data-testid="button-submit-payment">
                   {createMutation.isPending
-                    ? "Vytváram..."
+                    ? t("adminPayments.creating")
                     : form.userIds.length === 1
-                      ? "Vytvoriť platbu"
-                      : `Vytvoriť ${form.userIds.length} platieb`}
+                      ? t("adminPayments.createOne")
+                      : t("adminPayments.createMany", { count: form.userIds.length })}
                 </Button>
               </DialogFooter>
             </form>
@@ -253,13 +257,13 @@ export default function AdminPayments() {
         <CardContent className="p-4 space-y-3">
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label>Člen</Label>
+              <Label>{t("adminPayments.memberFilter")}</Label>
               <Select value={userFilter} onValueChange={setUserFilter}>
                 <SelectTrigger data-testid="filter-payment-user">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Všetci členovia</SelectItem>
+                  <SelectItem value="all">{t("adminPayments.allMembers")}</SelectItem>
                   {paymentUsers.map(user => (
                     <SelectItem key={user.id} value={String(user.id)}>{user.name}</SelectItem>
                   ))}
@@ -267,16 +271,16 @@ export default function AdminPayments() {
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label>Stav</Label>
+              <Label>{t("adminPayments.statusFilter")}</Label>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
                 <SelectTrigger data-testid="filter-payment-status">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Všetky stavy</SelectItem>
-                  <SelectItem value="pending">Čaká na úhradu</SelectItem>
-                  <SelectItem value="paid">Zaplatené</SelectItem>
-                  <SelectItem value="overdue">Po termíne</SelectItem>
+                  <SelectItem value="all">{t("adminPayments.allStatuses")}</SelectItem>
+                  <SelectItem value="pending">{t("paymentDetail.pendingPay")}</SelectItem>
+                  <SelectItem value="paid">{t("payments.paid")}</SelectItem>
+                  <SelectItem value="overdue">{t("payments.overdue")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -287,19 +291,19 @@ export default function AdminPayments() {
               <Input
                 value={searchFilter}
                 onChange={event => setSearchFilter(event.target.value)}
-                placeholder="Hľadať meno, popis alebo VS"
+                placeholder={t("adminPayments.searchPlaceholder")}
                 className="pl-9"
                 data-testid="filter-payment-search"
               />
             </div>
             {filtersActive && (
               <Button type="button" variant="ghost" size="sm" onClick={clearFilters} data-testid="button-clear-payment-filters">
-                <X className="mr-1 h-4 w-4" />Zrušiť filtre
+                <X className="mr-1 h-4 w-4" />{t("adminPayments.clearFilters")}
               </Button>
             )}
           </div>
           <p className="text-xs text-muted-foreground">
-            Zobrazené: {filteredPayments.length} z {payments.length} platieb
+            {t("adminPayments.shownOf", { shown: filteredPayments.length, total: payments.length })}
           </p>
         </CardContent>
       </Card>
@@ -308,13 +312,13 @@ export default function AdminPayments() {
       <div className="grid grid-cols-2 gap-3">
         <Card>
           <CardContent className="p-3 text-center">
-            <p className="text-xs text-muted-foreground">Zaplatené spolu</p>
+            <p className="text-xs text-muted-foreground">{t("adminPayments.paidTotal")}</p>
             <p className="text-lg font-bold text-green-600 dark:text-green-400">{totalPaid} Kč</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-3 text-center">
-            <p className="text-xs text-muted-foreground">Čaká na úhradu</p>
+            <p className="text-xs text-muted-foreground">{t("adminPayments.pendingTotal")}</p>
             <p className="text-lg font-bold text-yellow-600 dark:text-yellow-400">{totalPending} Kč</p>
           </CardContent>
         </Card>
@@ -325,16 +329,16 @@ export default function AdminPayments() {
         <Card>
           <CardContent className="p-8 text-center">
             <CreditCard className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
-            <p className="text-sm text-muted-foreground">Žiadne platby</p>
+            <p className="text-sm text-muted-foreground">{t("payments.none")}</p>
           </CardContent>
         </Card>
       ) : filteredPayments.length === 0 ? (
         <Card>
           <CardContent className="p-8 text-center">
             <Search className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
-            <p className="text-sm font-medium">Žiadne platby nezodpovedajú filtrom</p>
+            <p className="text-sm font-medium">{t("adminPayments.noMatch")}</p>
             <Button type="button" variant="ghost" size="sm" className="mt-2" onClick={clearFilters}>
-              Zrušiť filtre
+              {t("adminPayments.clearFilters")}
             </Button>
           </CardContent>
         </Card>
@@ -352,12 +356,12 @@ export default function AdminPayments() {
                   <div className="flex flex-wrap items-center gap-3 mt-1 text-xs text-muted-foreground">
                     <span className="font-semibold text-foreground">{p.amount} Kč</span>
                     {p.walletAppliedAmount > 0 && (
-                      <span className="text-green-700 dark:text-green-400">Peňaženka: {p.walletAppliedAmount} Kč</span>
+                      <span className="text-green-700 dark:text-green-400">{t("adminPayments.walletApplied", { amount: p.walletAppliedAmount })}</span>
                     )}
                     {p.walletAppliedAmount > 0 && outstandingAmount > 0 && (
-                      <span className="font-semibold text-yellow-700 dark:text-yellow-400">Zostáva: {outstandingAmount} Kč</span>
+                      <span className="font-semibold text-yellow-700 dark:text-yellow-400">{t("payments.remaining", { amount: outstandingAmount })}</span>
                     )}
-                    <span>Splatnosť: {format(parseISO(p.dueDate), "d. MMM yyyy", { locale: sk })}</span>
+                    <span>{t("payments.due", { date: format(parseISO(p.dueDate), "d. MMM yyyy", { locale: dateLocale }) })}</span>
                     {p.variableSymbol && <span>VS: {p.variableSymbol}</span>}
                   </div>
                   <p className="text-xs text-muted-foreground mt-0.5">{p.description}</p>
@@ -365,7 +369,7 @@ export default function AdminPayments() {
                 <div className="flex flex-col gap-1 shrink-0">
                   <Button variant="outline" size="sm" className="h-7 text-xs" asChild>
                     <Link href={`/payments/${p.id}`} data-testid={`button-payment-detail-${p.id}`}>
-                      <QrCode className="w-3 h-3 mr-1" />Detail
+                      <QrCode className="w-3 h-3 mr-1" />{t("adminPayments.detailButton")}
                     </Link>
                   </Button>
                   <Select
@@ -377,16 +381,16 @@ export default function AdminPayments() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="pending">Čaká</SelectItem>
-                      <SelectItem value="paid">Zaplatené</SelectItem>
-                      <SelectItem value="overdue">Po termíne</SelectItem>
+                      <SelectItem value="pending">{t("payments.pending")}</SelectItem>
+                      <SelectItem value="paid">{t("payments.paid")}</SelectItem>
+                      <SelectItem value="overdue">{t("payments.overdue")}</SelectItem>
                     </SelectContent>
                   </Select>
                   <Button
                     variant="ghost"
                     size="sm"
                     className="text-xs text-destructive"
-                    onClick={() => { if (confirm("Zmazať platbu?")) deleteMutation.mutate(p.id); }}
+                    onClick={() => { if (confirm(t("adminPayments.deleteConfirm"))) deleteMutation.mutate(p.id); }}
                     data-testid={`button-delete-payment-${p.id}`}
                   >
                     <Trash2 className="w-3 h-3" />

@@ -2,11 +2,12 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "wouter";
 import { QRCodeSVG } from "qrcode.react";
 import { format, parseISO } from "date-fns";
-import { sk } from "date-fns/locale";
+import { sk as skLocale, cs as csLocale, enUS as enLocale } from "date-fns/locale";
 import { ArrowLeft, AlertCircle, CheckCircle2, Clock, Landmark } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useI18n } from "@/lib/i18n";
 
 interface PaymentDetail {
   id: number;
@@ -23,31 +24,32 @@ interface PaymentDetail {
   qrPayload: string | null;
 }
 
-const statusConfig = {
-  paid: { label: "Zaplatené", variant: "default" as const, icon: CheckCircle2, color: "text-green-600" },
-  pending: { label: "Čaká na úhradu", variant: "secondary" as const, icon: Clock, color: "text-yellow-600" },
-  overdue: { label: "Po termíne", variant: "destructive" as const, icon: AlertCircle, color: "text-red-600" },
-};
-
 function formatIban(iban: string): string {
   return iban.replace(/(.{4})/g, "$1 ").trim();
 }
 
 export default function PaymentDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const { lang, t } = useI18n();
+  const dateLocale = lang === "sk" ? skLocale : lang === "cz" ? csLocale : enLocale;
+  const statusConfig = {
+    paid: { label: t("payments.paid"), variant: "default" as const, icon: CheckCircle2, color: "text-green-600" },
+    pending: { label: t("paymentDetail.pendingPay"), variant: "secondary" as const, icon: Clock, color: "text-yellow-600" },
+    overdue: { label: t("payments.overdue"), variant: "destructive" as const, icon: AlertCircle, color: "text-red-600" },
+  };
   const { data: payment, isLoading, error } = useQuery<PaymentDetail>({
     queryKey: ["/api/payments", id],
   });
 
   if (isLoading) {
-    return <p className="p-8 text-center text-muted-foreground">Načítavam platbu...</p>;
+    return <p className="p-8 text-center text-muted-foreground">{t("paymentDetail.loading")}</p>;
   }
 
   if (error || !payment) {
     return (
       <div className="space-y-4">
-        <Link href="/payments"><Button variant="ghost" size="sm"><ArrowLeft className="w-4 h-4 mr-1" />Späť</Button></Link>
-        <p className="text-sm text-destructive">Platbu sa nepodarilo načítať.</p>
+        <Link href="/payments"><Button variant="ghost" size="sm"><ArrowLeft className="w-4 h-4 mr-1" />{t("common.back")}</Button></Link>
+        <p className="text-sm text-destructive">{t("paymentDetail.loadFailed")}</p>
       </div>
     );
   }
@@ -59,14 +61,14 @@ export default function PaymentDetailPage() {
     <div className="space-y-6 max-w-2xl">
       <Link href="/payments">
         <Button variant="ghost" size="sm" className="text-muted-foreground">
-          <ArrowLeft className="w-4 h-4 mr-1" />Späť na platby
+          <ArrowLeft className="w-4 h-4 mr-1" />{t("paymentDetail.backToList")}
         </Button>
       </Link>
 
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="font-serif text-xl font-bold">{payment.description}</h1>
-          <p className="text-sm text-muted-foreground mt-1">Detail platby #{payment.id}</p>
+          <p className="text-sm text-muted-foreground mt-1">{t("paymentDetail.detail", { id: payment.id })}</p>
         </div>
         <Badge variant={status.variant} className="shrink-0">
           <StatusIcon className={`w-3.5 h-3.5 mr-1 ${status.color}`} />{status.label}
@@ -76,48 +78,48 @@ export default function PaymentDetailPage() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
-            <Landmark className="w-4 h-4" />Údaje k platbe
+            <Landmark className="w-4 h-4" />{t("paymentDetail.detailsTitle")}
           </CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-2 gap-x-4 gap-y-4 text-sm">
           <div>
-            <p className="text-xs text-muted-foreground">Celková suma</p>
+            <p className="text-xs text-muted-foreground">{t("paymentDetail.totalAmount")}</p>
             <p className="font-semibold text-lg">{payment.amount} {payment.currency}</p>
           </div>
           <div>
-            <p className="text-xs text-muted-foreground">Splatnosť</p>
-            <p className="font-medium">{format(parseISO(payment.dueDate), "d. MMMM yyyy", { locale: sk })}</p>
+            <p className="text-xs text-muted-foreground">{t("paymentDetail.dueDate")}</p>
+            <p className="font-medium">{format(parseISO(payment.dueDate), "d. MMMM yyyy", { locale: dateLocale })}</p>
           </div>
           <div>
-            <p className="text-xs text-muted-foreground">Variabilný symbol</p>
+            <p className="text-xs text-muted-foreground">{t("paymentDetail.variableSymbol")}</p>
             <p className="font-mono font-semibold" data-testid="text-payment-vs">{payment.variableSymbol}</p>
           </div>
           {payment.walletAppliedAmount > 0 && (
             <div>
-              <p className="text-xs text-muted-foreground">Uhradené z peňaženky</p>
+              <p className="text-xs text-muted-foreground">{t("paymentDetail.paidFromWallet")}</p>
               <p className="font-semibold text-green-700 dark:text-green-400">{payment.walletAppliedAmount} {payment.currency}</p>
             </div>
           )}
           {payment.outstandingAmount > 0 && payment.walletAppliedAmount > 0 && (
             <div>
-              <p className="text-xs text-muted-foreground">Zostáva uhradiť</p>
+              <p className="text-xs text-muted-foreground">{t("paymentDetail.remainingToPay")}</p>
               <p className="font-semibold text-yellow-700 dark:text-yellow-400">{payment.outstandingAmount} {payment.currency}</p>
             </div>
           )}
           <div>
-            <p className="text-xs text-muted-foreground">Príjemca</p>
+            <p className="text-xs text-muted-foreground">{t("paymentDetail.recipient")}</p>
             <p className="font-medium">{payment.recipientName}</p>
           </div>
           <div className="col-span-2">
             <p className="text-xs text-muted-foreground">IBAN</p>
-            <p className="font-mono font-medium break-all">{payment.recipientIban ? formatIban(payment.recipientIban) : "Nenastavený"}</p>
+            <p className="font-mono font-medium break-all">{payment.recipientIban ? formatIban(payment.recipientIban) : t("paymentDetail.notSet")}</p>
           </div>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">QR platba</CardTitle>
+          <CardTitle className="text-base">{t("paymentDetail.qrTitle")}</CardTitle>
         </CardHeader>
         <CardContent>
           {payment.qrPayload ? (
@@ -126,26 +128,26 @@ export default function PaymentDetailPage() {
                 <QRCodeSVG value={payment.qrPayload} size={240} level="M" />
               </div>
               <p className="text-xs text-muted-foreground text-center">
-                Naskenuj kód v bankovej aplikácii. Zostávajúca suma {payment.outstandingAmount} {payment.currency}, účet aj variabilný symbol sa vyplnia automaticky.
+                {t("paymentDetail.qrHint", { amount: payment.outstandingAmount, currency: payment.currency })}
               </p>
             </div>
           ) : payment.outstandingAmount === 0 ? (
             <div className="rounded-lg border border-green-600/30 bg-green-600/5 p-5 text-center">
               <CheckCircle2 className="w-6 h-6 text-green-600 mx-auto mb-2" />
-              <p className="text-sm font-medium">Platba bola celá uhradená z peňaženky</p>
-              <p className="text-xs text-muted-foreground mt-1">Zostáva uhradiť 0 {payment.currency}. Platba zostáva uložená v histórii.</p>
+              <p className="text-sm font-medium">{t("paymentDetail.fullyPaidFromWallet")}</p>
+              <p className="text-xs text-muted-foreground mt-1">{t("paymentDetail.zeroRemaining", { currency: payment.currency })}</p>
             </div>
           ) : payment.status === "paid" ? (
             <div className="rounded-lg border border-green-600/30 bg-green-600/5 p-5 text-center">
               <CheckCircle2 className="w-6 h-6 text-green-600 mx-auto mb-2" />
-              <p className="text-sm font-medium">Platba je označená ako zaplatená</p>
-              <p className="text-xs text-muted-foreground mt-1">QR kód už nie je potrebný.</p>
+              <p className="text-sm font-medium">{t("paymentDetail.markedPaid")}</p>
+              <p className="text-xs text-muted-foreground mt-1">{t("paymentDetail.qrNotNeeded")}</p>
             </div>
           ) : (
             <div className="rounded-lg border border-dashed p-5 text-center">
               <AlertCircle className="w-6 h-6 text-muted-foreground mx-auto mb-2" />
-              <p className="text-sm font-medium">QR kód zatiaľ nie je dostupný</p>
-              <p className="text-xs text-muted-foreground mt-1">Administrátor musí v bankových nastaveniach uložiť IBAN príjemcu.</p>
+              <p className="text-sm font-medium">{t("paymentDetail.qrUnavailable")}</p>
+              <p className="text-xs text-muted-foreground mt-1">{t("paymentDetail.qrUnavailableHint")}</p>
             </div>
           )}
         </CardContent>
