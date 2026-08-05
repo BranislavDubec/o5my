@@ -19,7 +19,7 @@ interface TacticWithFiles {
   }>;
 }
 
-function AppPdfViewer({ url, title }: { url: string; title: string }) {
+export function AppPdfViewer({ url, title }: { url: string; title: string }) {
   const { t } = useI18n();
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);

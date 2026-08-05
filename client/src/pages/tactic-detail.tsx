@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { AppPdfViewer } from "./tactic-pdf";
 
 interface TacticDetail {
   id: number;
@@ -175,17 +176,13 @@ export default function TacticDetailPage() {
               </div>
               {file.mimeType === "application/pdf" ? (
                 <div>
-                  <div className="p-8 bg-muted text-center">
-                    <FileText className="w-10 h-10 mx-auto mb-3 text-muted-foreground" />
-                    <p className="text-sm font-medium">{t("tacticDetail.pdfDocument")}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">{t("tacticDetail.pdfHint")}</p>
-                  </div>
+                  <AppPdfViewer url={file.url} title={`${tactic.title} – ${file.originalName}`} />
                   <div className="p-3 border-t flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2 min-w-0 text-sm">
                       <FileText className="w-4 h-4 text-muted-foreground shrink-0" />
                       <span className="truncate">{file.originalName}</span>
                     </div>
-                    <Button variant="outline" size="sm" asChild>
+                    <Button variant="ghost" size="sm" asChild>
                       <Link href={`/files/tactics/${tactic.id}/pdf/${file.id}`}><FileText className="w-4 h-4 mr-1" />{t("tacticDetail.openPdf")}</Link>
                     </Button>
                   </div>
