@@ -1,19 +1,24 @@
 import { Switch, Route, Router, Redirect } from "wouter";
+import { useState } from "react";
 import { useHashLocation } from "wouter/use-hash-location";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { AuthProvider, useAuth } from "@/contexts/auth-context";
 import { PwaInstallProvider } from "@/contexts/pwa-install-context";
 import { ThemeProvider } from "@/contexts/theme-context";
 import { Layout } from "@/components/layout";
+import { TERMS_INTRO, TERMS_SECTIONS, TERMS_VERSION } from "@shared/terms";
 import NotFound from "@/pages/not-found";
 import Login from "@/pages/login";
 import Register from "@/pages/register";
 import VerifyEmail from "@/pages/verify-email";
 import ForgotPassword from "@/pages/forgot-password";
 import ResetPassword from "@/pages/reset-password";
+import TermsPage from "@/pages/terms";
 import Dashboard from "@/pages/dashboard";
 import CalendarPage from "@/pages/calendar";
 import MatchesPage from "@/pages/matches";
@@ -68,11 +73,79 @@ function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) {
   return <Layout>{children}</Layout>;
 }
 
+// Shown after login when the user has not yet accepted the current version of
+// the terms (existing accounts were created before terms tracking existed).
+function TermsGate() {
+  const { acceptTerms, logout } = useAuth();
+  const [isAccepting, setIsAccepting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleAccept = async () => {
+    setIsAccepting(true);
+    setError(null);
+    try {
+      await acceptTerms();
+    } catch (err: any) {
+      setError(err.message || "Súhlas sa nepodarilo uložiť");
+      setIsAccepting(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex flex-col items-center px-4 py-8 bg-background">
+      <div className="w-full max-w-3xl space-y-6">
+        <div className="flex flex-col items-center gap-3 text-center">
+          <img src="/logo.jpg" alt="O5MY" className="w-16 h-16 rounded-full object-cover" />
+          <h1 className="font-serif text-2xl font-bold tracking-tight">O5MY Futsal</h1>
+          <p className="text-sm text-muted-foreground">
+            Aktualizovali sme podmienky používania (verzia {TERMS_VERSION}). Pred pokračovaním si ich
+            prečítaj a odsúhlas.
+          </p>
+          <p className="text-sm italic text-muted-foreground bg-muted rounded-lg px-4 py-3 max-w-xl">
+            {TERMS_INTRO}
+          </p>
+        </div>
+
+        <Card>
+          <CardContent className="py-6 space-y-6 max-h-[50vh] overflow-y-auto">
+            {TERMS_SECTIONS.map((section) => (
+              <section key={section.title} className="space-y-2">
+                <h2 className="text-base font-semibold">{section.title}</h2>
+                {section.paragraphs.map((paragraph, index) => (
+                  <p key={index} className="text-sm text-muted-foreground leading-relaxed">
+                    {paragraph}
+                  </p>
+                ))}
+              </section>
+            ))}
+          </CardContent>
+        </Card>
+
+        {error && <p className="text-sm text-destructive text-center">{error}</p>}
+
+        <div className="flex flex-col items-center gap-2 pb-4">
+          <Button className="w-full max-w-sm" onClick={handleAccept} disabled={isAccepting}>
+            {isAccepting ? "Ukladám..." : "Súhlasím s podmienkami používania"}
+          </Button>
+          <Button variant="ghost" onClick={logout} disabled={isAccepting}>
+            Odhlásiť sa
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AppRouter() {
   const { user, isLoading } = useAuth();
 
   if (isLoading) {
     return <FullPageSpinner />;
+  }
+
+  // Block the whole app until the current terms version is accepted.
+  if (user && user.termsVersion < TERMS_VERSION) {
+    return <TermsGate />;
   }
 
   return (
@@ -83,6 +156,9 @@ function AppRouter() {
       </Route>
       <Route path="/register">
         {user ? <Redirect to="/" /> : <Register />}
+      </Route>
+      <Route path="/terms">
+        <TermsPage />
       </Route>
       <Route path="/verify-email">
         {user ? <Redirect to="/" /> : <VerifyEmail />}

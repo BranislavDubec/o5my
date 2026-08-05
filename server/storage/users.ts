@@ -66,6 +66,14 @@ export class UsersStore {
     return db.update(users).set({ emailVerified: true }).where(eq(users.id, id)).returning().get();
   }
 
+  acceptTerms(id: number, termsVersion: number): User | undefined {
+    return db.update(users)
+      .set({ termsVersion, termsAcceptedAt: new Date().toISOString() })
+      .where(eq(users.id, id))
+      .returning()
+      .get();
+  }
+
   // ============ PLAYER STATISTICS ============
   getPlayerStatistics(): PlayerStatisticSummary[] {
     const statisticsByUser = new Map<number, PlayerStatistic>(

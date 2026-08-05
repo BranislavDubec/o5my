@@ -68,6 +68,13 @@ app.use((req, res, next) => {
 (async () => {
   await registerRoutes(httpServer, app);
 
+  // Direct navigation to /terms (e.g. from an external link or email) would
+  // otherwise hit the SPA fallback with an empty hash and land on the login
+  // page. Redirect to the in-app hash route instead.
+  app.get("/terms", (_req, res) => {
+    res.redirect("/#/terms");
+  });
+
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";

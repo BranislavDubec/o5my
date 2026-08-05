@@ -13,6 +13,8 @@ interface AuthUser {
   isActive: boolean;
   theme: "light" | "dark";
   emailVerified: boolean;
+  termsVersion: number;
+  termsAcceptedAt: string | null;
   createdAt: string;
 }
 
@@ -22,6 +24,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   register: (data: { email: string; password: string; firstName: string; lastName: string; nickname: string; phone?: string; acceptedTerms?: boolean }) => Promise<void>;
   updateProfile: (data: { firstName: string; lastName: string; nickname: string }) => Promise<void>;
+  acceptTerms: () => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -54,13 +57,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(await response.json());
   };
 
+  const acceptTerms = async () => {
+    const response = await apiRequest("POST", "/api/auth/accept-terms");
+    setUser(await response.json());
+  };
+
   const logout = async () => {
     await apiRequest("POST", "/api/auth/logout");
     setUser(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, register, updateProfile, logout }}>
+    <AuthContext.Provider value={{ user, isLoading, login, register, updateProfile, acceptTerms, logout }}>
       {children}
     </AuthContext.Provider>
   );

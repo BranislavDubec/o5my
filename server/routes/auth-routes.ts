@@ -1,5 +1,6 @@
 import type { Express } from "express";
 import { insertUserSchema } from "@shared/schema";
+import { TERMS_VERSION } from "@shared/terms";
 import { comparePassword, getCurrentUser, hashPassword, requireAuth } from "../auth";
 import {
   resetPasswordWithToken,
@@ -58,6 +59,8 @@ export function registerAuthRoutes(app: Express) {
         email,
         password: await hashPassword(data.password),
         role: "player",
+        termsVersion: TERMS_VERSION,
+        termsAcceptedAt: new Date().toISOString(),
       });
       storage.upsertNotificationSettings({ userId: user.id });
 
@@ -113,6 +116,13 @@ export function registerAuthRoutes(app: Express) {
       return res.status(401).json({ message: "Neprihlásený" });
     }
     res.json(user);
+  });
+
+  app.post("/api/auth/accept-terms", requireAuth, (req, res) => {
+    const user = storage.acceptTerms(req.user!.id, TERMS_VERSION);
+    if (!user) return res.status(404).json({ message: "Používateľ nenájdený" });
+    const { password, ...safeUser } = user;
+    res.json(safeUser);
   });
 
   app.put("/api/auth/profile", requireAuth, (req, res) => {

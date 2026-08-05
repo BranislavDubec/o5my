@@ -133,7 +133,7 @@ export default function Register() {
                 />
                 <Label htmlFor="accepted-terms" className="text-sm text-muted-foreground font-normal leading-snug">
                   Súhlasím s{" "}
-                  <a href="/terms.pdf" target="_blank" rel="noopener noreferrer" className="text-primary font-medium hover:underline">
+                  <a href="/#/terms" target="_blank" rel="noopener noreferrer" className="text-primary font-medium hover:underline">
                     podmienkami používania
                   </a>
                 </Label>

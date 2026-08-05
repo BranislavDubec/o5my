@@ -61,6 +61,7 @@ export interface IStorage {
   updateUserProfile(id: number, firstName: string, lastName: string, nickname: string): User | undefined;
   updateUserPassword(id: number, password: string): User | undefined;
   markUserEmailVerified(id: number): User | undefined;
+  acceptTerms(id: number, termsVersion: number): User | undefined;
 
   // Player statistics
   getPlayerStatistics(): PlayerStatisticSummary[];

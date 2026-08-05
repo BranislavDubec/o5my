@@ -17,6 +17,8 @@ export const users = sqliteTable("users", {
   theme: text("theme").notNull().default("light"), // light | dark
   emailVerified: integer("email_verified", { mode: "boolean" }).notNull().default(false),
   passwordVersion: integer("password_version").notNull().default(0),
+  termsVersion: integer("terms_version").notNull().default(0),
+  termsAcceptedAt: text("terms_accepted_at"),
   createdAt: text("created_at").notNull().$defaultFn(() => new Date().toISOString()),
 });
 
@@ -29,6 +31,8 @@ export const insertUserSchema = createInsertSchema(users).pick({
   nickname: true,
   phone: true,
   role: true,
+  termsVersion: true,
+  termsAcceptedAt: true,
 });
 
 export const loginUserSchema = createInsertSchema(users).pick({

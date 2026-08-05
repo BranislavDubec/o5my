@@ -62,6 +62,7 @@ export class DatabaseStorage implements IStorage {
   updateUserProfile = this.users.updateUserProfile;
   updateUserPassword = this.users.updateUserPassword;
   markUserEmailVerified = this.users.markUserEmailVerified;
+  acceptTerms = this.users.acceptTerms;
 
   // Player statistics
   getPlayerStatistics = this.users.getPlayerStatistics;
