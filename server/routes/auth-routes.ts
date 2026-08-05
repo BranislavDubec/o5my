@@ -31,6 +31,9 @@ function canSendPasswordReset(email: string) {
 export function registerAuthRoutes(app: Express) {
   app.post("/api/auth/register", async (req, res) => {
     try {
+      if (req.body?.acceptedTerms !== true) {
+        return res.status(400).json({ message: "Je potrebné súhlasiť s podmienkami používania" });
+      }
       const legacyName = splitFullName(req.body?.name);
       const firstName = normalizePersonName(req.body?.firstName ?? legacyName.firstName, "Meno");
       const lastName = normalizePersonName(req.body?.lastName ?? legacyName.lastName, "Priezvisko");

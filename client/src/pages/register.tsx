@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useAuth } from "@/contexts/auth-context";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,18 +19,23 @@ export default function Register() {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [registrationComplete, setRegistrationComplete] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!acceptedTerms) {
+      toast({ title: "Je potrebné súhlasiť s podmienkami", variant: "destructive" });
+      return;
+    }
     if (password.length < 8) {
       toast({ title: "Heslo musí mať aspoň 8 znakov", variant: "destructive" });
       return;
     }
     setIsLoading(true);
     try {
-      await register({ firstName, lastName, nickname, email, phone: phone || undefined, password });
+      await register({ firstName, lastName, nickname, email, phone: phone || undefined, password, acceptedTerms: true });
       setRegistrationComplete(true);
     } catch (err: any) {
       toast({ title: "Chyba", description: err.message, variant: "destructive" });
@@ -115,6 +121,22 @@ export default function Register() {
               <div className="space-y-2">
                 <Label htmlFor="password">Heslo</Label>
                 <Input id="password" type="password" value={password} onChange={e => setPassword(e.target.value)} required minLength={8} autoComplete="new-password" data-testid="input-password" />
+              </div>
+              <div className="flex items-start gap-2">
+                <Checkbox
+                  id="accepted-terms"
+                  checked={acceptedTerms}
+                  onCheckedChange={(checked) => setAcceptedTerms(checked === true)}
+                  required
+                  data-testid="checkbox-accepted-terms"
+                  className="mt-0.5"
+                />
+                <Label htmlFor="accepted-terms" className="text-sm text-muted-foreground font-normal leading-snug">
+                  Súhlasím s{" "}
+                  <a href="/terms.pdf" target="_blank" rel="noopener noreferrer" className="text-primary font-medium hover:underline">
+                    podmienkami používania
+                  </a>
+                </Label>
               </div>
               <Button type="submit" className="w-full" disabled={isLoading} data-testid="button-submit">
                 {isLoading ? "Registrujem..." : "Registrovať"}
