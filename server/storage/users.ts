@@ -1,4 +1,4 @@
-import { eq, asc } from "drizzle-orm";
+import { eq, asc, count } from "drizzle-orm";
 import {
   users,
   playerStatistics,
@@ -79,6 +79,14 @@ export class UsersStore {
     const statisticsByUser = new Map<number, PlayerStatistic>(
       db.select().from(playerStatistics).all().map(statistic => [statistic.userId, statistic]),
     );
+    const appearancesByUser = new Map<number, number>(
+      db.select({ userId: matchPlayerStatistics.userId, count: count() })
+        .from(matchPlayerStatistics)
+        .where(eq(matchPlayerStatistics.played, true))
+        .groupBy(matchPlayerStatistics.userId)
+        .all()
+        .map(row => [row.userId, row.count]),
+    );
     return this.getAllUsers()
       .filter(user => user.isActive && user.emailVerified)
       .map(user => {
@@ -88,6 +96,7 @@ export class UsersStore {
           name: user.name,
           goals: statistic?.goals ?? 0,
           assists: statistic?.assists ?? 0,
+          appearances: appearancesByUser.get(user.id) ?? 0,
           updatedAt: statistic?.updatedAt ?? null,
         };
       })
@@ -124,6 +133,6 @@ export class UsersStore {
         .returning()
         .get();
     });
-    return { userId, name: user.name, goals: statistic.goals, assists: statistic.assists, updatedAt: statistic.updatedAt };
+    return { userId, name: user.name, goals: statistic.goals, assists: statistic.assists, appearances: db.select({ count: count() }).from(matchPlayerStatistics).where(eq(matchPlayerStatistics.userId, userId)).get()?.count ?? 0, updatedAt: statistic.updatedAt };
   }
 }

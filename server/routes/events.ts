@@ -34,26 +34,30 @@ function parseMatchResult(body: unknown) {
       userId: parseCount(player.userId, "ID hráča", 1_000_000),
       goals: parseCount(player.goals ?? 0, "Počet gólov"),
       assists: parseCount(player.assists ?? 0, "Počet asistencií"),
+      played: player.played === true,
     };
-  }).filter(player => player.goals > 0 || player.assists > 0);
+  });
 
-  if (new Set(players.map(player => player.userId)).size !== players.length) {
+  // Keep players who have stats OR played (attendance)
+  const playersWithData = players.filter(player => player.goals > 0 || player.assists > 0 || player.played);
+
+  if (new Set(playersWithData.map(player => player.userId)).size !== playersWithData.length) {
     throw new Error("Každý hráč môže byť vo výsledku iba raz");
   }
-  if (players.some(player => {
+  if (playersWithData.some(player => {
     const user = storage.getUser(player.userId);
     return !user?.isActive || !user.emailVerified;
   })) {
-    throw new Error("Góly a asistencie možno zapísať iba aktívnym hráčom");
+    throw new Error("Hráči musia byť aktívnymi overenými používateľmi");
   }
-  if (players.reduce((sum, player) => sum + player.goals, 0) > teamScore) {
+  if (playersWithData.reduce((sum, player) => sum + player.goals, 0) > teamScore) {
     throw new Error("Súčet gólov hráčov nemôže byť vyšší ako skóre O5MY");
   }
-  if (players.reduce((sum, player) => sum + player.assists, 0) > teamScore) {
+  if (playersWithData.reduce((sum, player) => sum + player.assists, 0) > teamScore) {
     throw new Error("Súčet asistencií nemôže byť vyšší ako skóre O5MY");
   }
 
-  return { teamScore, opponentScore, notes: notes || null, players };
+  return { teamScore, opponentScore, notes: notes || null, players: playersWithData };
 }
 
 // Resolves the opponents table link for a match event. An explicit

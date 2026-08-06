@@ -1,0 +1,1 @@
+ALTER TABLE match_player_statistics ADD COLUMN played INTEGER NOT NULL DEFAULT 0;

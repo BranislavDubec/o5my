@@ -37,6 +37,7 @@ interface MatchPlayerContribution {
   userId: number;
   goals: number;
   assists: number;
+  played: boolean;
   user: { id: number; name: string };
 }
 
@@ -58,6 +59,7 @@ interface AdminUser {
 interface ResultPlayerValue {
   goals: number;
   assists: number;
+  played: boolean;
 }
 
 interface EventResponse {
@@ -183,8 +185,7 @@ export default function EventDetailPage() {
       opponentScore,
       notes: resultNotes,
       players: Object.entries(resultPlayers)
-        .map(([userId, values]) => ({ userId: Number(userId), ...values }))
-        .filter(player => player.goals > 0 || player.assists > 0),
+        .map(([userId, values]) => ({ userId: Number(userId), goals: values.goals, assists: values.assists, played: values.played })),
     }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/events", id] });
@@ -254,9 +255,19 @@ export default function EventDetailPage() {
   const openResultDialog = () => {
     if (!event) return;
     const values: Record<number, ResultPlayerValue> = {};
-    event.matchResult?.players.forEach(player => {
-      values[player.userId] = { goals: player.goals, assists: player.assists };
-    });
+    
+    // If editing existing result, use existing player stats
+    if (event.matchResult) {
+      event.matchResult.players.forEach(player => {
+        values[player.userId] = { goals: player.goals, assists: player.assists, played: player.played ?? false };
+      });
+    } else {
+      // Pre-populate with players who marked "Going" for attendance
+      going.forEach(response => {
+        values[response.user.id] = { goals: 0, assists: 0, played: true };
+      });
+    }
+    
     setTeamScore(event.matchResult?.teamScore ?? 0);
     setOpponentScore(event.matchResult?.opponentScore ?? 0);
     setResultNotes(event.matchResult?.notes ?? "");
@@ -264,16 +275,32 @@ export default function EventDetailPage() {
     setResultDialogOpen(true);
   };
 
-  const updateResultPlayer = (userId: number, field: keyof ResultPlayerValue, value: string) => {
-    const parsed = Math.max(0, Math.min(100, Number.parseInt(value || "0", 10) || 0));
-    setResultPlayers(previous => ({
-      ...previous,
-      [userId]: {
-        goals: previous[userId]?.goals ?? 0,
-        assists: previous[userId]?.assists ?? 0,
-        [field]: parsed,
-      },
-    }));
+  const updateResultPlayer = (userId: number, field: keyof ResultPlayerValue, value: string | boolean) => {
+    if (field === "played") {
+      setResultPlayers(previous => ({
+        ...previous,
+        [userId]: {
+          goals: previous[userId]?.goals ?? 0,
+          assists: previous[userId]?.assists ?? 0,
+          played: value as boolean,
+        },
+      }));
+    } else {
+      const stringValue = value as string;
+      const parsed = Math.max(0, Math.min(100, Number.parseInt(stringValue || "0", 10) || 0));
+      setResultPlayers(previous => {
+        const updated: Record<number, ResultPlayerValue> = {
+          ...previous,
+          [userId]: {
+            goals: previous[userId]?.goals ?? 0,
+            assists: previous[userId]?.assists ?? 0,
+            played: previous[userId]?.played ?? false,
+            [field]: parsed,
+          },
+        };
+        return updated;
+      });
+    }
   };
 
   if (!event) {
@@ -416,6 +443,7 @@ export default function EventDetailPage() {
                           {player.goals > 0 && `${player.goals} ${player.goals === 1 ? t("eventDetail.goalOne") : t("eventDetail.goalMany")}`}
                           {player.goals > 0 && player.assists > 0 && " · "}
                           {player.assists > 0 && `${player.assists} ${player.assists === 1 ? t("eventDetail.assistOne") : t("eventDetail.assistMany")}`}
+                          {player.played && (player.goals > 0 || player.assists > 0 ? " · " : "") && player.played && t("eventDetail.played")}
                         </span>
                       </div>
                     ))}
@@ -563,14 +591,15 @@ export default function EventDetailPage() {
             </div>
 
             <div className="space-y-2">
-              <div className="grid grid-cols-[1fr_72px_72px] gap-2 px-1 text-xs font-medium text-muted-foreground">
+              <div className="grid grid-cols-[1fr_72px_72px_60px] gap-2 px-1 text-xs font-medium text-muted-foreground">
                 <span>{t("eventDetail.player")}</span>
                 <span className="text-center">{t("eventDetail.goals")}</span>
                 <span className="text-center">{t("eventDetail.assistsShort")}</span>
+                <span className="text-center">{t("eventDetail.played")}</span>
               </div>
               <div className="divide-y rounded-md border">
                 {resultUsers.map(resultUser => (
-                  <div key={resultUser.id} className="grid grid-cols-[1fr_72px_72px] items-center gap-2 p-2">
+                  <div key={resultUser.id} className="grid grid-cols-[1fr_72px_72px_60px] items-center gap-2 p-2">
                     <div className="min-w-0">
                       <p className="text-sm font-medium truncate">{resultUser.name}</p>
                       {goingUserIds.has(resultUser.id) && <p className="text-[11px] text-green-600">{t("eventDetail.confirmedAttendance")}</p>}
@@ -592,6 +621,13 @@ export default function EventDetailPage() {
                       value={resultPlayers[resultUser.id]?.assists ?? 0}
                       onChange={inputEvent => updateResultPlayer(resultUser.id, "assists", inputEvent.target.value)}
                       className="text-center px-2"
+                    />
+                    <input
+                      type="checkbox"
+                      aria-label={t("eventDetail.playedAria", { name: resultUser.name })}
+                      checked={resultPlayers[resultUser.id]?.played ?? false}
+                      onChange={inputEvent => updateResultPlayer(resultUser.id, "played", inputEvent.target.checked)}
+                      className="w-4 h-4 justify-self-center"
                     />
                   </div>
                 ))}

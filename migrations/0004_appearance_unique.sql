@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX idx_match_player_statistics_event_user ON match_player_statistics(event_id, user_id);

@@ -138,18 +138,17 @@ export class EventsStore {
       }
 
       tx.delete(matchPlayerStatistics).where(eq(matchPlayerStatistics.eventId, eventId)).run();
-      players
-        .filter(player => player.goals > 0 || player.assists > 0)
-        .forEach(player => {
-          tx.insert(matchPlayerStatistics).values({
-            eventId,
-            userId: player.userId,
-            goals: player.goals,
-            assists: player.assists,
-            createdAt: updatedAt,
-            updatedAt,
-          }).run();
-        });
+      players.forEach(player => {
+        tx.insert(matchPlayerStatistics).values({
+          eventId,
+          userId: player.userId,
+          goals: player.goals,
+          assists: player.assists,
+          played: player.played,
+          createdAt: updatedAt,
+          updatedAt,
+        }).run();
+      });
     });
 
     return this.getMatchResult(eventId)!;

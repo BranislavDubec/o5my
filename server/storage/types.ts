@@ -46,6 +46,7 @@ export interface PlayerStatisticSummary {
   name: string;
   goals: number;
   assists: number;
+  appearances: number;
   updatedAt: string | null;
 }
 
@@ -53,6 +54,7 @@ export interface MatchPlayerContributionInput {
   userId: number;
   goals: number;
   assists: number;
+  played: boolean;
 }
 
 export type MatchResultWithPlayers = MatchResult & {

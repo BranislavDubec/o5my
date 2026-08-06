@@ -131,6 +131,7 @@ export const matchPlayerStatistics = sqliteTable("match_player_statistics", {
   userId: integer("user_id").notNull().references(() => users.id),
   goals: integer("goals").notNull().default(0),
   assists: integer("assists").notNull().default(0),
+  played: integer("played", { mode: "boolean" }).notNull().default(false),
   createdAt: text("created_at").notNull().$defaultFn(() => new Date().toISOString()),
   updatedAt: text("updated_at").notNull().$defaultFn(() => new Date().toISOString()),
 });

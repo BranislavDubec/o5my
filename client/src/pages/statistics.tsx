@@ -14,6 +14,7 @@ interface PlayerStatistic {
   name: string;
   goals: number;
   assists: number;
+  appearances: number;
   updatedAt: string | null;
 }
 
@@ -162,17 +163,18 @@ export default function StatisticsPage() {
 
   const counter = (
     statistic: PlayerStatistic,
-    type: "goals" | "assists",
+    type: "goals" | "assists" | "appearances",
     icon: React.ReactNode,
     label: string,
   ) => {
     const value = statistic[type];
+    const isAdjustable = type === "goals" || type === "assists";
     const deltaKey = type === "goals" ? "goalsDelta" : "assistsDelta";
     return (
       <div className="flex flex-col items-center gap-1" data-testid={`${type}-${statistic.userId}`}>
         <span className="flex items-center gap-1 text-xs text-muted-foreground">{icon}{label}</span>
         <div className="flex items-center gap-1">
-          {isAdmin && (
+          {isAdjustable && isAdmin && (
             <Button
               variant="outline"
               size="icon"
@@ -185,7 +187,7 @@ export default function StatisticsPage() {
             </Button>
           )}
           <span className="w-9 text-center text-xl font-bold tabular-nums">{value}</span>
-          {isAdmin && (
+          {isAdjustable && isAdmin && (
             <Button
               variant="outline"
               size="icon"
@@ -304,30 +306,6 @@ export default function StatisticsPage() {
 
       <h2 className="font-serif text-lg font-bold pt-2">{t("statistics.playersTitle")}</h2>
 
-      <div className="grid grid-cols-3 gap-3">
-        <Card>
-          <CardContent className="p-4 flex flex-col items-center text-center">
-            <Target className="w-5 h-5 text-primary mb-2" />
-            <span className="text-xl font-bold">{totalGoals}</span>
-            <span className="text-xs text-muted-foreground">{t("statistics.goals")}</span>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 flex flex-col items-center text-center">
-            <Handshake className="w-5 h-5 text-primary mb-2" />
-            <span className="text-xl font-bold">{totalAssists}</span>
-            <span className="text-xs text-muted-foreground">{t("statistics.assists")}</span>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 flex flex-col items-center text-center min-w-0">
-            <Trophy className="w-5 h-5 text-amber-500 mb-2" />
-            <span className="text-sm font-bold truncate max-w-full">{leader?.name || "—"}</span>
-            <span className="text-xs text-muted-foreground">{t("statistics.leader")}</span>
-          </CardContent>
-        </Card>
-      </div>
-
       {isLoading ? (
         <Card><CardContent className="p-8 text-center text-sm text-muted-foreground">{t("statistics.loading")}</CardContent></Card>
       ) : statistics.length === 0 ? (
@@ -354,9 +332,10 @@ export default function StatisticsPage() {
                     {index === 0 && leader && <Badge variant="secondary" className="mt-1 text-[10px]"><Trophy className="w-3 h-3 mr-1" />{t("statistics.leader")}</Badge>}
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-6 sm:gap-8 shrink-0">
+                <div className="grid grid-cols-3 gap-6 sm:gap-8 shrink-0">
                   {counter(statistic, "goals", <Target className="w-3.5 h-3.5" />, t("statistics.goals"))}
                   {counter(statistic, "assists", <Handshake className="w-3.5 h-3.5" />, t("statistics.assists"))}
+                  {counter(statistic, "appearances", <Users className="w-3.5 h-3.5" />, t("statistics.appearances"))}
                 </div>
               </CardContent>
             </Card>
