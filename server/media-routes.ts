@@ -120,6 +120,17 @@ function serializeTactic(tactic: ReturnType<typeof storage.getTacticCollections>
   return { ...tactic, files: tactic.files.map(serializeFile) };
 }
 
+function serializeAlbum(album: ReturnType<typeof storage.getPhotoAlbums>[number]) {
+  return { ...album, files: album.files.map(serializeFile) };
+}
+
+function resolveAlbumId(value: unknown): number | null {
+  if (value === undefined || value === null || value === "") return null;
+  const id = Number(value);
+  if (!Number.isInteger(id) || id <= 0) throw new Error("Neplatné ID priečinka");
+  return id;
+}
+
 export function registerMediaRoutes(app: Express) {
   app.get("/api/media/files/:id/content", requireAuth, (req, res, next) => {
     const file = storage.getMediaFile(Number(req.params.id));
@@ -153,6 +164,18 @@ export function registerMediaRoutes(app: Express) {
       return res.status(400).json({ message: "Fotky musia byť obrázky a môžu mať najviac 10 MB" });
     }
 
+    let albumId: number | null = null;
+    try {
+      albumId = resolveAlbumId(req.body?.albumId);
+    } catch (error) {
+      removeStoredFiles(files.map(file => file.filename));
+      return res.status(400).json({ message: error instanceof Error ? error.message : "Neplatné ID priečinka" });
+    }
+    if (albumId !== null && !storage.getPhotoAlbum(albumId)) {
+      removeStoredFiles(files.map(file => file.filename));
+      return res.status(400).json({ message: "Priečinok nebol nájdený" });
+    }
+
     try {
       const created = storage.createPhotos(files.map((file, index) => ({
         storedName: file.filename,
@@ -161,12 +184,32 @@ export function registerMediaRoutes(app: Express) {
         size: file.size,
         uploadedBy: req.user!.id,
         sortOrder: index,
-      })));
+      })), albumId);
       res.status(201).json(created.map(serializeFile));
     } catch (error) {
       removeStoredFiles(files.map(file => file.filename));
       throw error;
     }
+  });
+
+  app.patch("/api/media/photos/:id", requireAdmin, (req, res) => {
+    const photo = storage.getMediaFile(Number(req.params.id));
+    if (!photo || photo.category !== "photo") {
+      return res.status(404).json({ message: "Fotka nebola nájdená" });
+    }
+
+    let albumId: number | null;
+    try {
+      albumId = resolveAlbumId(req.body?.albumId);
+    } catch (error) {
+      return res.status(400).json({ message: error instanceof Error ? error.message : "Neplatné ID priečinka" });
+    }
+    if (albumId !== null && !storage.getPhotoAlbum(albumId)) {
+      return res.status(400).json({ message: "Priečinok nebol nájdený" });
+    }
+
+    const moved = storage.movePhoto(photo.id, albumId);
+    res.json(serializeFile(moved!));
   });
 
   app.delete("/api/media/photos/:id", requireAdmin, (req, res) => {
@@ -177,6 +220,35 @@ export function registerMediaRoutes(app: Express) {
     storage.deleteMediaFile(file.id);
     removeStoredFiles([file.storedName]);
     res.json({ message: "Fotka bola zmazaná" });
+  });
+
+  app.get("/api/media/albums", requireAuth, (_req, res) => {
+    res.json(storage.getPhotoAlbums().map(serializeAlbum));
+  });
+
+  app.post("/api/media/albums", requireAdmin, (req, res) => {
+    const title = typeof req.body?.name === "string" ? req.body.name.trim() : "";
+    if (!title || title.length > 100) {
+      return res.status(400).json({ message: "Názov priečinka je povinný a môže mať najviac 100 znakov" });
+    }
+    res.status(201).json(storage.createPhotoAlbum(title, req.user!.id));
+  });
+
+  app.patch("/api/media/albums/:id", requireAdmin, (req, res) => {
+    const title = typeof req.body?.name === "string" ? req.body.name.trim() : "";
+    if (!title || title.length > 100) {
+      return res.status(400).json({ message: "Názov priečinka je povinný a môže mať najviac 100 znakov" });
+    }
+    const updated = storage.renamePhotoAlbum(Number(req.params.id), title);
+    if (!updated) return res.status(404).json({ message: "Priečinok nebol nájdený" });
+    res.json(updated);
+  });
+
+  app.delete("/api/media/albums/:id", requireAdmin, (req, res) => {
+    const album = storage.getPhotoAlbum(Number(req.params.id));
+    if (!album) return res.status(404).json({ message: "Priečinok nebol nájdený" });
+    storage.deletePhotoAlbum(album.id);
+    res.json({ message: "Priečinok bol zmazaný" });
   });
 
   app.get("/api/media/tactics", requireAuth, (_req, res) => {

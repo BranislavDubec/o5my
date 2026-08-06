@@ -35,6 +35,7 @@ export interface OpponentMatchSummary {
 }
 
 export type TacticWithFiles = MediaCollection & { files: MediaFile[] };
+export type PhotoAlbumWithFiles = MediaCollection & { files: MediaFile[] };
 export type TeamResponsibilityWithOwners = TeamResponsibility & {
   owners: Array<Pick<User, "id" | "name">>;
   inventoryItems: TeamInventoryItem[];
@@ -184,7 +185,13 @@ export interface IStorage {
   // Team media
   getMediaFile(id: number): MediaFile | undefined;
   getPhotos(): MediaFile[];
-  createPhotos(files: NewStoredMediaFile[]): MediaFile[];
+  getPhotoAlbums(): PhotoAlbumWithFiles[];
+  getPhotoAlbum(id: number): PhotoAlbumWithFiles | undefined;
+  createPhotoAlbum(title: string, createdBy: number): MediaCollection;
+  renamePhotoAlbum(id: number, title: string): MediaCollection | undefined;
+  deletePhotoAlbum(id: number): void;
+  createPhotos(files: NewStoredMediaFile[], albumId?: number | null): MediaFile[];
+  movePhoto(photoId: number, albumId: number | null): MediaFile | undefined;
   deleteMediaFile(id: number): void;
   getTacticCollections(): TacticWithFiles[];
   getTacticCollection(id: number): TacticWithFiles | undefined;

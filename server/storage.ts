@@ -169,7 +169,13 @@ export class DatabaseStorage implements IStorage {
   // Team media
   getMediaFile = this.media.getMediaFile;
   getPhotos = this.media.getPhotos;
+  getPhotoAlbums = this.media.getPhotoAlbums;
+  getPhotoAlbum = this.media.getPhotoAlbum;
+  createPhotoAlbum = this.media.createPhotoAlbum;
+  renamePhotoAlbum = this.media.renamePhotoAlbum;
+  deletePhotoAlbum = this.media.deletePhotoAlbum;
   createPhotos = this.media.createPhotos;
+  movePhoto = this.media.movePhoto;
   deleteMediaFile = this.media.deleteMediaFile;
   getTacticCollections = this.media.getTacticCollections;
   getTacticCollection = this.media.getTacticCollection;
