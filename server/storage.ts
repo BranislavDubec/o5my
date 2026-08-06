@@ -14,6 +14,7 @@ import { TeamStore } from "./storage/team";
 import { AppSettingsStore } from "./storage/settings";
 import { MediaStore } from "./storage/media";
 import { OpponentsStore } from "./storage/opponents";
+import { StatsStore } from "./storage/stats";
 import type { IStorage } from "./storage/types";
 
 export type {
@@ -23,6 +24,7 @@ export type {
   PlayerStatisticSummary,
   MatchPlayerContributionInput,
   MatchResultWithPlayers,
+  TeamStatisticSummary,
   IStorage,
 } from "./storage/types";
 
@@ -50,6 +52,7 @@ export class DatabaseStorage implements IStorage {
   private readonly settings = bind(new AppSettingsStore());
   private readonly media = bind(new MediaStore());
   private readonly opponentsStore = bind(new OpponentsStore());
+  private readonly stats = bind(new StatsStore());
 
   // Users
   getUser = this.users.getUser;
@@ -96,6 +99,9 @@ export class DatabaseStorage implements IStorage {
   getEventResponse = this.events.getEventResponse;
   getEventResponses = this.events.getEventResponses;
   upsertEventResponse = this.events.upsertEventResponse;
+
+  // Team statistics
+  getTeamStatistics = this.stats.getTeamStatistics;
 
   // Polls
   getPoll = this.polls.getPoll;

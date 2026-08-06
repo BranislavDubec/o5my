@@ -34,4 +34,9 @@ export function registerDashboardRoutes(app: Express) {
       outstandingPayments,
     });
   });
+
+  // ============ TEAM STATISTICS ============
+  app.get("/api/stats/team", requireAuth, (_req, res) => {
+    res.json(storage.getTeamStatistics());
+  });
 }

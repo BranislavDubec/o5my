@@ -59,6 +59,46 @@ export type MatchResultWithPlayers = MatchResult & {
   players: Array<MatchPlayerStatistic & { user: Pick<User, "id" | "name"> }>;
 };
 
+export type MatchOutcome = "W" | "D" | "L";
+
+export interface TeamVenueStats {
+  played: number;
+  wins: number;
+  draws: number;
+  losses: number;
+  goalsFor: number;
+  goalsAgainst: number;
+}
+
+export interface TeamRecentResult {
+  eventId: number;
+  startTime: string;
+  opponent: string | null;
+  homeAway: string | null;
+  teamScore: number;
+  opponentScore: number;
+  outcome: MatchOutcome;
+}
+
+export interface TeamStatisticSummary {
+  totalMatches: number;
+  wins: number;
+  draws: number;
+  losses: number;
+  goalsFor: number;
+  goalsAgainst: number;
+  goalDifference: number;
+  winRate: number | null; // percent (0–100), null when no matches
+  goalsPerMatch: number | null;
+  goalsAgainstPerMatch: number | null;
+  form: MatchOutcome[]; // last 5 results, most recent first
+  home: TeamVenueStats;
+  away: TeamVenueStats;
+  biggestWin: TeamRecentResult | null;
+  biggestLoss: TeamRecentResult | null;
+  recentResults: TeamRecentResult[]; // most recent first, max 10
+}
+
 export interface IStorage {
   // Users
   getUser(id: number): User | undefined;
@@ -107,6 +147,9 @@ export interface IStorage {
     players: MatchPlayerContributionInput[],
   ): MatchResultWithPlayers;
   deleteMatchResult(eventId: number): boolean;
+
+  // Team statistics
+  getTeamStatistics(): TeamStatisticSummary;
 
   // Event Responses
   getEventResponse(eventId: number, userId: number): EventResponse | undefined;
