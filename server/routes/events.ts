@@ -56,6 +56,25 @@ function parseMatchResult(body: unknown) {
   return { teamScore, opponentScore, notes: notes || null, players };
 }
 
+// Resolves the opponents table link for a match event. An explicit
+// opponentId wins; otherwise the free-text opponent name is matched against
+// existing opponents (case-insensitive) so matches created before the link
+// existed still get connected.
+function resolveOpponentId(body: Record<string, unknown>): number | null {
+  const explicitId = Number(body.opponentId);
+  if (Number.isInteger(explicitId) && explicitId > 0) {
+    return storage.getOpponent(explicitId) ? explicitId : null;
+  }
+  if (typeof body.opponent === "string" && body.opponent.trim()) {
+    const name = body.opponent.trim().toLowerCase();
+    const match = storage.getAllOpponents().find(opponent =>
+      opponent.name.trim().toLowerCase() === name,
+    );
+    if (match) return match.id;
+  }
+  return null;
+}
+
 export function registerEventsRoutes(app: Express) {
   // ============ EVENTS ============
   app.get("/api/events", requireAuth, (req, res) => {
@@ -117,8 +136,10 @@ export function registerEventsRoutes(app: Express) {
 
   app.post("/api/events", requireAdmin, async (req, res) => {
     try {
+      const body = (req.body ?? {}) as Record<string, unknown>;
       const data = insertEventSchema.parse({
-        ...req.body,
+        ...body,
+        opponentId: body.type === "match" ? resolveOpponentId(body) : null,
         createdBy: req.user!.id,
       });
       const event = storage.createEvent(data);
@@ -185,6 +206,7 @@ export function registerEventsRoutes(app: Express) {
       opponent: body.type === "match" && typeof body.opponent === "string" && body.opponent.trim()
         ? body.opponent.trim()
         : null,
+      opponentId: body.type === "match" ? resolveOpponentId(body) : null,
       homeAway: body.type === "match" && ["home", "away"].includes(body.homeAway)
         ? body.homeAway
         : null,

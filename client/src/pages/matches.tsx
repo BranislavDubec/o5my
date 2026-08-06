@@ -42,6 +42,7 @@ interface MatchEvent {
 
 interface MatchForm {
   opponent: string;
+  opponentId: number | null;
   homeAway: "home" | "away";
   date: string;
   time: string;
@@ -52,6 +53,7 @@ interface MatchForm {
 
 const emptyForm: MatchForm = {
   opponent: "",
+  opponentId: null,
   homeAway: "home",
   date: "",
   time: "",
@@ -108,6 +110,7 @@ export default function MatchesPage() {
         startTime,
         endTime,
         opponent,
+        opponentId: form.opponentId ?? undefined,
         homeAway: form.homeAway,
       });
       return response.json() as Promise<{ googleSyncWarning?: string }>;
@@ -243,12 +246,14 @@ export default function MatchesPage() {
 
                           <Select
                             value={form.opponent}
-                            onValueChange={opponent =>
+                            onValueChange={opponentName => {
+                              const selected = opponents.find(opponent => opponent.name === opponentName);
                               setForm(previous => ({
                                 ...previous,
-                                opponent,
-                              }))
-                            }
+                                opponent: opponentName,
+                                opponentId: selected?.id ?? null,
+                              }));
+                            }}
                             disabled={opponentsLoading || opponents.length === 0}
                           >
                             <SelectTrigger

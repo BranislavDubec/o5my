@@ -86,7 +86,8 @@ export const events = sqliteTable("events", {
   location: text("location"),
   startTime: text("start_time").notNull(),
   endTime: text("end_time"),
-  opponent: text("opponent"), // for matches
+  opponent: text("opponent"), // for matches (display name)
+  opponentId: integer("opponent_id").references(() => opponents.id), // link to opponents table
   homeAway: text("home_away"), // home | away (for matches)
   externalId: text("external_id"),
   source: text("source").notNull().default("local"),
@@ -102,6 +103,7 @@ export const insertEventSchema = createInsertSchema(events).pick({
   startTime: true,
   endTime: true,
   opponent: true,
+  opponentId: true,
   homeAway: true,
   externalId: true,
   source: true,
@@ -169,6 +171,7 @@ export const polls = sqliteTable("polls", {
 export const opponents = sqliteTable("opponents", {
     id: integer("id").primaryKey({ autoIncrement: true }),
     name: text("name").notNull(),
+    description: text("description"),
 });
 
 export const insertPollSchema = createInsertSchema(polls).pick({
@@ -179,7 +182,8 @@ export const insertPollSchema = createInsertSchema(polls).pick({
 });
 
 export const insertOpponentSchema =  createInsertSchema(opponents).pick({
-  name: true
+  name: true,
+  description: true,
 });
 export type InsertOpponent = z.infer<typeof insertOpponentSchema>;
 

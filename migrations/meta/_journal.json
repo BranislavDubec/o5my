@@ -22,6 +22,13 @@
       "when": 1785946612115,
       "tag": "0002_yellow_centennial",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1786036665035,
+      "tag": "0003_spicy_wraith",
+      "breakpoints": true
     }
   ]
 }

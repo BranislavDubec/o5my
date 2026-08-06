@@ -7,7 +7,10 @@ export function registerOpponentsRoutes(app: Express) {
   // ============ OPPONENTS ============
   app.get("/api/opponents", requireAuth, (_req, res) => {
     const allOpponents = storage.getAllOpponents();
-    res.json(allOpponents);
+    res.json(allOpponents.map(opponent => ({
+      ...opponent,
+      matches: storage.getOpponentMatches(opponent.id, opponent.name),
+    })));
   });
 
   app.post("/api/opponents", requireAuth, (req, res) => {

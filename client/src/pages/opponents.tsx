@@ -4,15 +4,18 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
+import { format, parseISO } from "date-fns";
+import { sk as skLocale, cs as csLocale, enUS as enLocale } from "date-fns/locale";
 import {
+  CalendarDays,
+  Check,
+  Flag,
   Pencil,
   Plus,
   Swords,
   Trash2,
   Users,
   X,
-  Check,
-  Flag,
 } from "lucide-react";
 
 import { apiRequest } from "@/lib/queryClient";
@@ -20,19 +23,32 @@ import { useAuth } from "@/contexts/auth-context";
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/lib/i18n";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+
+interface OpponentMatch {
+  eventId: number;
+  startTime: string;
+  homeAway: string | null;
+  opponent: string | null;
+  teamScore: number | null;
+  opponentScore: number | null;
+}
 
 interface Opponent {
   id: number;
   name: string;
+  description: string | null;
+  matches: OpponentMatch[];
 }
 
 export default function OpponentsPage() {
   const { user } = useAuth();
   const { toast } = useToast();
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const queryClient = useQueryClient();
 
   const isAdmin = user?.role === "admin";
@@ -42,6 +58,18 @@ export default function OpponentsPage() {
     null,
   );
   const [editingOpponentName, setEditingOpponentName] = useState("");
+  const [editingOpponentDescription, setEditingOpponentDescription] =
+    useState("");
+
+  const dateLocale = lang === "sk" ? skLocale : lang === "cz" ? csLocale : enLocale;
+
+  const formatMatchDate = (value: string) => {
+    try {
+      return format(parseISO(value), "d. MMM yyyy", { locale: dateLocale });
+    } catch {
+      return value;
+    }
+  };
 
   const {
     data: opponents = [],
@@ -80,16 +108,20 @@ export default function OpponentsPage() {
     mutationFn: ({
       id,
       name,
+      description,
     }: {
       id: number;
       name: string;
+      description: string;
     }) =>
       apiRequest("PATCH", `/api/opponents/${id}`, {
         name,
+        description: description.trim() || null,
       }),
     onSuccess: () => {
       setEditingOpponentId(null);
       setEditingOpponentName("");
+      setEditingOpponentDescription("");
 
       queryClient.invalidateQueries({
         queryKey: ["/api/opponents"],
@@ -152,11 +184,13 @@ export default function OpponentsPage() {
   const startEditing = (opponent: Opponent) => {
     setEditingOpponentId(opponent.id);
     setEditingOpponentName(opponent.name);
+    setEditingOpponentDescription(opponent.description ?? "");
   };
 
   const cancelEditing = () => {
     setEditingOpponentId(null);
     setEditingOpponentName("");
+    setEditingOpponentDescription("");
   };
 
   const saveOpponent = () => {
@@ -174,6 +208,7 @@ export default function OpponentsPage() {
     updateMutation.mutate({
       id: editingOpponentId,
       name: trimmedName,
+      description: editingOpponentDescription,
     });
   };
 
@@ -277,96 +312,180 @@ export default function OpponentsPage() {
                 key={opponent.id}
                 data-testid={`opponent-${opponent.id}`}
               >
-                <CardContent className="p-4 flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-primary/15 text-primary flex items-center justify-center shrink-0">
-                    <Flag className="w-5 h-5" />
+                <CardContent className="p-4 space-y-3">
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-full bg-primary/15 text-primary flex items-center justify-center shrink-0">
+                      <Flag className="w-5 h-5" />
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      {isEditing ? (
+                        <Input
+                          value={editingOpponentName}
+                          onChange={(event) =>
+                            setEditingOpponentName(event.target.value)
+                          }
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              saveOpponent();
+                            }
+
+                            if (event.key === "Escape") {
+                              cancelEditing();
+                            }
+                          }}
+                          disabled={updateMutation.isPending}
+                          className="mb-2"
+                          maxLength={100}
+                          autoFocus
+                        />
+                      ) : (
+                        <p className="font-medium truncate">
+                          {opponent.name}
+                        </p>
+                      )}
+
+                      {isEditing ? (
+                        <Textarea
+                          value={editingOpponentDescription}
+                          onChange={(event) =>
+                            setEditingOpponentDescription(event.target.value)
+                          }
+                          placeholder={t("opponents.descriptionPlaceholder")}
+                          disabled={updateMutation.isPending}
+                          rows={3}
+                          maxLength={500}
+                        />
+                      ) : opponent.description ? (
+                        <p className="text-sm text-muted-foreground mt-1 whitespace-pre-line">
+                          {opponent.description}
+                        </p>
+                      ) : null}
+                    </div>
+
+                    {isAdmin && (
+                      <div className="flex items-center gap-2 shrink-0">
+                        {isEditing ? (
+                          <>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon"
+                              className="h-9 w-9"
+                              onClick={cancelEditing}
+                              disabled={updateMutation.isPending}
+                              aria-label={t("opponents.cancelEditAria")}
+                            >
+                              <X className="w-4 h-4" />
+                            </Button>
+
+                            <Button
+                              type="button"
+                              size="icon"
+                              className="h-9 w-9"
+                              onClick={saveOpponent}
+                              disabled={
+                                !editingOpponentName.trim() ||
+                                updateMutation.isPending
+                              }
+                              aria-label={t("opponents.saveAria")}
+                            >
+                              <Check className="w-4 h-4" />
+                            </Button>
+                          </>
+                        ) : (
+                          <>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon"
+                              className="h-9 w-9"
+                              onClick={() => startEditing(opponent)}
+                              disabled={isMutating}
+                              aria-label={t("opponents.editAria", { name: opponent.name })}
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </Button>
+
+                            <Button
+                              type="button"
+                              variant="destructive"
+                              size="icon"
+                              className="h-9 w-9"
+                              onClick={() =>
+                                handleDeleteOpponent(opponent)
+                              }
+                              disabled={isMutating}
+                              aria-label={t("opponents.deleteAria", { name: opponent.name })}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    )}
                   </div>
 
-                  {isEditing ? (
-                    <Input
-                      value={editingOpponentName}
-                      onChange={(event) =>
-                        setEditingOpponentName(event.target.value)
-                      }
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") {
-                          saveOpponent();
-                        }
+                  {opponent.matches.length > 0 && (
+                    <div className="border-t border-border pt-3">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                        <Swords className="w-3.5 h-3.5" />
+                        {t("opponents.matchesTitle")}
+                      </p>
 
-                        if (event.key === "Escape") {
-                          cancelEditing();
-                        }
-                      }}
-                      disabled={updateMutation.isPending}
-                      className="flex-1"
-                      maxLength={100}
-                      autoFocus
-                    />
-                  ) : (
-                    <p className="font-medium flex-1 truncate">
-                      {opponent.name}
-                    </p>
-                  )}
+                      <ul className="space-y-1.5">
+                        {opponent.matches.map((match) => {
+                          const hasResult =
+                            match.teamScore !== null &&
+                            match.opponentScore !== null;
+                          const resultBadge = hasResult
+                            ? match.teamScore! > match.opponentScore!
+                              ? "win"
+                              : match.teamScore! === match.opponentScore!
+                                ? "draw"
+                                : "loss"
+                            : null;
 
-                  {isAdmin && (
-                    <div className="flex items-center gap-2 shrink-0">
-                      {isEditing ? (
-                        <>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="icon"
-                            className="h-9 w-9"
-                            onClick={cancelEditing}
-                            disabled={updateMutation.isPending}
-                            aria-label={t("opponents.cancelEditAria")}
-                          >
-                            <X className="w-4 h-4" />
-                          </Button>
-
-                          <Button
-                            type="button"
-                            size="icon"
-                            className="h-9 w-9"
-                            onClick={saveOpponent}
-                            disabled={
-                              !editingOpponentName.trim() ||
-                              updateMutation.isPending
-                            }
-                            aria-label={t("opponents.saveAria")}
-                          >
-                            <Check className="w-4 h-4" />
-                          </Button>
-                        </>
-                      ) : (
-                        <>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="icon"
-                            className="h-9 w-9"
-                            onClick={() => startEditing(opponent)}
-                            disabled={isMutating}
-                            aria-label={t("opponents.editAria", { name: opponent.name })}
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </Button>
-
-                          <Button
-                            type="button"
-                            variant="destructive"
-                            size="icon"
-                            className="h-9 w-9"
-                            onClick={() =>
-                              handleDeleteOpponent(opponent)
-                            }
-                            disabled={isMutating}
-                            aria-label={t("opponents.deleteAria", { name: opponent.name })}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </>
-                      )}
+                          return (
+                            <li
+                              key={match.eventId}
+                              className="flex items-center gap-2 text-sm"
+                            >
+                              <CalendarDays className="w-4 h-4 text-muted-foreground shrink-0" />
+                              <span className="text-muted-foreground tabular-nums shrink-0">
+                                {formatMatchDate(match.startTime)}
+                              </span>
+                              <span className="flex-1 truncate">
+                                {match.homeAway === "away"
+                                  ? `${match.opponent || t("matches.defaultOpponent")} vs O5MY`
+                                  : `O5MY vs ${match.opponent || t("matches.defaultOpponent")}`}
+                              </span>
+                              {resultBadge && (
+                                <Badge
+                                  variant={
+                                    resultBadge === "win"
+                                      ? "default"
+                                      : resultBadge === "draw"
+                                        ? "secondary"
+                                        : "destructive"
+                                  }
+                                >
+                                  {t(`opponents.${resultBadge}Short`)}
+                                </Badge>
+                              )}
+                              {hasResult ? (
+                                <span className="font-semibold tabular-nums shrink-0">
+                                  {match.teamScore}:{match.opponentScore}
+                                </span>
+                              ) : (
+                                <span className="text-xs text-muted-foreground shrink-0">
+                                  {t("opponents.scheduledShort")}
+                                </span>
+                              )}
+                            </li>
+                          );
+                        })}
+                      </ul>
                     </div>
                   )}
                 </CardContent>

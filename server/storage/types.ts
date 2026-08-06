@@ -25,6 +25,15 @@ export interface NewStoredMediaFile {
   sortOrder?: number;
 }
 
+export interface OpponentMatchSummary {
+  eventId: number;
+  startTime: string;
+  homeAway: string | null;
+  opponent: string | null;
+  teamScore: number | null;
+  opponentScore: number | null;
+}
+
 export type TacticWithFiles = MediaCollection & { files: MediaFile[] };
 export type TeamResponsibilityWithOwners = TeamResponsibility & {
   owners: Array<Pick<User, "id" | "name">>;

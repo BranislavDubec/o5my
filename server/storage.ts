@@ -180,6 +180,8 @@ export class DatabaseStorage implements IStorage {
 
   // Opponents (not part of IStorage)
   getAllOpponents = this.opponentsStore.getAllOpponents;
+  getOpponent = this.opponentsStore.getOpponent;
+  getOpponentMatches = this.opponentsStore.getOpponentMatches;
   createOpponent = this.opponentsStore.createOpponent;
   updateOpponent = this.opponentsStore.updateOpponent;
   deleteOpponent = this.opponentsStore.deleteOpponent;
