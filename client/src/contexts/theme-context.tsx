@@ -33,7 +33,8 @@ function readInitialTheme(): ThemeMode {
     // Local storage can be unavailable in strict privacy modes.
   }
 
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  // Default to light mode when no explicit preference is stored.
+  return "light";
 }
 
 function applyTheme(theme: ThemeMode) {

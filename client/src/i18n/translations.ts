@@ -23,7 +23,7 @@ export const sk = {
     dashboard: "Dashboard",
     calendar: "Kalendár",
     matches: "Zápasy",
-    opponents: "Súpery",
+    opponents: "Súperi",
     polls: "Ankety",
     files: "Súbory",
     payments: "Platby",
