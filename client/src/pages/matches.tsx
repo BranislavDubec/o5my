@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { format, parseISO } from "date-fns";
 import { sk as skLocale, cs as csLocale, enUS as enLocale } from "date-fns/locale";
-import { CalendarDays, Clock, MapPin, Plus, RefreshCw, Swords, Trophy } from "lucide-react";
+import { CalendarDays, Clock, MapPin, Pencil, Plus, RefreshCw, Swords, Trophy } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/contexts/auth-context";
 import { useToast } from "@/hooks/use-toast";
@@ -34,6 +34,7 @@ interface MatchEvent {
   startTime: string;
   endTime: string | null;
   opponent: string | null;
+  opponentId: number | null;
   homeAway: string | null;
   source?: string | null;
   attendanceStatus?: AttendanceStatus;
@@ -70,6 +71,13 @@ export default function MatchesPage() {
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [form, setForm] = useState<MatchForm>(emptyForm);
+  const [editingMatch, setEditingMatch] = useState<MatchEvent | null>(null);
+  const [editHomeAway, setEditHomeAway] = useState<"home" | "away">("home");
+
+  const openHomeAwayDialog = (match: MatchEvent) => {
+    setEditHomeAway(match.homeAway === "away" ? "away" : "home");
+    setEditingMatch(match);
+  };
 
   const { data: events = [], isLoading } = useQuery<MatchEvent[]>({
     queryKey: ["/api/events"],
@@ -148,6 +156,41 @@ export default function MatchesPage() {
     },
   });
 
+  const editMutation = useMutation({
+    mutationFn: async () => {
+      if (!editingMatch) throw new Error("No match selected");
+      const opponent = editingMatch.opponent || t("matches.defaultOpponent");
+      const oldTemplate = editingMatch.homeAway === "away"
+        ? t("matches.titleAway", { opponent })
+        : t("matches.titleHome", { opponent });
+      const newTemplate = editHomeAway === "away"
+        ? t("matches.titleAway", { opponent })
+        : t("matches.titleHome", { opponent });
+      const title = editingMatch.title === oldTemplate ? newTemplate : editingMatch.title;
+      const response = await apiRequest("PUT", `/api/events/${editingMatch.id}`, {
+        type: "match",
+        title,
+        description: editingMatch.description || undefined,
+        location: editingMatch.location || undefined,
+        startTime: editingMatch.startTime,
+        endTime: editingMatch.endTime || undefined,
+        opponent: editingMatch.opponent || undefined,
+        opponentId: editingMatch.opponentId ?? undefined,
+        homeAway: editHomeAway,
+      });
+      return response.json() as Promise<{ googleSyncWarning?: string }>;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/events"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
+      toast({ title: t("matches.homeAwayChanged") });
+      setEditingMatch(null);
+    },
+    onError: (error: Error) => {
+      toast({ title: t("matches.updateFailed"), description: error.message, variant: "destructive" });
+    },
+  });
+
   const matches = events
     .filter(event => event.type === "match")
     .sort((first, second) => new Date(first.startTime).getTime() - new Date(second.startTime).getTime());
@@ -187,6 +230,22 @@ export default function MatchesPage() {
                     {match.homeAway === "away" ? t("matches.away") : t("matches.home")}
                   </Badge>
                   {match.source === "google" && <Badge variant="outline" className="text-[10px]">Google</Badge>}
+                  {user?.role === "admin" && (
+                    <button
+                      type="button"
+                      data-testid={`edit-match-${match.id}`}
+                      aria-label={t("matches.editHomeAway")}
+                      title={t("matches.editHomeAway")}
+                      className="ml-auto -mr-1 rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                      onClick={clickEvent => {
+                        clickEvent.preventDefault();
+                        clickEvent.stopPropagation();
+                        openHomeAwayDialog(match);
+                      }}
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                 </div>
                 <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground capitalize">
                   <CalendarDays className="h-3.5 w-3.5" />{formatMatchDate(match.startTime)}
@@ -362,6 +421,54 @@ export default function MatchesPage() {
                     </Button>
                   </DialogFooter>
                 </form>
+              </DialogContent>
+            </Dialog>
+            <Dialog open={editingMatch !== null} onOpenChange={open => { if (!open) setEditingMatch(null); }}>
+              <DialogContent className="max-w-sm">
+                <DialogHeader><DialogTitle>{t("matches.editHomeAway")}</DialogTitle></DialogHeader>
+                {editingMatch && (
+                  <form
+                    className="space-y-4"
+                    onSubmit={submitEvent => {
+                      submitEvent.preventDefault();
+                      editMutation.mutate();
+                    }}
+                  >
+                    <p className="text-sm text-muted-foreground">
+                      {t("matches.vsOpponent", { opponent: editingMatch.opponent || t("matches.defaultOpponent") })}
+                    </p>
+                    <div className="space-y-2">
+                      <Label>{t("matches.matchLocation")}</Label>
+                      <Select
+                        value={editHomeAway}
+                        onValueChange={(homeAway: "home" | "away") => setEditHomeAway(homeAway)}
+                      >
+                        <SelectTrigger data-testid="select-edit-home-away"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="home">{t("matches.home")}</SelectItem>
+                          <SelectItem value="away">{t("matches.away")}</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <DialogFooter>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setEditingMatch(null)}
+                        disabled={editMutation.isPending}
+                      >
+                        {t("common.cancel")}
+                      </Button>
+                      <Button
+                        type="submit"
+                        disabled={editMutation.isPending}
+                        data-testid="button-save-home-away"
+                      >
+                        {editMutation.isPending ? t("matches.saving") : t("common.save")}
+                      </Button>
+                    </DialogFooter>
+                  </form>
+                )}
               </DialogContent>
             </Dialog>
           </div>
