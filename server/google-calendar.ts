@@ -52,8 +52,9 @@ function parseGoogleMatchMetadata(summary = "", description = "") {
     .toLocaleLowerCase("sk");
 
   let opponent = opponentFromDescription || undefined;
+  const awaySideMarkers = ["vypraven", "výprav", "vonku", "hostia", "away"];
   let homeAway: "home" | "away" | undefined = sideFromDescription
-    ? sideFromDescription.includes("vypraven") || sideFromDescription.includes("vonku") ? "away" : "home"
+    ? awaySideMarkers.some(marker => sideFromDescription.includes(marker)) ? "away" : "home"
     : undefined;
 
   const title = summary.replace(/^zápas\s*:\s*/i, "").trim();
@@ -178,7 +179,7 @@ function buildGoogleEventDescription(event: WritableGoogleCalendarEvent) {
   const userDescription = getUserEventDescription(event.description);
   if (userDescription) descriptionParts.push(userDescription);
   if (event.opponent) descriptionParts.push(`Súper: ${event.opponent}`);
-  if (event.homeAway) descriptionParts.push(`Strana: ${event.homeAway === "home" ? "Domáci" : "Vypravení"}`);
+  if (event.homeAway) descriptionParts.push(`Strana: ${event.homeAway === "home" ? "Domáci" : "Hostia"}`);
   return descriptionParts;
 }
 

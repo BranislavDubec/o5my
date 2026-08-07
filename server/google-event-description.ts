@@ -1,7 +1,7 @@
 const managedDescriptionPatterns = [
   /^Typ:\s*(?:Zápas|Tréning|Team building)\s*$/i,
   /^Súper:\s*.*$/i,
-  /^Strana:\s*(?:Domáci|Hostia)\s*$/i,
+  /^Strana:\s*(?:Domáci|Hostia|Vypravení|Výprava|Vonku|Doma)\s*$/i,
   /^Účasť:\s*Idú\s+\d+,\s*Možno\s+\d+,\s*Neidú\s+\d+\s*$/i,
   /^(?:Idú|Možno|Neidú):\s*.*$/i,
 ];
