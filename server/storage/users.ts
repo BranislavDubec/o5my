@@ -1,4 +1,4 @@
-import { eq, asc, count } from "drizzle-orm";
+import { eq, and, asc, count } from "drizzle-orm";
 import {
   users,
   playerStatistics,
@@ -133,6 +133,6 @@ export class UsersStore {
         .returning()
         .get();
     });
-    return { userId, name: user.name, goals: statistic.goals, assists: statistic.assists, appearances: db.select({ count: count() }).from(matchPlayerStatistics).where(eq(matchPlayerStatistics.userId, userId)).get()?.count ?? 0, updatedAt: statistic.updatedAt };
+    return { userId, name: user.name, goals: statistic.goals, assists: statistic.assists, appearances: db.select({ count: count() }).from(matchPlayerStatistics).where(and(eq(matchPlayerStatistics.userId, userId), eq(matchPlayerStatistics.played, true))).get()?.count ?? 0, updatedAt: statistic.updatedAt };
   }
 }
