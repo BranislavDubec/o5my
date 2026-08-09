@@ -14,6 +14,16 @@ function formatNotificationDate(value: string) {
   }).format(new Date(value));
 }
 
+function personalizePaymentDescription(template: string, userName: string): string {
+  const trimmed = template.trim();
+  const memberName = userName.trim();
+  if (!memberName) return trimmed;
+
+  const resolved = trimmed.replace(/\{name\}/gi, memberName);
+  // If the template does not contain the {name} placeholder, append the member's name.
+  return /\{name\}/i.test(trimmed) ? resolved : `${trimmed} ${memberName}`.trim();
+}
+
 function getPaymentNotificationContent(payment: Payment, currency: string) {
   const remainingAmount = Math.max(0, payment.amount - payment.walletAppliedAmount);
   const dueDate = formatNotificationDate(payment.dueDate);
@@ -69,6 +79,7 @@ export function registerPaymentsRoutes(app: Express) {
       }
       const payment = storage.createPayment({
         ...data,
+        description: personalizePaymentDescription(data.description, user.name),
         variableSymbol: null,
       });
       const currency = storage.getAppSetting("payment_currency") || "CZK";
@@ -127,7 +138,7 @@ export function registerPaymentsRoutes(app: Express) {
         userId: user!.id,
         amount,
         dueDate,
-        description,
+        description: personalizePaymentDescription(description, user!.name),
       }));
       const createdPayments = storage.createPayments(paymentList);
       const currency = storage.getAppSetting("payment_currency") || "CZK";

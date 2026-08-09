@@ -238,6 +238,7 @@ export default function AdminPayments() {
               <div className="space-y-2">
                 <Label htmlFor="desc">{t("adminPayments.description")}</Label>
                 <Textarea id="desc" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} required rows={2} placeholder={t("adminPayments.descriptionPlaceholder")} data-testid="input-description" />
+                <p className="text-xs text-muted-foreground">{t("adminPayments.nameAppendedHint")}</p>
               </div>
               <DialogFooter>
                 <Button type="submit" disabled={createMutation.isPending || form.userIds.length === 0} data-testid="button-submit-payment">
