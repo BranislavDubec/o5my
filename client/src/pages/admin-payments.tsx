@@ -21,6 +21,8 @@ interface PaymentWithUser {
   id: number;
   userId: number;
   amount: number;
+  fullPrice: number;
+  identity: string | null;
   walletAppliedAmount: number;
   dueDate: string;
   variableSymbol: string | null;
@@ -44,9 +46,10 @@ export default function AdminPayments() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [form, setForm] = useState({ userIds: [] as number[], amount: "", dueDate: "", description: "" });
+  const [form, setForm] = useState({ userIds: [] as number[], fullPrice: "", dueDate: "", description: "", identity: "" });
   const [userFilter, setUserFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [identityFilter, setIdentityFilter] = useState("all");
   const [searchFilter, setSearchFilter] = useState("");
   const dateLocale = lang === "sk" ? skLocale : lang === "cz" ? csLocale : enLocale;
   const sortLang = lang === "cz" ? "cs" : lang;
@@ -62,16 +65,29 @@ export default function AdminPayments() {
   const paymentUsers = Array.from(
     new Map(payments.map(payment => [payment.user.id, payment.user])).values(),
   ).sort((a, b) => a.name.localeCompare(b.name, sortLang));
+  const paymentIdentities = Array.from(
+    new Set(payments.map(payment => payment.identity?.trim()).filter((value): value is string => !!value)),
+  ).sort((a, b) => a.localeCompare(b, sortLang));
 
   const normalizedSearch = searchFilter.trim().toLocaleLowerCase(sortLang);
   const filteredPayments = payments.filter(payment => {
     if (userFilter !== "all" && payment.userId !== Number(userFilter)) return false;
     if (statusFilter !== "all" && payment.status !== statusFilter) return false;
+    if (identityFilter !== "all" && (payment.identity ?? "") !== identityFilter) return false;
     if (!normalizedSearch) return true;
-    return [payment.user.name, payment.description, payment.variableSymbol ?? ""]
+    return [payment.user.name, payment.description, payment.variableSymbol ?? "", payment.identity ?? ""]
       .some(value => value.toLocaleLowerCase(sortLang).includes(normalizedSearch));
   });
-  const filtersActive = userFilter !== "all" || statusFilter !== "all" || normalizedSearch.length > 0;
+  const filtersActive = userFilter !== "all" || statusFilter !== "all" || identityFilter !== "all" || normalizedSearch.length > 0;
+
+  const selectedCount = form.userIds.length;
+  const fullPrice = Number(form.fullPrice);
+  const splitPreview = selectedCount > 0 && Number.isInteger(fullPrice) && fullPrice > 0
+    ? {
+        perMember: Math.floor(fullPrice / selectedCount),
+        remainder: fullPrice % selectedCount,
+      }
+    : null;
 
   const createMutation = useMutation({
     mutationFn: async (data: Record<string, unknown>) => {
@@ -88,7 +104,7 @@ export default function AdminPayments() {
         title: result.created === 1 ? t("adminPayments.paymentCreated") : t("adminPayments.paymentsCreated", { count: result.created ?? 0 }),
       });
       setDialogOpen(false);
-      setForm({ userIds: [], amount: "", dueDate: "", description: "" });
+      setForm({ userIds: [], fullPrice: "", dueDate: "", description: "", identity: "" });
     },
     onError: (err: any) => toast({ title: t("common.error"), description: err.message, variant: "destructive" }),
   });
@@ -121,9 +137,11 @@ export default function AdminPayments() {
     if (form.userIds.length === 0) return;
     createMutation.mutate({
       userIds: form.userIds,
-      amount: parseInt(form.amount),
+      fullPrice: parseInt(form.fullPrice),
+      amount: parseInt(form.fullPrice),
       dueDate: form.dueDate,
       description: form.description,
+      identity: form.identity,
     });
   };
 
@@ -150,6 +168,7 @@ export default function AdminPayments() {
   const clearFilters = () => {
     setUserFilter("all");
     setStatusFilter("all");
+    setIdentityFilter("all");
     setSearchFilter("");
   };
 
@@ -222,8 +241,8 @@ export default function AdminPayments() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
-                  <Label htmlFor="amount">{t("adminPayments.amount")}</Label>
-                  <Input id="amount" type="number" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} required data-testid="input-amount" />
+                  <Label htmlFor="fullPrice">{t("adminPayments.fullPrice")}</Label>
+                  <Input id="fullPrice" type="number" value={form.fullPrice} onChange={e => setForm({ ...form, fullPrice: e.target.value })} required data-testid="input-full-price" />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="dueDate">{t("adminPayments.dueDate")}</Label>
@@ -231,9 +250,28 @@ export default function AdminPayments() {
                 </div>
               </div>
               <div className="space-y-2">
+                <Label htmlFor="identity">{t("adminPayments.identity")}</Label>
+                <Input
+                  id="identity"
+                  value={form.identity}
+                  onChange={e => setForm({ ...form, identity: e.target.value })}
+                  placeholder={t("adminPayments.identityPlaceholder")}
+                  data-testid="input-payment-identity"
+                />
+              </div>
+              <div className="space-y-2">
                 <p className="text-xs text-muted-foreground">
                   {t("adminPayments.vsHint")}
                 </p>
+                {splitPreview && selectedCount > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    {t("adminPayments.perMemberPrice", {
+                      amount: splitPreview.perMember,
+                      count: selectedCount,
+                    })}
+                    {splitPreview.remainder > 0 && ` ${t("adminPayments.splitRemainder", { count: splitPreview.remainder })}`}
+                  </p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="desc">{t("adminPayments.description")}</Label>
@@ -282,6 +320,20 @@ export default function AdminPayments() {
                   <SelectItem value="pending">{t("paymentDetail.pendingPay")}</SelectItem>
                   <SelectItem value="paid">{t("payments.paid")}</SelectItem>
                   <SelectItem value="overdue">{t("payments.overdue")}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>{t("adminPayments.identityFilter")}</Label>
+              <Select value={identityFilter} onValueChange={setIdentityFilter}>
+                <SelectTrigger data-testid="filter-payment-identity">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t("adminPayments.allIdentities")}</SelectItem>
+                  {paymentIdentities.map(identity => (
+                    <SelectItem key={identity} value={identity}>{identity}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -353,9 +405,11 @@ export default function AdminPayments() {
                   <div className="flex items-center gap-2">
                     <p className="font-medium text-sm">{p.user.name}</p>
                     {statusBadge(p.status)}
+                    {p.identity && <Badge variant="outline" className="text-xs">{p.identity}</Badge>}
                   </div>
                   <div className="flex flex-wrap items-center gap-3 mt-1 text-xs text-muted-foreground">
                     <span className="font-semibold text-foreground">{p.amount} Kč</span>
+                    {p.fullPrice > p.amount && <span>{t("adminPayments.fullPriceValue", { amount: p.fullPrice })}</span>}
                     {p.walletAppliedAmount > 0 && (
                       <span className="text-green-700 dark:text-green-400">{t("adminPayments.walletApplied", { amount: p.walletAppliedAmount })}</span>
                     )}

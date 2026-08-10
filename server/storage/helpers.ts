@@ -80,6 +80,12 @@ function createPaymentWithWalletInTransaction(tx: any, payment: InsertPayment): 
   if (!Number.isInteger(payment.amount) || payment.amount <= 0) {
     throw new Error("Suma musí byť kladné celé číslo");
   }
+  const fullPrice = typeof payment.fullPrice === "number" && payment.fullPrice > 0
+    ? payment.fullPrice
+    : payment.amount;
+  if (fullPrice < payment.amount) {
+    throw new Error("Celková suma nemôže byť menšia ako suma jednej platby");
+  }
 
   const walletBalance = (tx.select().from(walletTransactions)
     .where(eq(walletTransactions.userId, payment.userId))
@@ -91,6 +97,7 @@ function createPaymentWithWalletInTransaction(tx: any, payment: InsertPayment): 
   const created = tx.insert(payments)
     .values({
       ...payment,
+      fullPrice,
       variableSymbol: null,
       walletAppliedAmount,
       status,

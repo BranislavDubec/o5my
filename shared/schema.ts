@@ -234,6 +234,8 @@ export const payments = sqliteTable("payments", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   userId: integer("user_id").notNull().references(() => users.id),
   amount: integer("amount").notNull(), // in CZK (integer to avoid float issues)
+  fullPrice: integer("full_price").notNull().default(0), // total amount before splitting across selected members
+  identity: text("identity"),
   walletAppliedAmount: integer("wallet_applied_amount").notNull().default(0),
   dueDate: text("due_date").notNull(),
   variableSymbol: text("variable_symbol"),
@@ -245,6 +247,8 @@ export const payments = sqliteTable("payments", {
 export const insertPaymentSchema = createInsertSchema(payments).pick({
   userId: true,
   amount: true,
+  fullPrice: true,
+  identity: true,
   dueDate: true,
   variableSymbol: true,
   description: true,

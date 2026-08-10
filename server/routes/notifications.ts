@@ -57,6 +57,7 @@ export function registerNotificationsRoutes(app: Express) {
     const body = typeof req.body?.body === "string" ? req.body.body.trim() : "";
     const context = typeof req.body?.context === "string" ? req.body.context : "general";
     const target = typeof req.body?.target === "string" ? req.body.target : "all";
+    const paymentIdentity = typeof req.body?.paymentIdentity === "string" ? req.body.paymentIdentity.trim() : "";
 
     if (!title || title.length > 100) {
       return res.status(400).json({ message: "Nadpis je povinný a môže mať najviac 100 znakov" });
@@ -67,7 +68,7 @@ export function registerNotificationsRoutes(app: Express) {
     if (!["general", "event", "payment"].includes(context)) {
       return res.status(400).json({ message: "Neplatný kontext notifikácie" });
     }
-    if (!["all", "user", "event_unanswered", "unpaid"].includes(target)) {
+    if (!["all", "user", "event_unanswered", "payment_identity", "unpaid"].includes(target)) {
       return res.status(400).json({ message: "Neplatný výber príjemcov" });
     }
 
@@ -103,12 +104,24 @@ export function registerNotificationsRoutes(app: Express) {
       if (context !== "payment") {
         return res.status(400).json({ message: "Tento výber príjemcov vyžaduje kontext platieb" });
       }
+      const unpaidPayments = storage.getAllPayments().filter(payment => payment.status !== "paid");
+      const filteredUnpaidPayments = paymentIdentity
+        ? unpaidPayments.filter(payment => (payment.identity ?? "") === paymentIdentity)
+        : unpaidPayments;
       const unpaidUserIds = new Set(
-        storage.getAllPayments()
-          .filter(payment => payment.status !== "paid")
-          .map(payment => payment.userId),
+        filteredUnpaidPayments.map(payment => payment.userId),
       );
       recipientIds = eligibleUsers.filter(user => unpaidUserIds.has(user.id)).map(user => user.id);
+    } else if (target === "payment_identity") {
+      if (context !== "payment") {
+        return res.status(400).json({ message: "Tento výber príjemcov vyžaduje kontext platieb" });
+      }
+      const matchingUserIds = new Set(
+        storage.getAllPayments()
+          .filter(payment => !paymentIdentity || (payment.identity ?? "") === paymentIdentity)
+          .map(payment => payment.userId),
+      );
+      recipientIds = eligibleUsers.filter(user => matchingUserIds.has(user.id)).map(user => user.id);
     }
 
     if (recipientIds.length === 0) {

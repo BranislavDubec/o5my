@@ -43,6 +43,13 @@
       "when": 1786053391628,
       "tag": "0005_match_player_played",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1786053391629,
+      "tag": "0006_payment_identity_full_price",
+      "breakpoints": true
     }
   ]
 }
