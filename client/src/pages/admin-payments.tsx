@@ -46,7 +46,14 @@ export default function AdminPayments() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [form, setForm] = useState({ userIds: [] as number[], fullPrice: "", dueDate: "", description: "", identity: "" });
+  const [form, setForm] = useState({
+    userIds: [] as number[],
+    priceMode: "full" as "full" | "perPerson",
+    price: "",
+    dueDate: "",
+    description: "",
+    identity: "",
+  });
   const [userFilter, setUserFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [identityFilter, setIdentityFilter] = useState("all");
@@ -81,12 +88,19 @@ export default function AdminPayments() {
   const filtersActive = userFilter !== "all" || statusFilter !== "all" || identityFilter !== "all" || normalizedSearch.length > 0;
 
   const selectedCount = form.userIds.length;
-  const fullPrice = Number(form.fullPrice);
-  const splitPreview = selectedCount > 0 && Number.isInteger(fullPrice) && fullPrice > 0
-    ? {
-        perMember: Math.floor(fullPrice / selectedCount),
-        remainder: fullPrice % selectedCount,
-      }
+  const enteredPrice = Number(form.price);
+  const splitPreview = selectedCount > 0 && Number.isInteger(enteredPrice) && enteredPrice > 0
+    ? form.priceMode === "perPerson"
+      ? {
+          perMember: enteredPrice,
+          fullPrice: enteredPrice * selectedCount,
+          remainder: 0,
+        }
+      : {
+          perMember: Math.floor(enteredPrice / selectedCount),
+          fullPrice: enteredPrice,
+          remainder: enteredPrice % selectedCount,
+        }
     : null;
 
   const createMutation = useMutation({
@@ -104,7 +118,7 @@ export default function AdminPayments() {
         title: result.created === 1 ? t("adminPayments.paymentCreated") : t("adminPayments.paymentsCreated", { count: result.created ?? 0 }),
       });
       setDialogOpen(false);
-      setForm({ userIds: [], fullPrice: "", dueDate: "", description: "", identity: "" });
+      setForm({ userIds: [], priceMode: "full", price: "", dueDate: "", description: "", identity: "" });
     },
     onError: (err: any) => toast({ title: t("common.error"), description: err.message, variant: "destructive" }),
   });
@@ -137,8 +151,8 @@ export default function AdminPayments() {
     if (form.userIds.length === 0) return;
     createMutation.mutate({
       userIds: form.userIds,
-      fullPrice: parseInt(form.fullPrice),
-      amount: parseInt(form.fullPrice),
+      priceMode: form.priceMode,
+      price: parseInt(form.price),
       dueDate: form.dueDate,
       description: form.description,
       identity: form.identity,
@@ -239,10 +253,27 @@ export default function AdminPayments() {
                   {t("adminPayments.perMemberHint")}
                 </p>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-3 sm:grid-cols-3">
                 <div className="space-y-2">
-                  <Label htmlFor="fullPrice">{t("adminPayments.fullPrice")}</Label>
-                  <Input id="fullPrice" type="number" value={form.fullPrice} onChange={e => setForm({ ...form, fullPrice: e.target.value })} required data-testid="input-full-price" />
+                  <Label htmlFor="priceMode">{t("adminPayments.priceMode")}</Label>
+                  <Select
+                    value={form.priceMode}
+                    onValueChange={(value: "full" | "perPerson") => setForm({ ...form, priceMode: value })}
+                  >
+                    <SelectTrigger id="priceMode" data-testid="select-price-mode">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="full">{t("adminPayments.fullPrice")}</SelectItem>
+                      <SelectItem value="perPerson">{t("adminPayments.pricePerPerson")}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="price">
+                    {form.priceMode === "full" ? t("adminPayments.fullPrice") : t("adminPayments.pricePerPerson")}
+                  </Label>
+                  <Input id="price" type="number" min="1" step="1" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} required data-testid="input-payment-price" />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="dueDate">{t("adminPayments.dueDate")}</Label>
@@ -251,6 +282,22 @@ export default function AdminPayments() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="identity">{t("adminPayments.identity")}</Label>
+                {paymentIdentities.length > 0 && (
+                  <Select
+                    value={paymentIdentities.includes(form.identity) ? form.identity : "__new__"}
+                    onValueChange={value => setForm({ ...form, identity: value === "__new__" ? "" : value })}
+                  >
+                    <SelectTrigger data-testid="select-payment-identity">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__new__">{t("adminPayments.newIdentity")}</SelectItem>
+                      {paymentIdentities.map(identity => (
+                        <SelectItem key={identity} value={identity}>{identity}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
                 <Input
                   id="identity"
                   value={form.identity}
@@ -270,6 +317,7 @@ export default function AdminPayments() {
                       count: selectedCount,
                     })}
                     {splitPreview.remainder > 0 && ` ${t("adminPayments.splitRemainder", { count: splitPreview.remainder })}`}
+                    {form.priceMode === "perPerson" && ` ${t("adminPayments.calculatedFullPrice", { amount: splitPreview.fullPrice })}`}
                   </p>
                 )}
               </div>

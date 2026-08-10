@@ -115,13 +115,14 @@ export function registerPaymentsRoutes(app: Express) {
 
   app.post("/api/payments/bulk", requireAdmin, (req, res) => {
     try {
-      const fullPrice = Number(req.body?.fullPrice ?? req.body?.amount);
+      const priceMode = req.body?.priceMode === "perPerson" ? "perPerson" : "full";
+      const enteredPrice = Number(req.body?.price ?? req.body?.fullPrice ?? req.body?.amount);
       const dueDate = typeof req.body?.dueDate === "string" ? req.body.dueDate : "";
       const description = typeof req.body?.description === "string" ? req.body.description.trim() : "";
       const identity = normalizePaymentIdentity(req.body?.identity);
       const rawUserIds = req.body?.userIds;
 
-      if (!Number.isInteger(fullPrice) || fullPrice <= 0) {
+      if (!Number.isSafeInteger(enteredPrice) || enteredPrice <= 0) {
         return res.status(400).json({ message: "Suma musí byť kladné celé číslo" });
       }
       if (!/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
@@ -138,8 +139,13 @@ export function registerPaymentsRoutes(app: Express) {
       if (userIds.length > 500 || userIds.some(id => !Number.isInteger(id) || id <= 0)) {
         return res.status(400).json({ message: "Neplatný výber členov" });
       }
-      if (fullPrice < userIds.length) {
+      if (priceMode === "full" && enteredPrice < userIds.length) {
         return res.status(400).json({ message: "Celková suma musí byť aspoň 1 Kč na člena" });
+      }
+
+      const fullPrice = priceMode === "perPerson" ? enteredPrice * userIds.length : enteredPrice;
+      if (!Number.isSafeInteger(fullPrice)) {
+        return res.status(400).json({ message: "Celková suma je príliš vysoká" });
       }
 
       const activeUsersById = new Map(
@@ -152,7 +158,9 @@ export function registerPaymentsRoutes(app: Express) {
         return res.status(400).json({ message: "Niektorý vybraný člen neexistuje alebo nie je aktívny" });
       }
 
-      const amounts = splitFullPrice(fullPrice, selectedUsers.length);
+      const amounts = priceMode === "perPerson"
+        ? selectedUsers.map(() => enteredPrice)
+        : splitFullPrice(fullPrice, selectedUsers.length);
 
       const paymentList = selectedUsers.map((user, index) => insertPaymentSchema.parse({
         userId: user!.id,
