@@ -50,6 +50,20 @@
       "when": 1786053391629,
       "tag": "0006_payment_identity_full_price",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1786053391630,
+      "tag": "0007_payment_identity",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1786053391631,
+      "tag": "0008_payment_full_price_backfill",
+      "breakpoints": true
     }
   ]
 }
