@@ -24,6 +24,18 @@ function personalizePaymentDescription(template: string, userName: string): stri
   return /\{name\}/i.test(trimmed) ? resolved : `${trimmed} ${memberName}`.trim();
 }
 
+function normalizePaymentIdentity(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().replace(/\s+/g, " ");
+  return normalized ? normalized.slice(0, 80) : null;
+}
+
+function splitFullPrice(fullPrice: number, memberCount: number) {
+  const baseAmount = Math.floor(fullPrice / memberCount);
+  const remainder = fullPrice % memberCount;
+  return Array.from({ length: memberCount }, (_, index) => baseAmount + (index < remainder ? 1 : 0));
+}
+
 function getPaymentNotificationContent(payment: Payment, currency: string) {
   const remainingAmount = Math.max(0, payment.amount - payment.walletAppliedAmount);
   const dueDate = formatNotificationDate(payment.dueDate);
@@ -79,6 +91,8 @@ export function registerPaymentsRoutes(app: Express) {
       }
       const payment = storage.createPayment({
         ...data,
+        fullPrice: typeof data.fullPrice === "number" && data.fullPrice > 0 ? data.fullPrice : data.amount,
+        identity: normalizePaymentIdentity(data.identity),
         description: personalizePaymentDescription(data.description, user.name),
         variableSymbol: null,
       });
@@ -101,12 +115,13 @@ export function registerPaymentsRoutes(app: Express) {
 
   app.post("/api/payments/bulk", requireAdmin, (req, res) => {
     try {
-      const amount = Number(req.body?.amount);
+      const fullPrice = Number(req.body?.fullPrice ?? req.body?.amount);
       const dueDate = typeof req.body?.dueDate === "string" ? req.body.dueDate : "";
       const description = typeof req.body?.description === "string" ? req.body.description.trim() : "";
+      const identity = normalizePaymentIdentity(req.body?.identity);
       const rawUserIds = req.body?.userIds;
 
-      if (!Number.isInteger(amount) || amount <= 0) {
+      if (!Number.isInteger(fullPrice) || fullPrice <= 0) {
         return res.status(400).json({ message: "Suma musí byť kladné celé číslo" });
       }
       if (!/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
@@ -123,6 +138,9 @@ export function registerPaymentsRoutes(app: Express) {
       if (userIds.length > 500 || userIds.some(id => !Number.isInteger(id) || id <= 0)) {
         return res.status(400).json({ message: "Neplatný výber členov" });
       }
+      if (fullPrice < userIds.length) {
+        return res.status(400).json({ message: "Celková suma musí byť aspoň 1 Kč na člena" });
+      }
 
       const activeUsersById = new Map(
         storage.getAllUsers()
@@ -134,9 +152,13 @@ export function registerPaymentsRoutes(app: Express) {
         return res.status(400).json({ message: "Niektorý vybraný člen neexistuje alebo nie je aktívny" });
       }
 
-      const paymentList = selectedUsers.map(user => insertPaymentSchema.parse({
+      const amounts = splitFullPrice(fullPrice, selectedUsers.length);
+
+      const paymentList = selectedUsers.map((user, index) => insertPaymentSchema.parse({
         userId: user!.id,
-        amount,
+        amount: amounts[index],
+        fullPrice,
+        identity,
         dueDate,
         description: personalizePaymentDescription(description, user!.name),
       }));

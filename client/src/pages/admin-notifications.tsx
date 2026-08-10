@@ -26,8 +26,15 @@ interface EventItem {
   startTime: string;
 }
 
+interface PaymentItem {
+  id: number;
+  identity: string | null;
+  userId: number;
+  status: string;
+}
+
 type NotificationContext = "general" | "event" | "payment";
-type NotificationTarget = "all" | "user" | "event_unanswered" | "unpaid";
+type NotificationTarget = "all" | "user" | "event_unanswered" | "payment_identity" | "unpaid";
 
 export default function AdminNotifications() {
   const { t, lang } = useI18n();
@@ -36,13 +43,17 @@ export default function AdminNotifications() {
   const [target, setTarget] = useState<NotificationTarget>("all");
   const [userId, setUserId] = useState("");
   const [eventId, setEventId] = useState("");
+  const [paymentIdentity, setPaymentIdentity] = useState("");
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
 
   const { data: users = [] } = useQuery<UserItem[]>({ queryKey: ["/api/users"] });
   const { data: events = [] } = useQuery<EventItem[]>({ queryKey: ["/api/events"] });
+  const { data: payments = [] } = useQuery<PaymentItem[]>({ queryKey: ["/api/payments/all"] });
   const activeUsers = users.filter(user => user.isActive && user.emailVerified);
   const sortedEvents = [...events].sort((first, second) => first.startTime.localeCompare(second.startTime));
+  const paymentIdentities = Array.from(new Set(payments.map(payment => payment.identity?.trim()).filter((value): value is string => !!value)))
+    .sort((first, second) => first.localeCompare(second, lang === "cz" ? "cs" : lang));
   const dateLocale = lang === "sk" ? skLocale : lang === "cz" ? csLocale : enLocale;
 
   const sendMutation = useMutation({
@@ -52,6 +63,7 @@ export default function AdminNotifications() {
         target,
         userId: target === "user" ? Number(userId) : undefined,
         eventId: context === "event" ? Number(eventId) : undefined,
+        paymentIdentity: context === "payment" ? paymentIdentity || undefined : undefined,
         title,
         body,
       });
@@ -68,6 +80,7 @@ export default function AdminNotifications() {
   const changeContext = (value: NotificationContext) => {
     setContext(value);
     setUserId("");
+    setPaymentIdentity("");
     if (value === "event") {
       setTarget("event_unanswered");
       setTitle(t("adminNotifications.eventReminderTitle"));
@@ -88,6 +101,7 @@ export default function AdminNotifications() {
   const canSend = title.trim()
     && body.trim()
     && (context !== "event" || eventId)
+    && (context !== "payment" || target !== "payment_identity" || paymentIdentity.trim().length > 0)
     && (target !== "user" || userId);
 
   const submit = () => {
@@ -144,10 +158,35 @@ export default function AdminNotifications() {
                 <SelectItem value="all">{t("adminNotifications.targetAll", { count: activeUsers.length })}</SelectItem>
                 <SelectItem value="user">{t("adminNotifications.targetUser")}</SelectItem>
                 {context === "event" && <SelectItem value="event_unanswered">{t("adminNotifications.targetEventUnanswered")}</SelectItem>}
-                {context === "payment" && <SelectItem value="unpaid">{t("adminNotifications.targetUnpaid")}</SelectItem>}
+                {context === "payment" && (
+                  <>
+                    <SelectItem value="payment_identity">{t("adminNotifications.targetPaymentIdentity")}</SelectItem>
+                    <SelectItem value="unpaid">{t("adminNotifications.targetUnpaid")}</SelectItem>
+                  </>
+                )}
               </SelectContent>
             </Select>
           </div>
+
+          {context === "payment" && target !== "user" && (
+            <div className="space-y-2">
+              <Label>{t("adminNotifications.paymentIdentityLabel")}</Label>
+              <Select value={paymentIdentity || "__all__"} onValueChange={value => setPaymentIdentity(value === "__all__" ? "" : value)}>
+                <SelectTrigger data-testid="select-notification-payment-identity"><SelectValue placeholder={t("adminNotifications.selectPaymentIdentity")} /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">{t("adminNotifications.allPaymentIdentities")}</SelectItem>
+                  {paymentIdentities.map(identity => (
+                    <SelectItem key={identity} value={identity}>{identity}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {target === "unpaid"
+                  ? t("adminNotifications.paymentIdentityOptional")
+                  : t("adminNotifications.paymentIdentityRequired")}
+              </p>
+            </div>
+          )}
 
           {target === "user" && (
             <div className="space-y-2">
