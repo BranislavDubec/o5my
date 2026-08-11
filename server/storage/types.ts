@@ -187,7 +187,11 @@ export interface IStorage {
   // Bank Transactions
   getAllBankTransactions(limit?: number): BankTransaction[];
   getUnmatchedBankTransactions(): BankTransaction[];
-  createBankTransaction(tx: Omit<BankTransaction, 'id'>): BankTransaction | undefined;
+  importBankTransaction(tx: Omit<BankTransaction, 'id'>): {
+    transaction: BankTransaction;
+    created: boolean;
+    matched: boolean;
+  };
   updateBankTransactionMatch(id: number, paymentId: number | null): void;
 
   // User wallets

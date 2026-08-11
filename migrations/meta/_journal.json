@@ -64,6 +64,34 @@
       "when": 1786053391631,
       "tag": "0008_payment_full_price_backfill",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1786450000000,
+      "tag": "0009_bank_transaction_currency",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1786450000001,
+      "tag": "0010_bank_transaction_sync_error",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1786450000002,
+      "tag": "0011_bank_transaction_raw_data",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1786450000003,
+      "tag": "0012_bank_transaction_minor_units",
+      "breakpoints": true
     }
   ]
 }

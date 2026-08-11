@@ -1,4 +1,4 @@
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, ne } from "drizzle-orm";
 import {
   users,
   payments,
@@ -92,14 +92,56 @@ export class PaymentsStore {
       .filter(tx => tx.matchedPaymentId === null);
   }
 
-  createBankTransaction(tx: Omit<BankTransaction, 'id'>): BankTransaction | undefined {
-    // Check if transaction already exists (by transactionId)
-    const existing = db.select().from(bankTransactions)
-      .where(eq(bankTransactions.transactionId, tx.transactionId))
-      .get();
-    if (existing) return undefined;
+  importBankTransaction(tx: Omit<BankTransaction, 'id'>): {
+    transaction: BankTransaction;
+    created: boolean;
+    matched: boolean;
+  } {
+    return db.transaction(database => {
+      const existing = database.select().from(bankTransactions)
+        .where(eq(bankTransactions.transactionId, tx.transactionId))
+        .get();
+      if (existing) return { transaction: existing, created: false, matched: false };
 
-    return db.insert(bankTransactions).values(tx).returning().get();
+      let matchedPaymentId: number | null = null;
+      let syncError = tx.syncError;
+
+      if (!syncError && tx.amount > 0 && tx.currency === "CZK" && tx.variableSymbol) {
+        const pendingPayment = database.select().from(payments)
+          .where(and(
+            eq(payments.variableSymbol, tx.variableSymbol),
+            ne(payments.status, "paid"),
+          ))
+          .get();
+
+        if (pendingPayment) {
+          const outstandingMinor = Math.max(
+            0,
+            pendingPayment.amount - pendingPayment.walletAppliedAmount,
+          ) * 100;
+          if (tx.amount === outstandingMinor) {
+            matchedPaymentId = pendingPayment.id;
+          } else {
+            syncError = "amount_mismatch";
+          }
+        }
+      }
+
+      const transaction = database.insert(bankTransactions).values({
+        ...tx,
+        matchedPaymentId,
+        syncError,
+      }).returning().get();
+
+      if (matchedPaymentId !== null) {
+        database.update(payments)
+          .set({ status: "paid" })
+          .where(eq(payments.id, matchedPaymentId))
+          .run();
+      }
+
+      return { transaction, created: true, matched: matchedPaymentId !== null };
+    });
   }
 
   updateBankTransactionMatch(id: number, paymentId: number | null): void {

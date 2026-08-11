@@ -1,0 +1,1 @@
+ALTER TABLE bank_transactions ADD COLUMN currency TEXT NOT NULL DEFAULT 'CZK';
