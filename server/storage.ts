@@ -132,7 +132,7 @@ export class DatabaseStorage implements IStorage {
   // Bank Transactions
   getAllBankTransactions = this.payments.getAllBankTransactions;
   getUnmatchedBankTransactions = this.payments.getUnmatchedBankTransactions;
-  createBankTransaction = this.payments.createBankTransaction;
+  importBankTransaction = this.payments.importBankTransaction;
   updateBankTransactionMatch = this.payments.updateBankTransactionMatch;
 
   // User wallets

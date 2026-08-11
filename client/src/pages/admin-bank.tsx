@@ -17,12 +17,16 @@ import { useI18n } from "@/lib/i18n";
 interface BankTransaction {
   id: number;
   transactionId: string;
-  amount: number;
+  amount: number; // minor units
+  currency: string;
   date: string;
   payerName: string | null;
+  payerAccount: string | null;
+  payerBankCode: string | null;
   payerIban: string | null;
   variableSymbol: string | null;
   memo: string | null;
+  syncError: string | null;
   matchedPaymentId: number | null;
 }
 
@@ -34,6 +38,7 @@ interface BankSettings {
   paymentCurrency: string;
   accountBalance: number | null;
   balanceUpdatedAt: string | null;
+  lastSyncError: string | null;
 }
 
 interface CashTransaction {
@@ -113,7 +118,11 @@ export default function AdminBank() {
       queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
       toast({ title: t("adminBank.syncResult", { synced: data.synced, matched: data.matched }) });
     },
-    onError: (err: any) => toast({ title: t("adminBank.syncFailed"), description: err.message, variant: "destructive" }),
+    onError: (err: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/bank/transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/bank/settings"] });
+      toast({ title: t("adminBank.syncFailed"), description: err.message, variant: "destructive" });
+    },
   });
 
   const cashMutation = useMutation({
@@ -157,6 +166,25 @@ export default function AdminBank() {
       return new Intl.NumberFormat(localeTag, { style: "currency", currency, maximumFractionDigits: 2 }).format(amount);
     } catch {
       return `${amount} ${currency}`;
+    }
+  };
+  const formatTransactionMoney = (amountMinor: number, transactionCurrency: string) => {
+    try {
+      return new Intl.NumberFormat(localeTag, {
+        style: "currency",
+        currency: transactionCurrency,
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(amountMinor / 100);
+    } catch {
+      return `${(amountMinor / 100).toFixed(2)} ${transactionCurrency}`;
+    }
+  };
+  const transactionError = (error: string) => {
+    switch (error) {
+      case "unsupported_currency": return t("adminBank.unsupportedCurrency");
+      case "amount_mismatch": return t("adminBank.amountMismatch");
+      default: return t("adminBank.transactionError");
     }
   };
 
@@ -252,6 +280,11 @@ export default function AdminBank() {
             <Clock className="w-3.5 h-3.5" />
             {t("adminBank.lastSync", { time: lastSync })}
           </div>
+          {settings?.lastSyncError && (
+            <p className="mt-3 rounded-md bg-destructive/10 px-3 py-2 text-xs font-medium text-destructive" data-testid="text-fio-sync-error">
+              {settings.lastSyncError}
+            </p>
+          )}
         </CardContent>
       </Card>
 
@@ -379,14 +412,21 @@ export default function AdminBank() {
                   {tx.matchedPaymentId ? <CheckCircle2 className="w-4 h-4" /> : <Banknote className="w-4 h-4" />}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium">{tx.amount} Kč</p>
+                  <p className="text-sm font-medium">{formatTransactionMoney(tx.amount, tx.currency)}</p>
                   <p className="text-xs text-muted-foreground truncate">
                     {tx.payerName || t("adminBank.unknownPayer")}
                     {tx.variableSymbol && ` · VS: ${tx.variableSymbol}`}
                   </p>
                   <p className="text-xs text-muted-foreground">{format(new Date(tx.date), "d. MMM yyyy", { locale: dateLocale })}</p>
+                  {tx.syncError && (
+                    <p className="mt-1 text-xs font-medium text-destructive" data-testid={`text-tx-error-${tx.id}`}>
+                      {transactionError(tx.syncError)}
+                    </p>
+                  )}
                 </div>
-                {tx.matchedPaymentId ? (
+                {tx.syncError ? (
+                  <Badge variant="destructive" className="text-xs">{t("adminBank.error")}</Badge>
+                ) : tx.matchedPaymentId ? (
                   <Badge variant="default" className="bg-green-600 text-xs">{t("adminBank.matched")}</Badge>
                 ) : (
                   <Badge variant="secondary" className="text-xs">{t("adminBank.unmatched")}</Badge>

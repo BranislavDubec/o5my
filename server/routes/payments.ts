@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { storage } from "../storage";
 import { requireAuth, requireAdmin } from "../auth";
 import { insertPaymentSchema, type Payment } from "@shared/schema";
-import { syncFioTransactions } from "../fio-api";
+import { FioSyncError, syncFioTransactions } from "../fio-api";
 import { createPaymentQrPayload, isValidIban, normalizeIban } from "../payment-qr";
 import { notifyUsers } from "../notifications";
 import { syncGoogleCalendarEvents } from "../google-calendar";
@@ -303,9 +303,12 @@ export function registerPaymentsRoutes(app: Express) {
       }
       const { dateFrom, dateTo } = req.body || {};
       const result = await syncFioTransactions(token, dateFrom, dateTo);
-      storage.setAppSetting('fio_last_sync', new Date().toISOString());
       res.json(result);
     } catch (err: any) {
+      if (err instanceof FioSyncError) {
+        if (err.retryAfterSeconds) res.setHeader("Retry-After", String(err.retryAfterSeconds));
+        return res.status(err.statusCode).json({ message: err.message });
+      }
       res.status(500).json({ message: err.message || "Synchronizácia zlyhala" });
     }
   });
@@ -335,13 +338,21 @@ export function registerPaymentsRoutes(app: Express) {
       paymentCurrency: storage.getAppSetting('payment_currency') || 'CZK',
       accountBalance: parsedBalance !== null && Number.isFinite(parsedBalance) ? parsedBalance : null,
       balanceUpdatedAt: storage.getAppSetting('fio_balance_updated_at') || null,
+      lastSyncError: storage.getAppSetting('fio_last_sync_error') || null,
     });
   });
 
   app.put("/api/bank/settings", requireAdmin, (req, res) => {
     const { fioToken, paymentIban, paymentRecipientName, paymentCurrency } = req.body || {};
     if (typeof fioToken === "string" && fioToken.trim()) {
-      storage.setAppSetting('fio_token', fioToken.trim());
+      const normalizedToken = fioToken.trim();
+      if (normalizedToken.length !== 64) {
+        return res.status(400).json({ message: "FIO API token musí mať presne 64 znakov" });
+      }
+      storage.setAppSetting('fio_token', normalizedToken);
+      storage.setAppSetting('fio_sync_cursor_date', '');
+      storage.setAppSetting('fio_last_sync_error', '');
+      storage.setAppSetting('fio_last_sync_error_data', '');
     }
 
     if (typeof paymentIban === "string") {
