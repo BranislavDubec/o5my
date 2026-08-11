@@ -4,6 +4,7 @@ import type { Request } from 'express';
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "node:http";
+import { startFioSyncScheduler } from "./fio-sync-scheduler";
 
 const app = express();
 const httpServer = createServer(app);
@@ -110,6 +111,11 @@ app.use((req, res, next) => {
     },
     () => {
       log(`serving on port ${port}`);
+      // Avoid having a developer machine and production call Fio with the
+      // same token. Production is the single owner of the weekly schedule.
+      if (process.env.NODE_ENV === "production") {
+        startFioSyncScheduler();
+      }
     },
   );
 })();

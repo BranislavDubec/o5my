@@ -150,15 +150,11 @@ export async function fetchFioTransactions(token: string, dateFrom: string, date
   return (await fetchFioStatement(url)).transactions.map(transaction => transaction.normalized);
 }
 
-export async function syncFioTransactions(
+async function performFioTransactionSync(
   token: string,
-  dateFrom?: string,
-  dateTo?: string,
+  range: { dateFrom: string; dateTo: string },
+  automaticSync: boolean,
 ): Promise<{ synced: number; matched: number; accountBalance?: number }> {
-  validateDateRange(dateFrom, dateTo);
-
-  const automaticSync = !dateFrom && !dateTo;
-  const range = automaticSync ? getAutomaticFioSyncRange() : { dateFrom: dateFrom!, dateTo: dateTo! };
   const statement = await fetchFioStatement(
     `${FIO_API_BASE}/periods/${token}/${range.dateFrom}/${range.dateTo}/transactions.json`,
   );
@@ -202,7 +198,7 @@ export async function syncFioTransactions(
     });
     if (result.created) synced++;
     if (result.matched) matched++;
-    if (result.created && unsupportedCurrency) {
+    if (unsupportedCurrency) {
       rejectedTransactions.push({
         transactionId: normalized.transactionId,
         currency: normalized.currency,
@@ -222,13 +218,6 @@ export async function syncFioTransactions(
 
   if (accountCurrency !== FIO_SUPPORTED_CURRENCY) {
     const message = `Fio account currency ${accountCurrency} is not supported; only CZK accounts can be synchronized`;
-    recordFioSyncError(message, {
-      accountCurrency,
-      accountIban: statement.iban ?? null,
-      dateFrom: range.dateFrom,
-      dateTo: range.dateTo,
-      rejectedTransactions,
-    });
     throw new FioSyncError(message, 422);
   }
 
@@ -237,12 +226,6 @@ export async function syncFioTransactions(
       rejectedTransactions.map(transaction => transaction.currency),
     )).join(", ");
     const message = `${rejectedTransactions.length} non-CZK Fio transaction(s) were logged but rejected (${currencies})`;
-    recordFioSyncError(message, {
-      accountCurrency,
-      dateFrom: range.dateFrom,
-      dateTo: range.dateTo,
-      rejectedTransactions,
-    });
     throw new FioSyncError(message, 422);
   }
 
@@ -250,6 +233,40 @@ export async function syncFioTransactions(
   storage.setAppSetting("fio_last_sync_error", "");
   storage.setAppSetting("fio_last_sync_error_data", "");
   return { synced, matched, accountBalance: statement.closingBalance };
+}
+
+export async function syncFioTransactions(
+  token: string,
+  dateFrom?: string,
+  dateTo?: string,
+): Promise<{ synced: number; matched: number; accountBalance?: number }> {
+  // Invalid admin input is a request error, not a failed Fio synchronization.
+  validateDateRange(dateFrom, dateTo);
+
+  const automaticSync = !dateFrom && !dateTo;
+  const range = automaticSync
+    ? getAutomaticFioSyncRange()
+    : { dateFrom: dateFrom!, dateTo: dateTo! };
+
+  try {
+    return await performFioTransactionSync(token, range, automaticSync);
+  } catch (error) {
+    const syncError = error instanceof FioSyncError
+      ? error
+      : new FioSyncError("Fio synchronization failed while processing transactions");
+
+    recordFioSyncError(syncError.message, {
+      automaticSync,
+      dateFrom: range.dateFrom,
+      dateTo: range.dateTo,
+      statusCode: syncError.statusCode,
+      errorType: error instanceof Error ? error.name : "UnknownError",
+    });
+    if (!(error instanceof FioSyncError)) {
+      console.error("[Fio sync] Unexpected synchronization error", error);
+    }
+    throw syncError;
+  }
 }
 
 export function setLastSyncDate(date: string) {

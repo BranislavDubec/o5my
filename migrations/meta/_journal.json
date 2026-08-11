@@ -113,6 +113,13 @@
       "when": 1786536000002,
       "tag": "0015_bank_transaction_account_backfill",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "6",
+      "when": 1786536000003,
+      "tag": "0016_current_schema_baseline",
+      "breakpoints": true
     }
   ]
 }
