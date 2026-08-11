@@ -21,6 +21,8 @@ interface BankTransaction {
   currency: string;
   date: string;
   payerName: string | null;
+  payerAccount: string | null;
+  payerBankCode: string | null;
   payerIban: string | null;
   variableSymbol: string | null;
   memo: string | null;
@@ -36,6 +38,7 @@ interface BankSettings {
   paymentCurrency: string;
   accountBalance: number | null;
   balanceUpdatedAt: string | null;
+  lastSyncError: string | null;
 }
 
 interface CashTransaction {
@@ -115,7 +118,11 @@ export default function AdminBank() {
       queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
       toast({ title: t("adminBank.syncResult", { synced: data.synced, matched: data.matched }) });
     },
-    onError: (err: any) => toast({ title: t("adminBank.syncFailed"), description: err.message, variant: "destructive" }),
+    onError: (err: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/bank/transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/bank/settings"] });
+      toast({ title: t("adminBank.syncFailed"), description: err.message, variant: "destructive" });
+    },
   });
 
   const cashMutation = useMutation({
@@ -273,6 +280,11 @@ export default function AdminBank() {
             <Clock className="w-3.5 h-3.5" />
             {t("adminBank.lastSync", { time: lastSync })}
           </div>
+          {settings?.lastSyncError && (
+            <p className="mt-3 rounded-md bg-destructive/10 px-3 py-2 text-xs font-medium text-destructive" data-testid="text-fio-sync-error">
+              {settings.lastSyncError}
+            </p>
+          )}
         </CardContent>
       </Card>
 

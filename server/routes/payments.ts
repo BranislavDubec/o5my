@@ -303,7 +303,6 @@ export function registerPaymentsRoutes(app: Express) {
       }
       const { dateFrom, dateTo } = req.body || {};
       const result = await syncFioTransactions(token, dateFrom, dateTo);
-      storage.setAppSetting('fio_last_sync', new Date().toISOString());
       res.json(result);
     } catch (err: any) {
       if (err instanceof FioSyncError) {
@@ -339,6 +338,7 @@ export function registerPaymentsRoutes(app: Express) {
       paymentCurrency: storage.getAppSetting('payment_currency') || 'CZK',
       accountBalance: parsedBalance !== null && Number.isFinite(parsedBalance) ? parsedBalance : null,
       balanceUpdatedAt: storage.getAppSetting('fio_balance_updated_at') || null,
+      lastSyncError: storage.getAppSetting('fio_last_sync_error') || null,
     });
   });
 
@@ -350,6 +350,9 @@ export function registerPaymentsRoutes(app: Express) {
         return res.status(400).json({ message: "FIO API token musí mať presne 64 znakov" });
       }
       storage.setAppSetting('fio_token', normalizedToken);
+      storage.setAppSetting('fio_sync_cursor_date', '');
+      storage.setAppSetting('fio_last_sync_error', '');
+      storage.setAppSetting('fio_last_sync_error_data', '');
     }
 
     if (typeof paymentIban === "string") {

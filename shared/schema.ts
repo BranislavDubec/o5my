@@ -262,10 +262,12 @@ export type Payment = typeof payments.$inferSelect;
 export const bankTransactions = sqliteTable("bank_transactions", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   transactionId: text("transaction_id").notNull().unique(), // FIO IDpohyb
-  amount: integer("amount").notNull(), // signed amount in the currency's minor units (haléře for CZK)
+  amount: integer("amount").notNull(), // haléře for CZK; rejected non-CZK rows keep their exact source amount in raw_data
   currency: text("currency").notNull().default("CZK"),
   date: text("date").notNull(),
   payerName: text("payer_name"),
+  payerAccount: text("payer_account"),
+  payerBankCode: text("payer_bank_code"),
   payerIban: text("payer_iban"),
   variableSymbol: text("variable_symbol"),
   constantSymbol: text("constant_symbol"),

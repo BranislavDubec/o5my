@@ -1,172 +1,32 @@
-import { z } from "zod";
 import { storage } from "./storage";
+import {
+  FIO_SUPPORTED_CURRENCY,
+  FioSyncError,
+  fioApiResponseSchema,
+  normalizeCounterpartyAccount,
+  normalizeFioTransaction,
+  type FioRawTransaction,
+  type NormalizedFioTransaction,
+} from "./fio-model";
+
+export {
+  FioSyncError,
+  fioRawTransactionSchema,
+  normalizeCounterpartyAccount,
+  normalizeFioTransaction,
+} from "./fio-model";
 
 const FIO_API_BASE = "https://fioapi.fio.cz/v1/rest";
 const FIO_MIN_INTERVAL_MS = 30_000;
-
-const columnMetadata = {
-  name: z.string().optional(),
-  id: z.number().int().optional(),
-};
-
-const numberColumnSchema = z.object({
-  value: z.number().finite(),
-  ...columnMetadata,
-});
-
-const textColumnSchema = z.object({
-  value: z.union([z.string(), z.number().finite()]),
-  ...columnMetadata,
-});
-
-const optionalTextColumnSchema = textColumnSchema.nullable().optional();
-
-// Fio's JSON response uses stable column IDs instead of descriptive property
-// names. Keep this raw model separate from the normalized application model.
-export const fioRawTransactionSchema = z.object({
-  column22: numberColumnSchema, // ID pohybu
-  column0: z.object({ value: z.union([z.number().finite(), z.string()]), ...columnMetadata }), // Datum
-  column1: numberColumnSchema, // Objem
-  column14: textColumnSchema, // Měna
-  column2: optionalTextColumnSchema, // Protiúčet
-  column10: optionalTextColumnSchema, // Název protiúčtu
-  column3: optionalTextColumnSchema, // Kód banky
-  column12: optionalTextColumnSchema, // Název banky
-  column4: optionalTextColumnSchema, // KS
-  column5: optionalTextColumnSchema, // VS
-  column6: optionalTextColumnSchema, // SS
-  column7: optionalTextColumnSchema, // Uživatelská identifikace
-  column16: optionalTextColumnSchema, // Zpráva pro příjemce
-  column8: optionalTextColumnSchema, // Typ
-  column9: optionalTextColumnSchema, // Provedl
-  column18: optionalTextColumnSchema, // Upřesnění
-  column25: optionalTextColumnSchema, // Komentář
-  column26: optionalTextColumnSchema, // BIC
-  column17: optionalTextColumnSchema, // ID pokynu
-  column27: optionalTextColumnSchema, // Reference plátce
-}).passthrough();
-
-export type FioRawTransaction = z.infer<typeof fioRawTransactionSchema>;
-
-const fioApiResponseSchema = z.object({
-  accountStatement: z.object({
-    info: z.object({
-      accountId: z.union([z.string(), z.number()]).optional(),
-      iban: z.string().optional(),
-      currency: z.string().optional(),
-      openingBalance: z.number().finite().optional(),
-      closingBalance: z.number().finite().optional(),
-      dateStart: z.union([z.string(), z.number()]).optional(),
-      dateEnd: z.union([z.string(), z.number()]).optional(),
-      idFrom: z.number().optional().nullable(),
-      idTo: z.number().optional().nullable(),
-      idLastDownload: z.number().optional().nullable(),
-    }).passthrough(),
-    transactionList: z.object({
-      transaction: z.array(fioRawTransactionSchema).optional().nullable(),
-    }).optional().nullable(),
-  }).passthrough(),
-});
-
-export interface NormalizedFioTransaction {
-  transactionId: string;
-  instructionId: string | null;
-  date: string;
-  amountMinor: number;
-  currency: string;
-  counterAccount: string | null;
-  counterBankCode: string | null;
-  counterName: string | null;
-  counterBankName: string | null;
-  constantSymbol: string | null;
-  variableSymbol: string | null;
-  specificSymbol: string | null;
-  userIdentification: string | null;
-  recipientMessage: string | null;
-  transactionType: string | null;
-  performedBy: string | null;
-  specification: string | null;
-  comment: string | null;
-  bic: string | null;
-  payerReference: string | null;
-}
+const FIO_INITIAL_LOOKBACK_DAYS = 89;
+const FIO_SYNC_OVERLAP_DAYS = 1;
+const FIO_ACCOUNT_TIME_ZONE = "Europe/Prague";
 
 interface FioStatementResult {
   transactions: Array<{ normalized: NormalizedFioTransaction; raw: FioRawTransaction }>;
   iban?: string;
   currency?: string;
   closingBalance?: number;
-}
-
-export class FioSyncError extends Error {
-  constructor(
-    message: string,
-    public readonly statusCode = 502,
-    public readonly retryAfterSeconds?: number,
-  ) {
-    super(message);
-    this.name = "FioSyncError";
-  }
-}
-
-function columnText(column: z.infer<typeof optionalTextColumnSchema>): string | null {
-  if (!column || column.value === null || column.value === undefined) return null;
-  const value = String(column.value).trim();
-  return value || null;
-}
-
-function normalizeSymbol(value: string | null, label: string): string | null {
-  if (!value) return null;
-  if (!/^\d{1,10}$/.test(value)) {
-    throw new FioSyncError(`Fio transaction contains an invalid ${label}`, 502);
-  }
-  return value.replace(/^0+(?=\d)/, "");
-}
-
-export function normalizeFioTransaction(raw: FioRawTransaction): NormalizedFioTransaction {
-  const transactionIdValue = raw.column22.value;
-  if (!Number.isSafeInteger(transactionIdValue) || transactionIdValue <= 0) {
-    throw new FioSyncError("Fio transaction contains an invalid transaction ID", 502);
-  }
-
-  const date = new Date(raw.column0.value);
-  if (Number.isNaN(date.getTime())) {
-    throw new FioSyncError(`Fio transaction ${transactionIdValue} contains an invalid date`, 502);
-  }
-
-  const amountInMinorUnits = raw.column1.value * 100;
-  const amountMinor = Math.round(amountInMinorUnits);
-  if (!Number.isSafeInteger(amountMinor) || Math.abs(amountInMinorUnits - amountMinor) > 0.000001) {
-    throw new FioSyncError(`Fio transaction ${transactionIdValue} has unsupported monetary precision`, 502);
-  }
-
-  const currency = columnText(raw.column14)?.toUpperCase();
-  if (!currency || !/^[A-Z]{3}$/.test(currency)) {
-    throw new FioSyncError(`Fio transaction ${transactionIdValue} contains an invalid currency`, 502);
-  }
-
-  return {
-    transactionId: String(transactionIdValue),
-    instructionId: columnText(raw.column17),
-    date: date.toISOString(),
-    amountMinor,
-    currency,
-    counterAccount: columnText(raw.column2),
-    counterBankCode: columnText(raw.column3),
-    counterName: columnText(raw.column10),
-    counterBankName: columnText(raw.column12),
-    constantSymbol: normalizeSymbol(columnText(raw.column4), "constant symbol"),
-    variableSymbol: normalizeSymbol(columnText(raw.column5), "variable symbol"),
-    specificSymbol: normalizeSymbol(columnText(raw.column6), "specific symbol"),
-    userIdentification: columnText(raw.column7),
-    recipientMessage: columnText(raw.column16),
-    transactionType: columnText(raw.column8),
-    performedBy: columnText(raw.column9),
-    specification: columnText(raw.column18),
-    comment: columnText(raw.column25),
-    bic: columnText(raw.column26),
-    payerReference: columnText(raw.column27),
-  };
 }
 
 async function fetchFioStatement(url: string): Promise<FioStatementResult> {
@@ -236,19 +96,57 @@ function validateDateRange(dateFrom?: string, dateTo?: string) {
     throw new FioSyncError("Both Fio date range values are required", 400);
   }
   if (!dateFrom || !dateTo) return;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateFrom) || !/^\d{4}-\d{2}-\d{2}$/.test(dateTo) || dateFrom > dateTo) {
+  if (!isCalendarDate(dateFrom) || !isCalendarDate(dateTo) || dateFrom > dateTo) {
     throw new FioSyncError("Invalid Fio date range", 400);
   }
+}
+
+function isCalendarDate(value: string): boolean {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return false;
+  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+  return date.toISOString().slice(0, 10) === value;
+}
+
+function addCalendarDays(value: string, days: number): string {
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function currentFioDate(): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: FIO_ACCOUNT_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const value = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  return `${value.year}-${value.month}-${value.day}`;
+}
+
+export function getAutomaticFioSyncRange(): { dateFrom: string; dateTo: string } {
+  const dateTo = currentFioDate();
+  const cursor = storage.getAppSetting("fio_sync_cursor_date");
+  const dateFrom = cursor && isCalendarDate(cursor)
+    ? addCalendarDays(cursor, -FIO_SYNC_OVERLAP_DAYS)
+    : addCalendarDays(dateTo, -FIO_INITIAL_LOOKBACK_DAYS);
+  return { dateFrom, dateTo };
+}
+
+function recordFioSyncError(message: string, details: Record<string, unknown>) {
+  storage.setAppSetting("fio_last_sync_error", message);
+  storage.setAppSetting("fio_last_sync_error_data", JSON.stringify({
+    occurredAt: new Date().toISOString(),
+    ...details,
+  }));
+  console.error("[Fio sync]", message, details);
 }
 
 export async function fetchFioTransactions(token: string, dateFrom: string, dateTo: string) {
   validateDateRange(dateFrom, dateTo);
   const url = `${FIO_API_BASE}/periods/${token}/${dateFrom}/${dateTo}/transactions.json`;
-  return (await fetchFioStatement(url)).transactions.map(transaction => transaction.normalized);
-}
-
-export async function fetchLatestFioTransactions(token: string) {
-  const url = `${FIO_API_BASE}/last/${token}/transactions.json`;
   return (await fetchFioStatement(url)).transactions.map(transaction => transaction.normalized);
 }
 
@@ -259,21 +157,27 @@ export async function syncFioTransactions(
 ): Promise<{ synced: number; matched: number; accountBalance?: number }> {
   validateDateRange(dateFrom, dateTo);
 
-  const statement = dateFrom && dateTo
-    ? await fetchFioStatement(`${FIO_API_BASE}/periods/${token}/${dateFrom}/${dateTo}/transactions.json`)
-    : await fetchFioStatement(`${FIO_API_BASE}/last/${token}/transactions.json`);
-
-  if (statement.iban) storage.setAppSetting("payment_iban", statement.iban);
-  if (statement.currency) storage.setAppSetting("payment_currency", statement.currency.toUpperCase());
-  if (typeof statement.closingBalance === "number" && Number.isFinite(statement.closingBalance)) {
-    storage.setAppSetting("fio_account_balance", String(statement.closingBalance));
-    storage.setAppSetting("fio_balance_updated_at", new Date().toISOString());
+  const automaticSync = !dateFrom && !dateTo;
+  const range = automaticSync ? getAutomaticFioSyncRange() : { dateFrom: dateFrom!, dateTo: dateTo! };
+  const statement = await fetchFioStatement(
+    `${FIO_API_BASE}/periods/${token}/${range.dateFrom}/${range.dateTo}/transactions.json`,
+  );
+  const accountCurrency = statement.currency?.trim().toUpperCase();
+  if (!accountCurrency || !/^[A-Z]{3}$/.test(accountCurrency)) {
+    throw new FioSyncError("Fio statement contains an invalid account currency", 502);
   }
 
   let synced = 0;
   let matched = 0;
+  const rejectedTransactions: Array<{ transactionId: string; currency: string }> = [];
 
   for (const { normalized, raw } of statement.transactions) {
+    const unsupportedCurrency = accountCurrency !== FIO_SUPPORTED_CURRENCY
+      || normalized.currency !== FIO_SUPPORTED_CURRENCY;
+    const counterparty = normalizeCounterpartyAccount(
+      normalized.counterAccount,
+      normalized.counterBankCode,
+    );
     const memo = normalized.recipientMessage
       ?? normalized.userIdentification
       ?? normalized.comment
@@ -285,19 +189,66 @@ export async function syncFioTransactions(
       currency: normalized.currency,
       date: normalized.date,
       payerName: normalized.counterName ?? normalized.userIdentification,
-      payerIban: normalized.counterAccount,
+      payerAccount: counterparty.account,
+      payerBankCode: counterparty.bankCode,
+      payerIban: counterparty.iban,
       variableSymbol: normalized.variableSymbol,
       constantSymbol: normalized.constantSymbol,
       memo,
-      syncError: normalized.currency === "CZK" ? null : "unsupported_currency",
+      syncError: unsupportedCurrency ? "unsupported_currency" : null,
       rawData: JSON.stringify({ normalized, raw }),
       matchedPaymentId: null,
       syncedAt: new Date().toISOString(),
     });
     if (result.created) synced++;
     if (result.matched) matched++;
+    if (result.created && unsupportedCurrency) {
+      rejectedTransactions.push({
+        transactionId: normalized.transactionId,
+        currency: normalized.currency,
+      });
+    }
   }
 
+  if (accountCurrency === FIO_SUPPORTED_CURRENCY) {
+    if (statement.iban) storage.setAppSetting("payment_iban", statement.iban);
+    storage.setAppSetting("payment_currency", FIO_SUPPORTED_CURRENCY);
+    if (typeof statement.closingBalance === "number" && Number.isFinite(statement.closingBalance)) {
+      storage.setAppSetting("fio_account_balance", String(statement.closingBalance));
+      storage.setAppSetting("fio_balance_updated_at", new Date().toISOString());
+    }
+    if (automaticSync) storage.setAppSetting("fio_sync_cursor_date", range.dateTo);
+  }
+
+  if (accountCurrency !== FIO_SUPPORTED_CURRENCY) {
+    const message = `Fio account currency ${accountCurrency} is not supported; only CZK accounts can be synchronized`;
+    recordFioSyncError(message, {
+      accountCurrency,
+      accountIban: statement.iban ?? null,
+      dateFrom: range.dateFrom,
+      dateTo: range.dateTo,
+      rejectedTransactions,
+    });
+    throw new FioSyncError(message, 422);
+  }
+
+  if (rejectedTransactions.length > 0) {
+    const currencies = Array.from(new Set(
+      rejectedTransactions.map(transaction => transaction.currency),
+    )).join(", ");
+    const message = `${rejectedTransactions.length} non-CZK Fio transaction(s) were logged but rejected (${currencies})`;
+    recordFioSyncError(message, {
+      accountCurrency,
+      dateFrom: range.dateFrom,
+      dateTo: range.dateTo,
+      rejectedTransactions,
+    });
+    throw new FioSyncError(message, 422);
+  }
+
+  storage.setAppSetting("fio_last_sync", new Date().toISOString());
+  storage.setAppSetting("fio_last_sync_error", "");
+  storage.setAppSetting("fio_last_sync_error_data", "");
   return { synced, matched, accountBalance: statement.closingBalance };
 }
 

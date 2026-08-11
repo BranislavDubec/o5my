@@ -19,6 +19,10 @@ import type {
 import { db } from "./db";
 import { createPaymentWithWalletInTransaction } from "./helpers";
 
+function variableSymbolForMatching(value: string): string {
+  return value.replace(/^0+(?=\d)/, "");
+}
+
 export class PaymentsStore {
   // ============ PAYMENTS ============
   getPayment(id: number): Payment | undefined {
@@ -101,15 +105,29 @@ export class PaymentsStore {
       const existing = database.select().from(bankTransactions)
         .where(eq(bankTransactions.transactionId, tx.transactionId))
         .get();
-      if (existing) return { transaction: existing, created: false, matched: false };
+      if (existing) {
+        const transaction = database.update(bankTransactions)
+          .set({
+            payerName: tx.payerName,
+            payerAccount: tx.payerAccount,
+            payerBankCode: tx.payerBankCode,
+            payerIban: tx.payerIban,
+            rawData: tx.rawData,
+          })
+          .where(eq(bankTransactions.id, existing.id))
+          .returning()
+          .get();
+        return { transaction, created: false, matched: false };
+      }
 
       let matchedPaymentId: number | null = null;
       let syncError = tx.syncError;
 
       if (!syncError && tx.amount > 0 && tx.currency === "CZK" && tx.variableSymbol) {
+        const matchingVariableSymbol = variableSymbolForMatching(tx.variableSymbol);
         const pendingPayment = database.select().from(payments)
           .where(and(
-            eq(payments.variableSymbol, tx.variableSymbol),
+            eq(payments.variableSymbol, matchingVariableSymbol),
             ne(payments.status, "paid"),
           ))
           .get();
