@@ -47,6 +47,52 @@ test("stores the domestic counter-account separately and derives its Czech IBAN"
   );
 });
 
+test("parses Fio's compact timezone bank date", async () => {
+  const { normalizeFioTransaction } = await fioModule;
+  const transaction = normalizeFioTransaction({
+    column22: { value: 27676081291 },
+    column0: { value: "2026-06-08+0200" },
+    column1: { value: 100 },
+    column14: { value: "CZK" },
+  });
+
+  assert.equal(transaction.date, "2026-06-07T22:00:00.000Z");
+});
+
+test("parses Fio dates with colon offsets and string epoch milliseconds", async () => {
+  const { normalizeFioTransaction } = await fioModule;
+  const withOffset = normalizeFioTransaction({
+    column22: { value: 27676081292 },
+    column0: { value: "2026-01-15+01:00" },
+    column1: { value: 100 },
+    column14: { value: "CZK" },
+  });
+  const withStringTimestamp = normalizeFioTransaction({
+    column22: { value: 27676081293 },
+    column0: { value: "1343685600000" },
+    column1: { value: 100 },
+    column14: { value: "CZK" },
+  });
+
+  assert.equal(withOffset.date, "2026-01-14T23:00:00.000Z");
+  assert.equal(withStringTimestamp.date, "2012-07-30T22:00:00.000Z");
+});
+
+test("rejects impossible Fio calendar dates", async () => {
+  const { FioSyncError, normalizeFioTransaction } = await fioModule;
+
+  assert.throws(
+    () => normalizeFioTransaction({
+      column22: { value: 27676081294 },
+      column0: { value: "2026-02-30+0100" },
+      column1: { value: 100 },
+      column14: { value: "CZK" },
+    }),
+    (error: unknown) => error instanceof FioSyncError
+      && error.message === "Fio transaction 27676081294 contains an invalid date",
+  );
+});
+
 test("automatic Fio sync becomes due seven days after the last successful sync", () => {
   const lastSync = "2026-08-01T12:00:00.000Z";
   const lastSyncTime = Date.parse(lastSync);
