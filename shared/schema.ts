@@ -275,6 +275,9 @@ export const bankTransactions = sqliteTable("bank_transactions", {
   syncError: text("sync_error"),
   rawData: text("raw_data"),
   matchedPaymentId: integer("matched_payment_id").references(() => payments.id),
+  reconciledUserId: integer("reconciled_user_id").references(() => users.id),
+  reconciledBy: integer("reconciled_by").references(() => users.id),
+  reconciledAt: text("reconciled_at"),
   syncedAt: text("synced_at").notNull().$defaultFn(() => new Date().toISOString()),
 });
 

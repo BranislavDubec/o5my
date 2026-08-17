@@ -132,6 +132,7 @@ export default function AdminPayments() {
       queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
       toast({ title: t("adminPayments.statusUpdated") });
     },
+    onError: (err: any) => toast({ title: t("common.error"), description: err.message, variant: "destructive" }),
   });
 
   const deleteMutation = useMutation({
@@ -144,6 +145,7 @@ export default function AdminPayments() {
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
       toast({ title: t("adminPayments.paymentDeleted") });
     },
+    onError: (err: any) => toast({ title: t("common.error"), description: err.message, variant: "destructive" }),
   });
 
   const handleSubmit = (e: React.FormEvent) => {

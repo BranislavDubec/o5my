@@ -1,5 +1,6 @@
-import type { Express } from "express";
+import type { Express, Response } from "express";
 import { storage } from "../storage";
+import { BankReconciliationError } from "../storage/payments";
 import { requireAuth, requireAdmin } from "../auth";
 import { insertPaymentSchema, type Payment } from "@shared/schema";
 import { FioSyncError, syncFioTransactions } from "../fio-api";
@@ -59,6 +60,14 @@ function getPaymentNotificationContent(payment: Payment, currency: string) {
     heading: "Nová platba",
     buttonLabel: "Zobraziť platbu a QR kód",
   };
+}
+
+function sendBankReconciliationError(res: Response, error: unknown) {
+  if (error instanceof BankReconciliationError) {
+    return res.status(error.statusCode).json({ message: error.message, code: error.code });
+  }
+  console.error("Bank transaction reconciliation failed", error);
+  return res.status(500).json({ message: "Bankovú transakciu sa nepodarilo spracovať" });
 }
 
 export function registerPaymentsRoutes(app: Express) {
@@ -234,14 +243,22 @@ export function registerPaymentsRoutes(app: Express) {
     if (existingPayment.walletAppliedAmount >= existingPayment.amount && status !== "paid") {
       return res.status(400).json({ message: "Platba bola celá uhradená z peňaženky" });
     }
-    const payment = storage.updatePaymentStatus(paymentId, status);
-    if (!payment) return res.status(404).json({ message: "Platba nenájdená" });
-    res.json(payment);
+    try {
+      const payment = storage.updatePaymentStatus(paymentId, status);
+      if (!payment) return res.status(404).json({ message: "Platba nenájdená" });
+      res.json(payment);
+    } catch (error) {
+      sendBankReconciliationError(res, error);
+    }
   });
 
   app.delete("/api/payments/:id", requireAdmin, (req, res) => {
-    storage.deletePayment(Number(req.params.id));
-    res.json({ message: "Platba zmazaná" });
+    try {
+      storage.deletePayment(Number(req.params.id));
+      res.json({ message: "Platba zmazaná" });
+    } catch (error) {
+      sendBankReconciliationError(res, error);
+    }
   });
 
   // ============ BANK (Admin) ============
@@ -249,6 +266,36 @@ export function registerPaymentsRoutes(app: Express) {
     const limit = parseInt(req.query.limit as string) || 50;
     const transactions = storage.getAllBankTransactions(limit);
     res.json(transactions);
+  });
+
+  app.post("/api/bank/transactions/:id/reconcile", requireAdmin, (req, res) => {
+    const bankTransactionId = Number(req.params.id);
+    const userId = Number(req.body?.userId);
+    const rawPaymentId = req.body?.paymentId;
+    const paymentId = rawPaymentId === undefined || rawPaymentId === null || rawPaymentId === ""
+      ? undefined
+      : Number(rawPaymentId);
+
+    try {
+      const result = storage.reconcileBankTransaction({
+        bankTransactionId,
+        userId,
+        paymentId,
+        actorId: req.user!.id,
+      });
+      res.json(result);
+    } catch (error) {
+      sendBankReconciliationError(res, error);
+    }
+  });
+
+  app.post("/api/bank/transactions/retry-matching", requireAdmin, (_req, res) => {
+    try {
+      res.json(storage.retryUnmatchedBankTransactions());
+    } catch (error) {
+      console.error("Retrying bank transaction matching failed", error);
+      res.status(500).json({ message: "Opakované párovanie bankových transakcií zlyhalo" });
+    }
   });
 
   app.get("/api/cashbox", requireAdmin, (_req, res) => {
@@ -378,21 +425,26 @@ export function registerPaymentsRoutes(app: Express) {
   });
 
   app.put("/api/bank/transactions/:id/match", requireAdmin, (req, res) => {
-    const { paymentId } = req.body;
-    const txId = Number(req.params.id);
-    if (paymentId) {
-      const pid = parseInt(paymentId);
-      storage.updateBankTransactionMatch(txId, pid);
-      storage.updatePaymentStatus(pid, 'paid');
-    } else {
-      // Unmatch
-      const transactions = storage.getAllBankTransactions();
-      const tx = transactions.find(t => t.id === txId);
-      if (tx?.matchedPaymentId) {
-        storage.updatePaymentStatus(tx.matchedPaymentId, 'pending');
-        storage.updateBankTransactionMatch(txId, null);
-      }
+    const paymentId = Number(req.body?.paymentId);
+    const payment = Number.isInteger(paymentId) && paymentId > 0
+      ? storage.getPayment(paymentId)
+      : undefined;
+    if (!payment) {
+      return res.status(400).json({
+        message: "Zrušenie spárovania nie je podporované; vyber platbu na bezpečné spracovanie",
+      });
     }
-    res.json({ message: "Transakcia aktualizovaná" });
+
+    try {
+      const result = storage.reconcileBankTransaction({
+        bankTransactionId: Number(req.params.id),
+        userId: payment.userId,
+        paymentId: payment.id,
+        actorId: req.user!.id,
+      });
+      res.json(result);
+    } catch (error) {
+      sendBankReconciliationError(res, error);
+    }
   });
 }

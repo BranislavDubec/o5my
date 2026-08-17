@@ -63,6 +63,30 @@ export type MatchResultWithPlayers = MatchResult & {
 
 export type MatchOutcome = "W" | "D" | "L";
 
+export interface ReconcileBankTransactionInput {
+  bankTransactionId: number;
+  userId: number;
+  paymentId?: number;
+  actorId: number;
+}
+
+export type ImportedBankTransaction = Omit<
+  BankTransaction,
+  "id" | "reconciledUserId" | "reconciledBy" | "reconciledAt"
+>;
+
+export interface ReconcileBankTransactionResult {
+  transaction: BankTransaction;
+  payment: Payment | null;
+  /** Amount newly credited to the user's wallet, in whole CZK. */
+  walletCredit: number;
+}
+
+export interface RetryBankTransactionMatchingResult {
+  checked: number;
+  matched: number;
+}
+
 export interface TeamVenueStats {
   played: number;
   wins: number;
@@ -187,12 +211,13 @@ export interface IStorage {
   // Bank Transactions
   getAllBankTransactions(limit?: number): BankTransaction[];
   getUnmatchedBankTransactions(): BankTransaction[];
-  importBankTransaction(tx: Omit<BankTransaction, 'id'>): {
+  importBankTransaction(tx: ImportedBankTransaction): {
     transaction: BankTransaction;
     created: boolean;
     matched: boolean;
   };
-  updateBankTransactionMatch(id: number, paymentId: number | null): void;
+  reconcileBankTransaction(input: ReconcileBankTransactionInput): ReconcileBankTransactionResult;
+  retryUnmatchedBankTransactions(): RetryBankTransactionMatchingResult;
 
   // User wallets
   getWalletBalance(userId: number): number;
