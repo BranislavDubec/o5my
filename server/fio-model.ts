@@ -120,6 +120,52 @@ function validateSymbol(value: string | null, label: string, maxLength: number):
   return value;
 }
 
+function isValidCalendarDate(year: number, month: number, day: number): boolean {
+  const candidate = new Date(0);
+  candidate.setUTCHours(0, 0, 0, 0);
+  candidate.setUTCFullYear(year, month - 1, day);
+  return candidate.getUTCFullYear() === year
+    && candidate.getUTCMonth() === month - 1
+    && candidate.getUTCDate() === day;
+}
+
+function parseFioTransactionDate(value: number | string): string | null {
+  if (typeof value === "number") {
+    if (!Number.isSafeInteger(value)) return null;
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date.toISOString();
+  }
+
+  const normalized = value.trim();
+  if (/^-?\d+$/.test(normalized)) {
+    const timestamp = Number(normalized);
+    if (!Number.isSafeInteger(timestamp)) return null;
+    const date = new Date(timestamp);
+    return Number.isNaN(date.getTime()) ? null : date.toISOString();
+  }
+
+  // Fio documents the bank date as YYYY-MM-DD+GMT and currently returns
+  // compact offsets such as 2026-06-08+0200. Add the missing midnight time
+  // component and normalize the offset before parsing it as an instant.
+  const match = /^(\d{4})-(\d{2})-(\d{2})([+-])(\d{2}):?(\d{2})$/.exec(normalized);
+  if (!match) return null;
+
+  const [, yearText, monthText, dayText, sign, hourText, minuteText] = match;
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const offsetHour = Number(hourText);
+  const offsetMinute = Number(minuteText);
+  if (!isValidCalendarDate(year, month, day) || offsetHour > 23 || offsetMinute > 59) {
+    return null;
+  }
+
+  const date = new Date(
+    `${yearText}-${monthText}-${dayText}T00:00:00${sign}${hourText}:${minuteText}`,
+  );
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
 function modulo97(value: string): number {
   let remainder = 0;
   for (const character of value) {
@@ -176,8 +222,8 @@ export function normalizeFioTransaction(raw: FioRawTransaction): NormalizedFioTr
     throw new FioSyncError("Fio transaction contains an invalid transaction ID", 502);
   }
 
-  const date = new Date(raw.column0.value);
-  if (Number.isNaN(date.getTime())) {
+  const date = parseFioTransactionDate(raw.column0.value);
+  if (!date) {
     throw new FioSyncError(`Fio transaction ${transactionIdValue} contains an invalid date`, 502);
   }
 
@@ -198,7 +244,7 @@ export function normalizeFioTransaction(raw: FioRawTransaction): NormalizedFioTr
   return {
     transactionId: String(transactionIdValue),
     instructionId: columnText(raw.column17),
-    date: date.toISOString(),
+    date,
     amountMinor,
     currency,
     counterAccount: columnText(raw.column2),
