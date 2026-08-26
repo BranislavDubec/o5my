@@ -37,6 +37,7 @@ import OrganizationPage from "@/pages/organization";
 import StatisticsPage from "@/pages/statistics";
 import AdminMembers from "@/pages/admin-members";
 import AdminPayments from "@/pages/admin-payments";
+import AdminPaymentIdentity from "@/pages/admin-payment-identity";
 import AdminBank from "@/pages/admin-bank";
 import AdminNotifications from "@/pages/admin-notifications";
 import Settings from "@/pages/settings";
@@ -255,6 +256,12 @@ function AppRouter() {
       </Route>
       <Route path="/admin/payments">
         <ProtectedRoute requiredRole="admin"><AdminPayments /></ProtectedRoute>
+      </Route>
+      <Route path="/admin/payments/unassigned">
+        <ProtectedRoute requiredRole="admin"><AdminPaymentIdentity unassigned /></ProtectedRoute>
+      </Route>
+      <Route path="/admin/payments/identity/:identity">
+        <ProtectedRoute requiredRole="admin"><AdminPaymentIdentity /></ProtectedRoute>
       </Route>
       <Route path="/admin/bank">
         <ProtectedRoute requiredRole="admin"><AdminBank /></ProtectedRoute>
