@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
@@ -12,28 +12,11 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Trash2, CreditCard, QrCode, Search, X } from "lucide-react";
+import { Plus, CreditCard, Search, X, CheckCircle2, Clock, AlertCircle, ChevronRight, Users } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { sk as skLocale, cs as csLocale, enUS as enLocale } from "date-fns/locale";
 import { useI18n } from "@/lib/i18n";
-
-interface PaymentWithUser {
-  id: number;
-  userId: number;
-  amount: number;
-  fullPrice: number;
-  identity: string | null;
-  walletAppliedAmount: number;
-  dueDate: string;
-  variableSymbol: string | null;
-  description: string;
-  status: string;
-  user: { id: number; name: string };
-}
-
-function getOutstandingAmount(payment: PaymentWithUser) {
-  return Math.max(0, payment.amount - payment.walletAppliedAmount);
-}
+import { groupPaymentsByIdentity, type PaymentWithUser } from "@/lib/payment-identities";
 
 interface UserItem {
   id: number;
@@ -56,9 +39,7 @@ export default function AdminPayments() {
     description: "",
     identity: "",
   });
-  const [userFilter, setUserFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [identityFilter, setIdentityFilter] = useState("all");
   const [searchFilter, setSearchFilter] = useState("");
   const dateLocale = lang === "sk" ? skLocale : lang === "cz" ? csLocale : enLocale;
   const sortLang = lang === "cz" ? "cs" : lang;
@@ -74,23 +55,19 @@ export default function AdminPayments() {
     .filter(user => user.isActive && user.emailVerified)
     .sort((a, b) => a.name.localeCompare(b.name, sortLang));
   const activePlayers = allPlayers.filter(user => user.isPlayerActive);
-  const paymentUsers = Array.from(
-    new Map(payments.map(payment => [payment.user.id, payment.user])).values(),
-  ).sort((a, b) => a.name.localeCompare(b.name, sortLang));
   const paymentIdentities = Array.from(
     new Set(payments.map(payment => payment.identity?.trim()).filter((value): value is string => !!value)),
   ).sort((a, b) => a.localeCompare(b, sortLang));
 
+  const groups = groupPaymentsByIdentity(payments);
   const normalizedSearch = searchFilter.trim().toLocaleLowerCase(sortLang);
-  const filteredPayments = payments.filter(payment => {
-    if (userFilter !== "all" && payment.userId !== Number(userFilter)) return false;
-    if (statusFilter !== "all" && payment.status !== statusFilter) return false;
-    if (identityFilter !== "all" && (payment.identity ?? "") !== identityFilter) return false;
+  const filteredGroups = groups.filter(group => {
+    if (statusFilter !== "all" && group.status !== statusFilter) return false;
     if (!normalizedSearch) return true;
-    return [payment.user.name, payment.description, payment.variableSymbol ?? "", payment.identity ?? ""]
+    return [group.identity ?? t("adminPayments.noIdentity"), ...group.payments.flatMap(p => [p.description, p.user.name])]
       .some(value => value.toLocaleLowerCase(sortLang).includes(normalizedSearch));
   });
-  const filtersActive = userFilter !== "all" || statusFilter !== "all" || identityFilter !== "all" || normalizedSearch.length > 0;
+  const filtersActive = statusFilter !== "all" || normalizedSearch.length > 0;
 
   const selectedCount = form.userIds.length;
   const enteredPrice = Number(form.price);
@@ -128,31 +105,6 @@ export default function AdminPayments() {
     onError: (err: any) => toast({ title: t("common.error"), description: err.message, variant: "destructive" }),
   });
 
-  const updateStatusMutation = useMutation({
-    mutationFn: ({ id, status }: { id: number; status: string }) =>
-      apiRequest("PUT", `/api/payments/${id}`, { status }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/payments/all"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/payments"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
-      toast({ title: t("adminPayments.statusUpdated") });
-    },
-    onError: (err: any) => toast({ title: t("common.error"), description: err.message, variant: "destructive" }),
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: (id: number) => apiRequest("DELETE", `/api/payments/${id}`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/payments/all"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/payments"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/wallet"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
-      toast({ title: t("adminPayments.paymentDeleted") });
-    },
-    onError: (err: any) => toast({ title: t("common.error"), description: err.message, variant: "destructive" }),
-  });
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (form.userIds.length === 0) return;
@@ -175,21 +127,17 @@ export default function AdminPayments() {
     }));
   };
 
-  const statusBadge = (status: string) => {
-    switch (status) {
-      case "paid": return <Badge variant="default" className="bg-green-600">{t("payments.paid")}</Badge>;
-      case "overdue": return <Badge variant="destructive">{t("payments.overdue")}</Badge>;
-      default: return <Badge variant="secondary">{t("payments.pending")}</Badge>;
-    }
+  const statusConfig = {
+    paid: { label: t("adminPayments.everyonePaid"), variant: "default" as const, icon: CheckCircle2, color: "text-green-600 dark:text-green-400", className: "bg-green-600" },
+    pending: { label: t("adminPayments.awaitingPayment"), variant: "secondary" as const, icon: Clock, color: "text-yellow-600 dark:text-yellow-400", className: "" },
+    overdue: { label: t("payments.overdue"), variant: "destructive" as const, icon: AlertCircle, color: "text-red-600 dark:text-red-400", className: "" },
   };
 
-  const totalPaid = filteredPayments.filter(p => p.status === "paid").reduce((s, p) => s + p.amount, 0);
-  const totalPending = filteredPayments.filter(p => p.status === "pending").reduce((s, p) => s + getOutstandingAmount(p), 0);
+  const totalPaid = payments.filter(p => p.status === "paid").reduce((s, p) => s + p.amount, 0);
+  const totalPending = groups.reduce((s, group) => s + group.outstandingAmount, 0);
 
   const clearFilters = () => {
-    setUserFilter("all");
     setStatusFilter("all");
-    setIdentityFilter("all");
     setSearchFilter("");
   };
 
@@ -362,22 +310,22 @@ export default function AdminPayments() {
 
       <Card data-testid="payment-filters">
         <CardContent className="p-4 space-y-3">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label>{t("adminPayments.memberFilter")}</Label>
-              <Select value={userFilter} onValueChange={setUserFilter}>
-                <SelectTrigger data-testid="filter-payment-user">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">{t("adminPayments.allMembers")}</SelectItem>
-                  {paymentUsers.map(user => (
-                    <SelectItem key={user.id} value={String(user.id)}>{user.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+            <div className="flex-1 space-y-1.5">
+              <Label htmlFor="payment-search">{t("adminPayments.searchLabel")}</Label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  id="payment-search"
+                  value={searchFilter}
+                  onChange={event => setSearchFilter(event.target.value)}
+                  placeholder={t("adminPayments.searchIdentityPlaceholder")}
+                  className="pl-9"
+                  data-testid="filter-payment-search"
+                />
+              </div>
             </div>
-            <div className="space-y-1.5">
+            <div className="space-y-1.5 sm:w-56">
               <Label>{t("adminPayments.statusFilter")}</Label>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
                 <SelectTrigger data-testid="filter-payment-status">
@@ -385,37 +333,11 @@ export default function AdminPayments() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">{t("adminPayments.allStatuses")}</SelectItem>
-                  <SelectItem value="pending">{t("paymentDetail.pendingPay")}</SelectItem>
-                  <SelectItem value="paid">{t("payments.paid")}</SelectItem>
+                  <SelectItem value="paid">{t("adminPayments.everyonePaid")}</SelectItem>
+                  <SelectItem value="pending">{t("adminPayments.awaitingPayment")}</SelectItem>
                   <SelectItem value="overdue">{t("payments.overdue")}</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label>{t("adminPayments.identityFilter")}</Label>
-              <Select value={identityFilter} onValueChange={setIdentityFilter}>
-                <SelectTrigger data-testid="filter-payment-identity">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">{t("adminPayments.allIdentities")}</SelectItem>
-                  {paymentIdentities.map(identity => (
-                    <SelectItem key={identity} value={identity}>{identity}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                value={searchFilter}
-                onChange={event => setSearchFilter(event.target.value)}
-                placeholder={t("adminPayments.searchPlaceholder")}
-                className="pl-9"
-                data-testid="filter-payment-search"
-              />
             </div>
             {filtersActive && (
               <Button type="button" variant="ghost" size="sm" onClick={clearFilters} data-testid="button-clear-payment-filters">
@@ -424,7 +346,7 @@ export default function AdminPayments() {
             )}
           </div>
           <p className="text-xs text-muted-foreground">
-            {t("adminPayments.shownOf", { shown: filteredPayments.length, total: payments.length })}
+            {t("adminPayments.shownOfIdentities", { shown: filteredGroups.length, total: groups.length })}
           </p>
         </CardContent>
       </Card>
@@ -445,15 +367,15 @@ export default function AdminPayments() {
         </Card>
       </div>
 
-      {/* Payment List */}
-      {payments.length === 0 ? (
+      {/* Payment identities */}
+      {groups.length === 0 ? (
         <Card>
           <CardContent className="p-8 text-center">
             <CreditCard className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
             <p className="text-sm text-muted-foreground">{t("payments.none")}</p>
           </CardContent>
         </Card>
-      ) : filteredPayments.length === 0 ? (
+      ) : filteredGroups.length === 0 ? (
         <Card>
           <CardContent className="p-8 text-center">
             <Search className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
@@ -465,62 +387,53 @@ export default function AdminPayments() {
         </Card>
       ) : (
         <div className="space-y-2">
-          {filteredPayments.map(p => {
-            const outstandingAmount = getOutstandingAmount(p);
-            return <Card key={p.id} data-testid={`card-payment-${p.id}`}>
-              <CardContent className="p-3 flex items-center gap-3">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="font-medium text-sm">{p.user.name}</p>
-                    {statusBadge(p.status)}
-                    {p.identity && <Badge variant="outline" className="text-xs">{p.identity}</Badge>}
-                  </div>
-                  <div className="flex flex-wrap items-center gap-3 mt-1 text-xs text-muted-foreground">
-                    <span className="font-semibold text-foreground">{p.amount} Kč</span>
-                    {p.fullPrice > p.amount && <span>{t("adminPayments.fullPriceValue", { amount: p.fullPrice })}</span>}
-                    {p.walletAppliedAmount > 0 && (
-                      <span className="text-green-700 dark:text-green-400">{t("adminPayments.walletApplied", { amount: p.walletAppliedAmount })}</span>
-                    )}
-                    {p.walletAppliedAmount > 0 && outstandingAmount > 0 && (
-                      <span className="font-semibold text-yellow-700 dark:text-yellow-400">{t("payments.remaining", { amount: outstandingAmount })}</span>
-                    )}
-                    <span>{t("payments.due", { date: format(parseISO(p.dueDate), "d. MMM yyyy", { locale: dateLocale }) })}</span>
-                    {p.variableSymbol && <span>VS: {p.variableSymbol}</span>}
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-0.5">{p.description}</p>
-                </div>
-                <div className="flex flex-col gap-1 shrink-0">
-                  <Button variant="outline" size="sm" className="h-7 text-xs" asChild>
-                    <Link href={`/payments/${p.id}`} data-testid={`button-payment-detail-${p.id}`}>
-                      <QrCode className="w-3 h-3 mr-1" />{t("adminPayments.detailButton")}
-                    </Link>
-                  </Button>
-                  <Select
-                    value={p.status}
-                    onValueChange={v => updateStatusMutation.mutate({ id: p.id, status: v })}
-                    disabled={p.walletAppliedAmount >= p.amount}
-                  >
-                    <SelectTrigger className="h-7 text-xs w-28" data-testid={`select-status-${p.id}`}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="pending">{t("payments.pending")}</SelectItem>
-                      <SelectItem value="paid">{t("payments.paid")}</SelectItem>
-                      <SelectItem value="overdue">{t("payments.overdue")}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-xs text-destructive"
-                    onClick={() => { if (confirm(t("adminPayments.deleteConfirm"))) deleteMutation.mutate(p.id); }}
-                    data-testid={`button-delete-payment-${p.id}`}
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>;
+          {filteredGroups.map(group => {
+            const cfg = statusConfig[group.status];
+            const Icon = cfg.icon;
+            const dueLabel = group.dueDateFrom === group.dueDateTo
+              ? t("payments.due", { date: format(parseISO(group.dueDateTo), "d. MMM yyyy", { locale: dateLocale }) })
+              : t("adminPayments.dueRange", {
+                  from: format(parseISO(group.dueDateFrom), "d. MMM yyyy", { locale: dateLocale }),
+                  to: format(parseISO(group.dueDateTo), "d. MMM yyyy", { locale: dateLocale }),
+                });
+            return (
+              <Link key={group.href} href={group.href} data-testid={`link-payment-identity-${group.identity ?? "unassigned"}`}>
+                <Card className="cursor-pointer transition-colors hover:border-primary/50">
+                  <CardContent className="p-4 flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 bg-muted ${cfg.color}`}>
+                      <Icon className="w-5 h-5" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-medium text-sm">{group.identity ?? t("adminPayments.noIdentity")}</p>
+                        <Badge variant={cfg.variant} className={cfg.className} data-testid={`badge-identity-status-${group.identity ?? "unassigned"}`}>
+                          {group.status === "paid" ? cfg.label : t("adminPayments.paidProgress", { paid: group.paidCount, total: group.memberCount })}
+                        </Badge>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-3 mt-1 text-xs text-muted-foreground">
+                        <span className="inline-flex items-center gap-1">
+                          <Users className="w-3 h-3" />{t("adminPayments.memberCount", { count: group.memberCount })}
+                        </span>
+                        <span className="font-semibold text-foreground">{group.totalAmount} Kč</span>
+                        {group.outstandingAmount > 0 && (
+                          <span className="font-semibold text-yellow-700 dark:text-yellow-400">
+                            {t("payments.remaining", { amount: group.outstandingAmount })}
+                          </span>
+                        )}
+                        <span>{dueLabel}</span>
+                      </div>
+                      {group.status !== "paid" && (
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {t("adminPayments.unpaidMembers", { count: group.memberCount - group.paidCount })}
+                          {group.status === "overdue" && ` · ${t("payments.overdue")}`}
+                        </p>
+                      )}
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+                  </CardContent>
+                </Card>
+              </Link>
+            );
           })}
         </div>
       )}
