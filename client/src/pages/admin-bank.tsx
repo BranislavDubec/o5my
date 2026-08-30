@@ -36,6 +36,7 @@ interface BankUser {
   id: number;
   name: string;
   isActive: boolean;
+  emailVerified: boolean;
   walletBalance: number;
 }
 
@@ -280,7 +281,9 @@ export default function AdminBank() {
   const visibleTransactions = transactionFilter === "processing"
     ? filteredTransactions
     : filteredTransactions.slice(0, 20);
-  const sortedUsers = users.filter(user => user.isActive).sort((a, b) => a.name.localeCompare(b.name, localeTag));
+  const sortedUsers = users
+    .filter(user => user.isActive && user.emailVerified)
+    .sort((a, b) => a.name.localeCompare(b.name, localeTag));
   const eligiblePayments = payments
     .filter(payment => (
       payment.userId === Number(resolutionUserId)

@@ -295,8 +295,8 @@ export class PaymentsStore {
       const user = database.select().from(users)
         .where(eq(users.id, input.userId))
         .get() as User | undefined;
-      if (!user?.isActive) {
-        throw new BankReconciliationError("USER_NOT_FOUND", "Aktívny člen nebol nájdený", 404);
+      if (!user?.isActive || !user.emailVerified) {
+        throw new BankReconciliationError("USER_NOT_FOUND", "Aktívny overený člen nebol nájdený", 404);
       }
 
       let payment: Payment | null = null;

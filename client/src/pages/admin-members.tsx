@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Users, UserCheck, UserX, Shield, User as UserIcon, WalletCards } from "lucide-react";
+import { MailCheck, Shield, Swords, User as UserIcon, UserCheck, UserX, Users, WalletCards } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 import { useState } from "react";
 import { format, parseISO } from "date-fns";
@@ -21,6 +21,8 @@ interface UserItem {
   phone?: string | null;
   role: string;
   isActive: boolean;
+  isPlayerActive: boolean;
+  emailVerified: boolean;
   createdAt: string;
   walletBalance?: number;
   walletCurrency?: string;
@@ -66,6 +68,7 @@ export default function AdminMembers() {
       apiRequest("PUT", `/api/users/${id}/status`, { isActive }),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/statistics"] });
       queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
       toast({ title: variables.isActive ? t("adminMembers.userActivated") : t("adminMembers.userDeactivated") });
     },
@@ -74,13 +77,48 @@ export default function AdminMembers() {
     },
   });
 
+  const updatePlayerStatusMutation = useMutation({
+    mutationFn: ({ id, isPlayerActive }: { id: number; isPlayerActive: boolean }) =>
+      apiRequest("PUT", `/api/users/${id}/player-active`, { isPlayerActive }),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/statistics"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/events"] });
+      toast({
+        title: variables.isPlayerActive
+          ? t("adminMembers.playerActivated")
+          : t("adminMembers.playerDeactivated"),
+      });
+    },
+    onError: (err: any) => {
+      toast({ title: t("adminMembers.playerStatusChangeFailed"), description: err.message, variant: "destructive" });
+    },
+  });
+
+  const verifyEmailMutation = useMutation({
+    mutationFn: (id: number) => apiRequest("POST", `/api/users/${id}/verify-email`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/statistics"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
+      toast({ title: t("adminMembers.emailVerified") });
+    },
+    onError: (err: any) => {
+      toast({ title: t("adminMembers.emailVerificationFailed"), description: err.message, variant: "destructive" });
+    },
+  });
+
   const activeUserCount = users.filter(user => user.isActive).length;
+  const activePlayerCount = users.filter(user => user.isActive && user.isPlayerActive && (!isAdmin || user.emailVerified)).length;
 
   return (
     <div className="space-y-6 max-w-2xl">
       <div>
         <h1 className="font-serif text-xl font-bold">{t("adminMembers.title")}</h1>
-        <p className="text-sm text-muted-foreground mt-1">{t("adminMembers.activeOfTotal", { active: activeUserCount, total: users.length })}</p>
+        <p className="text-sm text-muted-foreground mt-1">
+          {t("adminMembers.statusSummary", { players: activePlayerCount, accounts: activeUserCount, total: users.length })}
+        </p>
       </div>
 
       {users.length === 0 ? (
@@ -107,6 +145,16 @@ export default function AdminMembers() {
                       <Badge variant="secondary" className="text-xs"><UserIcon className="w-3 h-3 mr-0.5" />{t("layout.rolePlayer")}</Badge>
                     )}
                     {!u.isActive && <Badge variant="outline" className="text-xs">{t("adminMembers.inactiveBadge")}</Badge>}
+                    {u.isPlayerActive === false && <Badge variant="secondary" className="text-xs">{t("adminMembers.playerInactiveBadge")}</Badge>}
+                    {u.emailVerified ? (
+                      <Badge variant="outline" className="text-xs text-emerald-700 dark:text-emerald-300" data-testid={`badge-email-verified-${u.id}`}>
+                        <MailCheck className="mr-1 h-3 w-3" />{t("adminMembers.emailVerifiedBadge")}
+                      </Badge>
+                    ) : isAdmin ? (
+                      <Badge variant="outline" className="text-xs text-amber-700 dark:text-amber-300" data-testid={`badge-email-unverified-${u.id}`}>
+                        {t("adminMembers.emailUnverifiedBadge")}
+                      </Badge>
+                    ) : null}
                   </div>
                   {isAdmin && u.email && <p className="text-xs text-muted-foreground truncate">{u.email}</p>}
                   {u.nickname && <p className="text-xs font-medium text-primary truncate">@{u.nickname}</p>}
@@ -147,6 +195,33 @@ export default function AdminMembers() {
                         </Button>
                       </DialogContent>
                     </Dialog>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-xs"
+                      disabled={updatePlayerStatusMutation.isPending}
+                      onClick={() => updatePlayerStatusMutation.mutate({ id: u.id, isPlayerActive: !u.isPlayerActive })}
+                      data-testid={`button-player-status-${u.id}`}
+                    >
+                      <Swords className="w-3 h-3 mr-1" />
+                      {u.isPlayerActive ? t("adminMembers.setPlayerInactive") : t("adminMembers.setPlayerActive")}
+                    </Button>
+                    {!u.emailVerified && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-xs"
+                        disabled={verifyEmailMutation.isPending}
+                        onClick={() => {
+                          if (confirm(t("adminMembers.verifyEmailConfirm", { name: u.name, email: u.email || "" }))) {
+                            verifyEmailMutation.mutate(u.id);
+                          }
+                        }}
+                        data-testid={`button-verify-email-${u.id}`}
+                      >
+                        <MailCheck className="w-3 h-3 mr-1" />{t("adminMembers.verifyEmail")}
+                      </Button>
+                    )}
                     {u.id !== currentUser?.id && (
                       <Button
                         variant={u.isActive ? "ghost" : "outline"}

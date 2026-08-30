@@ -6,6 +6,7 @@ export function registerDashboardRoutes(app: Express) {
   // ============ DASHBOARD STATS ============
   app.get("/api/stats", requireAuth, (req, res) => {
     const users = storage.getAllUsers();
+    const currentUser = users.find(user => user.id === req.user!.id);
     const events = storage.getAllEvents();
     const polls = storage.getAllPolls();
     const now = new Date().toISOString();
@@ -13,7 +14,9 @@ export function registerDashboardRoutes(app: Express) {
       .filter(event => event.startTime >= now)
       .map(event => ({
         ...event,
-        attendanceStatus: storage.getEventResponse(event.id, req.user!.id)?.status ?? null,
+        attendanceStatus: event.type === "match" && currentUser?.isPlayerActive !== true
+          ? "not_applicable"
+          : storage.getEventResponse(event.id, req.user!.id)?.status ?? null,
       }));
     const activePolls = polls.filter(poll => !poll.closesAt || poll.closesAt >= now);
     const outstandingPayments = storage
@@ -21,11 +24,11 @@ export function registerDashboardRoutes(app: Express) {
       .filter(payment => payment.status !== "paid");
 
     res.json({
-      playerCount: users.filter(user => user.isActive).length,
+      playerCount: users.filter(user => user.isActive && user.isPlayerActive && user.emailVerified).length,
       eventCount: events.length,
       upcomingEvents: upcomingEventsWithAttendance.slice(0, 5),
       unansweredEvents: upcomingEventsWithAttendance
-        .filter(event => !event.attendanceStatus)
+        .filter(event => !event.attendanceStatus && (currentUser?.isPlayerActive || event.type !== "match"))
         .slice(0, 5),
       activePolls: activePolls.length,
       unansweredPolls: activePolls

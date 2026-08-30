@@ -95,7 +95,7 @@ export function registerPaymentsRoutes(app: Express) {
     try {
       const data = insertPaymentSchema.parse(req.body);
       const user = storage.getUser(data.userId);
-      if (!user?.isActive) {
+      if (!user?.isActive || !user.emailVerified) {
         return res.status(404).json({ message: "Aktívny člen nebol nájdený" });
       }
       const payment = storage.createPayment({
@@ -159,7 +159,7 @@ export function registerPaymentsRoutes(app: Express) {
 
       const activeUsersById = new Map(
         storage.getAllUsers()
-          .filter(user => user.isActive)
+          .filter(user => user.isActive && user.emailVerified)
           .map(user => [user.id, user]),
       );
       const selectedUsers = userIds.map(userId => activeUsersById.get(userId));

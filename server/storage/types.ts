@@ -133,6 +133,7 @@ export interface IStorage {
   createUser(user: InsertUser): User;
   updateUserRole(id: number, role: string): User | undefined;
   updateUserActiveStatus(id: number, isActive: boolean): User | undefined;
+  updateUserPlayerStatus(id: number, isPlayerActive: boolean): User | undefined;
   updateUserTheme(id: number, theme: "light" | "dark"): User | undefined;
   updateUserProfile(id: number, firstName: string, lastName: string, nickname: string): User | undefined;
   updateUserPassword(id: number, password: string): User | undefined;

@@ -30,6 +30,7 @@ test("bank reconciliation is atomic, precise, idempotent, and retryable", async 
     name,
     role: "player",
     isActive,
+    emailVerified: true,
   }).returning().get();
 
   const createPayment = (userId: number, amount = 1_000) => store.createPayment({
@@ -79,6 +80,7 @@ test("bank reconciliation is atomic, precise, idempotent, and retryable", async 
       name: "Admin",
       role: "admin",
       isActive: true,
+      emailVerified: true,
     }).returning().get();
 
     const exactUser = createUser("Exact");

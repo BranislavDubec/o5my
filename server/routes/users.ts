@@ -1,6 +1,34 @@
 import type { Express } from "express";
 import { storage } from "../storage";
 import { requireAuth, requireAdmin } from "../auth";
+import { updateGoogleCalendarEventAttendance } from "../google-calendar";
+
+function refreshFutureMatchAttendance(userId: number) {
+  const now = Date.now();
+  const matches = storage.getAllEvents().filter(event => (
+    event.type === "match"
+    && Boolean(event.externalId)
+    && new Date(event.startTime).getTime() > now
+    && Boolean(storage.getEventResponse(event.id, userId))
+  ));
+
+  void (async () => {
+    for (const event of matches) {
+      const responses = storage.getEventResponses(event.id).filter(response => {
+        const user = storage.getUser(response.userId);
+        return user?.isActive === true && user.isPlayerActive && user.emailVerified;
+      });
+      try {
+        await updateGoogleCalendarEventAttendance(event, responses);
+      } catch (error: any) {
+        console.error(
+          `Failed to refresh Google Calendar attendance for event ${event.id}`,
+          error?.message || error,
+        );
+      }
+    }
+  })();
+}
 
 export function registerUsersRoutes(app: Express) {
   // ============ PLAYER STATISTICS ============
@@ -39,13 +67,15 @@ export function registerUsersRoutes(app: Express) {
     }
 
     res.json(allUsers
-      .filter(user => user.isActive)
+      .filter(user => user.isActive && user.emailVerified)
       .map(user => ({
         id: user.id,
         name: user.name,
         nickname: user.nickname,
         role: user.role,
         isActive: user.isActive,
+        isPlayerActive: user.isPlayerActive,
+        emailVerified: user.emailVerified,
         createdAt: user.createdAt,
       })));
   });
@@ -73,6 +103,42 @@ export function registerUsersRoutes(app: Express) {
 
     const user = storage.updateUserActiveStatus(userId, req.body.isActive);
     if (!user) return res.status(404).json({ message: "Používateľ nenájdený" });
+    refreshFutureMatchAttendance(userId);
+
+    const { password, ...safe } = user;
+    res.json(safe);
+  });
+
+  app.put("/api/users/:id/player-active", requireAdmin, (req, res) => {
+    const userId = Number(req.params.id);
+    if (!Number.isInteger(userId) || userId <= 0) {
+      return res.status(400).json({ message: "Neplatné ID používateľa" });
+    }
+    if (typeof req.body?.isPlayerActive !== "boolean") {
+      return res.status(400).json({ message: "Neplatný stav hráča" });
+    }
+
+    const user = storage.updateUserPlayerStatus(userId, req.body.isPlayerActive);
+    if (!user) return res.status(404).json({ message: "Používateľ nenájdený" });
+    refreshFutureMatchAttendance(userId);
+
+    const { password, ...safe } = user;
+    res.json(safe);
+  });
+
+  app.post("/api/users/:id/verify-email", requireAdmin, (req, res) => {
+    const userId = Number(req.params.id);
+    if (!Number.isInteger(userId) || userId <= 0) {
+      return res.status(400).json({ message: "Neplatné ID používateľa" });
+    }
+
+    const existing = storage.getUser(userId);
+    if (!existing) return res.status(404).json({ message: "Používateľ nenájdený" });
+
+    const user = existing.emailVerified ? existing : storage.markUserEmailVerified(userId);
+    if (!user) return res.status(404).json({ message: "Používateľ nenájdený" });
+    storage.deleteEmailVerificationTokens(userId);
+    if (!existing.emailVerified) refreshFutureMatchAttendance(userId);
 
     const { password, ...safe } = user;
     res.json(safe);

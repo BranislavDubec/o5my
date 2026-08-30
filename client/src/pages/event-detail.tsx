@@ -30,6 +30,7 @@ interface EventDetail {
   opponent: string | null;
   homeAway: string | null;
   source?: string | null;
+  canRespondToAttendance?: boolean;
   matchResult: MatchResult | null;
 }
 
@@ -53,6 +54,7 @@ interface AdminUser {
   id: number;
   name: string;
   isActive: boolean;
+  isPlayerActive: boolean;
   emailVerified: boolean;
 }
 
@@ -130,14 +132,24 @@ export default function EventDetailPage() {
     queryKey: ["/api/events", id],
   });
 
-  const { data: responses = [] } = useQuery<EventResponse[]>({
+  const { data: responses = [], isLoading: responsesLoading } = useQuery<EventResponse[]>({
     queryKey: ["/api/events", id, "responses"],
   });
 
-  const { data: adminUsers = [] } = useQuery<AdminUser[]>({
+  const { data: adminUsers = [], isLoading: adminUsersLoading } = useQuery<AdminUser[]>({
     queryKey: ["/api/users"],
     enabled: user?.role === "admin",
   });
+
+  const getEligibleResultUserIds = () => {
+    const eligibleIds = new Set(event?.matchResult?.players.map(player => player.userId) ?? []);
+    adminUsers.forEach(candidate => {
+      if (candidate.isActive && candidate.isPlayerActive && candidate.emailVerified) {
+        eligibleIds.add(candidate.id);
+      }
+    });
+    return eligibleIds;
+  };
 
   const respondMutation = useMutation({
     mutationFn: (data: { status: string; note?: string }) =>
@@ -148,6 +160,7 @@ export default function EventDetailPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
       toast({ title: t("eventDetail.attendanceUpdated") });
     },
+    onError: (error: Error) => toast({ title: t("common.error"), description: error.message, variant: "destructive" }),
   });
 
   const deleteMutation = useMutation({
@@ -180,13 +193,17 @@ export default function EventDetailPage() {
   });
 
   const saveResultMutation = useMutation({
-    mutationFn: () => apiRequest("PUT", `/api/events/${id}/result`, {
-      teamScore,
-      opponentScore,
-      notes: resultNotes,
-      players: Object.entries(resultPlayers)
-        .map(([userId, values]) => ({ userId: Number(userId), goals: values.goals, assists: values.assists, played: values.played })),
-    }),
+    mutationFn: () => {
+      const eligibleUserIds = getEligibleResultUserIds();
+      return apiRequest("PUT", `/api/events/${id}/result`, {
+        teamScore,
+        opponentScore,
+        notes: resultNotes,
+        players: Object.entries(resultPlayers)
+          .filter(([userId]) => eligibleUserIds.has(Number(userId)))
+          .map(([userId, values]) => ({ userId: Number(userId), goals: values.goals, assists: values.assists, played: values.played })),
+      });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/events", id] });
       queryClient.invalidateQueries({ queryKey: ["/api/events"] });
@@ -255,6 +272,7 @@ export default function EventDetailPage() {
   const openResultDialog = () => {
     if (!event) return;
     const values: Record<number, ResultPlayerValue> = {};
+    const eligibleUserIds = getEligibleResultUserIds();
     
     // If editing existing result, use existing player stats
     if (event.matchResult) {
@@ -264,7 +282,9 @@ export default function EventDetailPage() {
     } else {
       // Pre-populate with players who marked "Going" for attendance
       going.forEach(response => {
-        values[response.user.id] = { goals: 0, assists: 0, played: true };
+        if (eligibleUserIds.has(response.user.id)) {
+          values[response.user.id] = { goals: 0, assists: 0, played: true };
+        }
       });
     }
     
@@ -318,8 +338,9 @@ export default function EventDetailPage() {
   const goingUserIds = new Set(going.map(response => response.user.id));
   const existingResultUserIds = new Set(event.matchResult?.players.map(player => player.userId) ?? []);
   const resultUsers = adminUsers
-    .filter(resultUser => (resultUser.isActive && resultUser.emailVerified) || existingResultUserIds.has(resultUser.id))
+    .filter(resultUser => (resultUser.isActive && resultUser.isPlayerActive && resultUser.emailVerified) || existingResultUserIds.has(resultUser.id))
     .sort((first, second) => Number(goingUserIds.has(second.id)) - Number(goingUserIds.has(first.id)) || first.name.localeCompare(second.name, lang === "cz" ? "cs" : lang));
+  const canRespondToEvent = event.canRespondToAttendance !== false;
   const isWin = event.matchResult && event.matchResult.teamScore > event.matchResult.opponentScore;
   const isDraw = event.matchResult && event.matchResult.teamScore === event.matchResult.opponentScore;
   const resultLeftName = event.homeAway === "away" ? event.opponent || t("eventDetail.opponentFallback") : "O5MY";
@@ -410,7 +431,13 @@ export default function EventDetailPage() {
                 <Trophy className="w-4 h-4" />{t("eventDetail.resultTitle")}
               </CardTitle>
               {user?.role === "admin" && (
-                <Button variant="outline" size="sm" onClick={openResultDialog} data-testid="button-edit-result">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={openResultDialog}
+                  disabled={adminUsersLoading || responsesLoading}
+                  data-testid="button-edit-result"
+                >
                   <Pencil className="w-4 h-4 mr-1" />
                   {event.matchResult ? t("common.edit") : t("eventDetail.enterResult")}
                 </Button>
@@ -466,42 +493,50 @@ export default function EventDetailPage() {
           <CardTitle className="text-base">{t("eventDetail.myAttendance")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex gap-2" data-testid="attendance-buttons">
-            <Button
-              variant={myResponse?.status === "going" ? "default" : "outline"}
-              size="sm"
-              onClick={() => respondMutation.mutate({ status: "going", note })}
-              className="flex-1"
-              data-testid="button-going"
-            >
-              <Check className="w-4 h-4 mr-1" />{t("eventDetail.going")}
-            </Button>
-            <Button
-              variant={myResponse?.status === "maybe" ? "default" : "outline"}
-              size="sm"
-              onClick={() => respondMutation.mutate({ status: "maybe", note })}
-              className="flex-1"
-              data-testid="button-maybe"
-            >
-              <Minus className="w-4 h-4 mr-1" />{t("eventDetail.maybe")}
-            </Button>
-            <Button
-              variant={myResponse?.status === "not_going" ? "destructive" : "outline"}
-              size="sm"
-              onClick={() => respondMutation.mutate({ status: "not_going", note })}
-              className="flex-1"
-              data-testid="button-not-going"
-            >
-              <X className="w-4 h-4 mr-1" />{t("eventDetail.notGoing")}
-            </Button>
-          </div>
-          <Textarea
-            placeholder={t("eventDetail.notePlaceholder", { optional: t("common.optional") })}
-            value={note}
-            onChange={e => setNote(e.target.value)}
-            rows={2}
-            data-testid="input-attendance-note"
-          />
+          {canRespondToEvent ? (
+            <>
+              <div className="flex gap-2" data-testid="attendance-buttons">
+                <Button
+                  variant={myResponse?.status === "going" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => respondMutation.mutate({ status: "going", note })}
+                  className="flex-1"
+                  data-testid="button-going"
+                >
+                  <Check className="w-4 h-4 mr-1" />{t("eventDetail.going")}
+                </Button>
+                <Button
+                  variant={myResponse?.status === "maybe" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => respondMutation.mutate({ status: "maybe", note })}
+                  className="flex-1"
+                  data-testid="button-maybe"
+                >
+                  <Minus className="w-4 h-4 mr-1" />{t("eventDetail.maybe")}
+                </Button>
+                <Button
+                  variant={myResponse?.status === "not_going" ? "destructive" : "outline"}
+                  size="sm"
+                  onClick={() => respondMutation.mutate({ status: "not_going", note })}
+                  className="flex-1"
+                  data-testid="button-not-going"
+                >
+                  <X className="w-4 h-4 mr-1" />{t("eventDetail.notGoing")}
+                </Button>
+              </div>
+              <Textarea
+                placeholder={t("eventDetail.notePlaceholder", { optional: t("common.optional") })}
+                value={note}
+                onChange={e => setNote(e.target.value)}
+                rows={2}
+                data-testid="input-attendance-note"
+              />
+            </>
+          ) : (
+            <p className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground" data-testid="inactive-player-match-notice">
+              {t("eventDetail.inactivePlayerMatchNotice")}
+            </p>
+          )}
         </CardContent>
       </Card>
 

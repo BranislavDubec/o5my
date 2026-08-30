@@ -10,7 +10,7 @@ import {
 } from "../google-calendar";
 import { getUserEventDescription } from "../google-event-description";
 
-function parseMatchResult(body: unknown) {
+function parseMatchResult(body: unknown, existingPlayerIds: ReadonlySet<number> = new Set()) {
   const input = body && typeof body === "object" ? body as Record<string, unknown> : {};
   const parseCount = (value: unknown, label: string, maximum = 100) => {
     const parsed = Number(value);
@@ -46,9 +46,13 @@ function parseMatchResult(body: unknown) {
   }
   if (playersWithData.some(player => {
     const user = storage.getUser(player.userId);
-    return !user?.isActive || !user.emailVerified;
+    if (!user) return true;
+    // Keep historical match participants editable after their player/account
+    // status changes, but never allow an inactive player to be newly added.
+    if (existingPlayerIds.has(player.userId)) return false;
+    return !user.isActive || !user.isPlayerActive || !user.emailVerified;
   })) {
-    throw new Error("Hráči musia byť aktívnymi overenými používateľmi");
+    throw new Error("Do výsledku možno pridať iba aktívnych overených hráčov");
   }
   if (playersWithData.reduce((sum, player) => sum + player.goals, 0) > teamScore) {
     throw new Error("Súčet gólov hráčov nemôže byť vyšší ako skóre O5MY");
@@ -58,6 +62,33 @@ function parseMatchResult(body: unknown) {
   }
 
   return { teamScore, opponentScore, notes: notes || null, players: playersWithData };
+}
+
+function hasEventStarted(event: { startTime: string }) {
+  const startTime = new Date(event.startTime).getTime();
+  return Number.isFinite(startTime) && startTime <= Date.now();
+}
+
+function canUserRespondToAttendance(event: { type: string }, userId: number) {
+  if (event.type !== "match") return true;
+  const user = storage.getUser(userId);
+  return user?.isActive === true && user.isPlayerActive && user.emailVerified;
+}
+
+function getVisibleEventResponses(event: { id: number; type: string; startTime: string }) {
+  const responses = storage.getEventResponses(event.id);
+  if (event.type !== "match" || hasEventStarted(event)) return responses;
+  return responses.filter(response => {
+    const user = storage.getUser(response.userId);
+    return user?.isActive === true && user.isPlayerActive && user.emailVerified;
+  });
+}
+
+function getVisibleAttendanceStatus(event: { id: number; type: string; startTime: string }, userId: number) {
+  const storedStatus = storage.getEventResponse(event.id, userId)?.status ?? null;
+  if (canUserRespondToAttendance(event, userId)) return storedStatus;
+  if (hasEventStarted(event) && storedStatus) return storedStatus;
+  return "not_applicable";
 }
 
 // Resolves the opponents table link for a match event. An explicit
@@ -85,7 +116,8 @@ export function registerEventsRoutes(app: Express) {
     const allEvents = storage.getAllEvents();
     res.json(allEvents.map(event => ({
       ...event,
-      attendanceStatus: storage.getEventResponse(event.id, req.user!.id)?.status ?? null,
+      attendanceStatus: getVisibleAttendanceStatus(event, req.user!.id),
+      canRespondToAttendance: canUserRespondToAttendance(event, req.user!.id),
       matchResult: storage.getMatchResult(event.id) ?? null,
     })));
   });
@@ -95,7 +127,8 @@ export function registerEventsRoutes(app: Express) {
     const events = storage.getUpcomingEvents(limit);
     res.json(events.map(event => ({
       ...event,
-      attendanceStatus: storage.getEventResponse(event.id, req.user!.id)?.status ?? null,
+      attendanceStatus: getVisibleAttendanceStatus(event, req.user!.id),
+      canRespondToAttendance: canUserRespondToAttendance(event, req.user!.id),
       matchResult: storage.getMatchResult(event.id) ?? null,
     })));
   });
@@ -103,7 +136,12 @@ export function registerEventsRoutes(app: Express) {
   app.get("/api/events/:id", requireAuth, (req, res) => {
     const event = storage.getEvent(Number(req.params.id));
     if (!event) return res.status(404).json({ message: "Event nenájdený" });
-    res.json({ ...event, matchResult: storage.getMatchResult(event.id) ?? null });
+    res.json({
+      ...event,
+      attendanceStatus: getVisibleAttendanceStatus(event, req.user!.id),
+      canRespondToAttendance: canUserRespondToAttendance(event, req.user!.id),
+      matchResult: storage.getMatchResult(event.id) ?? null,
+    });
   });
 
   app.put("/api/events/:id/result", requireAdmin, (req, res) => {
@@ -113,7 +151,10 @@ export function registerEventsRoutes(app: Express) {
       const event = storage.getEvent(eventId);
       if (!event) return res.status(404).json({ message: "Event nenájdený" });
       if (event.type !== "match") return res.status(400).json({ message: "Výsledok možno zapísať iba k zápasu" });
-      const result = parseMatchResult(req.body);
+      const existingPlayerIds = new Set(
+        storage.getMatchResult(eventId)?.players.map(player => player.userId) ?? [],
+      );
+      const result = parseMatchResult(req.body, existingPlayerIds);
       res.json(storage.upsertMatchResult(
         eventId,
         result.teamScore,
@@ -222,8 +263,9 @@ export function registerEventsRoutes(app: Express) {
     if (event.externalId) {
       try {
         await updateGoogleCalendarEvent(event);
-        const responses = storage.getEventResponses(event.id);
-        if (responses.length > 0) {
+        const hasStoredResponses = storage.getEventResponses(event.id).length > 0;
+        const responses = getVisibleEventResponses(event);
+        if (hasStoredResponses) {
           await updateGoogleCalendarEventAttendance(event, responses);
         }
       } catch (googleErr: any) {
@@ -232,7 +274,13 @@ export function registerEventsRoutes(app: Express) {
       }
     }
 
-    res.json({ ...event, googleSyncWarning });
+    res.json({
+      ...event,
+      attendanceStatus: getVisibleAttendanceStatus(event, req.user!.id),
+      canRespondToAttendance: canUserRespondToAttendance(event, req.user!.id),
+      matchResult: storage.getMatchResult(event.id) ?? null,
+      googleSyncWarning,
+    });
   });
 
   app.delete("/api/events/:id", requireAuth, async (req, res) => {
@@ -258,8 +306,9 @@ export function registerEventsRoutes(app: Express) {
 
   // ============ EVENT RESPONSES (Attendance) ============
   app.get("/api/events/:id/responses", requireAuth, (req, res) => {
-    const responses = storage.getEventResponses(Number(req.params.id));
-    res.json(responses);
+    const event = storage.getEvent(Number(req.params.id));
+    if (!event) return res.status(404).json({ message: "Event nenájdený" });
+    res.json(getVisibleEventResponses(event));
   });
 
   app.post("/api/events/:id/responses", requireAuth, async (req, res) => {
@@ -273,6 +322,9 @@ export function registerEventsRoutes(app: Express) {
     if (!event) {
       return res.status(404).json({ message: "Event nenájdený" });
     }
+    if (!canUserRespondToAttendance(event, req.user!.id)) {
+      return res.status(403).json({ message: "Na zápas môžu reagovať iba aktívni hráči" });
+    }
 
     storage.upsertEventResponse({
       eventId,
@@ -285,7 +337,7 @@ export function registerEventsRoutes(app: Express) {
 
     void (async () => {
       try {
-        const responses = storage.getEventResponses(eventId);
+        const responses = getVisibleEventResponses(event);
         await updateGoogleCalendarEventAttendance(event, responses);
       } catch (googleErr: any) {
         console.error("Failed to update Google Calendar attendance", googleErr.message || googleErr);

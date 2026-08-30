@@ -75,11 +75,13 @@ export function registerNotificationsRoutes(app: Express) {
     const eligibleUsers = storage.getAllUsers().filter(user => user.isActive && user.emailVerified);
     let path = "/#/";
     let recipientIds: number[] = [];
+    let selectedEvent: ReturnType<typeof storage.getEvent>;
 
     if (context === "event") {
       const eventId = Number(req.body?.eventId);
       const event = Number.isInteger(eventId) ? storage.getEvent(eventId) : undefined;
       if (!event) return res.status(400).json({ message: "Vyber platný event" });
+      selectedEvent = event;
       path = `/#/events/${event.id}`;
     } else if (context === "payment") {
       path = "/#/payments";
@@ -98,6 +100,7 @@ export function registerNotificationsRoutes(app: Express) {
       }
       const eventId = Number(req.body?.eventId);
       recipientIds = eligibleUsers
+        .filter(user => selectedEvent?.type !== "match" || user.isPlayerActive)
         .filter(user => !storage.getEventResponse(eventId, user.id))
         .map(user => user.id);
     } else if (target === "unpaid") {

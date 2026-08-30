@@ -39,6 +39,8 @@ interface UserItem {
   id: number;
   name: string;
   isActive: boolean;
+  isPlayerActive: boolean;
+  emailVerified: boolean;
 }
 
 export default function AdminPayments() {
@@ -68,7 +70,10 @@ export default function AdminPayments() {
   const { data: users = [] } = useQuery<UserItem[]>({
     queryKey: ["/api/users"],
   });
-  const activeUsers = users.filter(user => user.isActive);
+  const allPlayers = users
+    .filter(user => user.isActive && user.emailVerified)
+    .sort((a, b) => a.name.localeCompare(b.name, sortLang));
+  const activePlayers = allPlayers.filter(user => user.isPlayerActive);
   const paymentUsers = Array.from(
     new Map(payments.map(payment => [payment.user.id, payment.user])).values(),
   ).sort((a, b) => a.name.localeCompare(b.name, sortLang));
@@ -205,18 +210,28 @@ export default function AdminPayments() {
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <Label>{t("adminPayments.membersSelected", { count: form.userIds.length })}</Label>
-                  <div className="flex items-center gap-1">
+                  <div className="flex flex-wrap items-center justify-end gap-1">
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
                       className="h-7 px-2 text-xs"
-                      onClick={() => setForm(previous => ({ ...previous, userIds: activeUsers.map(user => user.id) }))}
-                      disabled={activeUsers.length === 0 || form.userIds.length === activeUsers.length}
+                      onClick={() => setForm(previous => ({ ...previous, userIds: activePlayers.map(user => user.id) }))}
+                      disabled={activePlayers.length === 0}
                     >
-                      {t("adminPayments.selectAll")}
+                      {t("adminPayments.selectAllActivePlayers")}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs"
+                      onClick={() => setForm(previous => ({ ...previous, userIds: allPlayers.map(user => user.id) }))}
+                      disabled={allPlayers.length === 0}
+                    >
+                      {t("adminPayments.selectAllPlayers")}
                     </Button>
                     {form.userIds.length > 0 && (
                       <Button
@@ -232,9 +247,9 @@ export default function AdminPayments() {
                   </div>
                 </div>
                 <div className="max-h-48 space-y-1 overflow-y-auto rounded-md border p-2" data-testid="payment-user-list">
-                  {activeUsers.length === 0 ? (
-                    <p className="p-2 text-sm text-muted-foreground">{t("adminPayments.noActiveMembers")}</p>
-                  ) : activeUsers.map(user => {
+                  {allPlayers.length === 0 ? (
+                    <p className="p-2 text-sm text-muted-foreground">{t("adminPayments.noMembers")}</p>
+                  ) : allPlayers.map(user => {
                     const checkboxId = `payment-user-${user.id}`;
                     return (
                     <div key={user.id} className="flex items-center gap-3 rounded-md px-2 hover:bg-muted">
@@ -247,6 +262,9 @@ export default function AdminPayments() {
                       <Label htmlFor={checkboxId} className="flex-1 cursor-pointer py-2 font-normal">
                         {user.name}
                       </Label>
+                      {!user.isPlayerActive && (
+                        <Badge variant="secondary" className="text-[10px]">{t("adminPayments.inactivePlayer")}</Badge>
+                      )}
                     </div>
                     );
                   })}

@@ -14,6 +14,7 @@ export const users = sqliteTable("users", {
   phone: text("phone"),
   role: text("role").notNull().default("player"), // admin | player
   isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+  isPlayerActive: integer("is_player_active", { mode: "boolean" }).notNull().default(true),
   theme: text("theme").notNull().default("light"), // light | dark
   emailVerified: integer("email_verified", { mode: "boolean" }).notNull().default(false),
   passwordVersion: integer("password_version").notNull().default(0),

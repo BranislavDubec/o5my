@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 
 interface AuthUser {
   id: number;
@@ -11,6 +11,7 @@ interface AuthUser {
   phone: string | null;
   role: string;
   isActive: boolean;
+  isPlayerActive: boolean;
   theme: "light" | "dark";
   emailVerified: boolean;
   termsVersion: number;
@@ -45,6 +46,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (email: string, password: string) => {
     const res = await apiRequest("POST", "/api/auth/login", { email, password });
     const data = await res.json();
+    queryClient.clear();
     setUser(data);
   };
 
@@ -64,6 +66,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = async () => {
     await apiRequest("POST", "/api/auth/logout");
+    queryClient.clear();
     setUser(null);
   };
 

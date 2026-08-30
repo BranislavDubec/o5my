@@ -38,6 +38,10 @@ export class UsersStore {
     return db.update(users).set({ isActive }).where(eq(users.id, id)).returning().get();
   }
 
+  updateUserPlayerStatus(id: number, isPlayerActive: boolean): User | undefined {
+    return db.update(users).set({ isPlayerActive }).where(eq(users.id, id)).returning().get();
+  }
+
   updateUserTheme(id: number, theme: "light" | "dark"): User | undefined {
     return db.update(users).set({ theme }).where(eq(users.id, id)).returning().get();
   }
@@ -88,7 +92,7 @@ export class UsersStore {
         .map(row => [row.userId, row.count]),
     );
     return this.getAllUsers()
-      .filter(user => user.isActive && user.emailVerified)
+      .filter(user => user.isActive && user.isPlayerActive && user.emailVerified)
       .map(user => {
         const statistic = statisticsByUser.get(user.id);
         return {
@@ -105,7 +109,7 @@ export class UsersStore {
 
   adjustPlayerStatistics(userId: number, goalsDelta: number, assistsDelta: number): PlayerStatisticSummary | undefined {
     const user = this.getUser(userId);
-    if (!user?.isActive || !user.emailVerified) return undefined;
+    if (!user?.isActive || !user.isPlayerActive || !user.emailVerified) return undefined;
     const statistic = db.transaction(tx => {
       const existing = tx.select().from(playerStatistics).where(eq(playerStatistics.userId, userId)).get();
       const goals = (existing?.goals ?? 0) + goalsDelta;
