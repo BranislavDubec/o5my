@@ -210,7 +210,7 @@ export interface IStorage {
   getPendingPaymentsByVariableSymbol(vs: string): Payment[];
 
   // Bank Transactions
-  getAllBankTransactions(limit?: number): BankTransaction[];
+  getAllBankTransactions(limit?: number, fromDate?: string): BankTransaction[];
   getUnmatchedBankTransactions(): BankTransaction[];
   importBankTransaction(tx: ImportedBankTransaction): {
     transaction: BankTransaction;

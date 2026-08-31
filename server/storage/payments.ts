@@ -1,4 +1,4 @@
-import { eq, and, desc, gt, isNull, ne, or } from "drizzle-orm";
+import { eq, and, desc, gt, gte, isNull, ne, or } from "drizzle-orm";
 import {
   users,
   payments,
@@ -52,6 +52,86 @@ export class BankReconciliationError extends Error {
 
 function variableSymbolForMatching(value: string): string {
   return value.replace(/^0+(?=\d)/, "");
+}
+
+function normalizedPersonName(value: string | null | undefined): string {
+  if (!value) return "";
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("sk")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .sort()
+    .join(" ");
+}
+
+function findAutomaticPaymentMatch(
+  database: any,
+  transaction: Pick<BankTransaction, "amount" | "variableSymbol" | "payerName">,
+): { payment?: Payment; variableSymbolAmountMismatch: boolean } {
+  const alreadyMatchedPaymentIds = new Set(
+    (database.select({ paymentId: bankTransactions.matchedPaymentId })
+      .from(bankTransactions)
+      .all() as Array<{ paymentId: number | null }>)
+      .map(row => row.paymentId)
+      .filter((id): id is number => id !== null),
+  );
+  const unpaidPayments = (database.select().from(payments)
+    .where(ne(payments.status, "paid"))
+    .all() as Payment[])
+    .filter(payment => !alreadyMatchedPaymentIds.has(payment.id));
+  const exactAmountPayments = unpaidPayments.filter(payment => (
+    Math.max(0, payment.amount - payment.walletAppliedAmount) * 100 === transaction.amount
+  ));
+
+  const payerName = normalizedPersonName(transaction.payerName);
+  const usersById = new Map(
+    (database.select().from(users).all() as User[])
+      .filter(user => user.isActive && user.emailVerified)
+      .map(user => [user.id, user]),
+  );
+  const uniqueNameMatch = (candidates: Payment[]) => {
+    if (!payerName) return undefined;
+    const matches = candidates.filter(payment => {
+      const user = usersById.get(payment.userId);
+      return user ? normalizedPersonName(user.name) === payerName : false;
+    });
+    return matches.length === 1 ? matches[0] : undefined;
+  };
+
+  if (transaction.variableSymbol) {
+    const matchingVariableSymbol = variableSymbolForMatching(transaction.variableSymbol);
+    const variableSymbolPayments = unpaidPayments.filter(payment => (
+      payment.variableSymbol === matchingVariableSymbol
+    ));
+    const exactVariableSymbolPayments = variableSymbolPayments.filter(payment => (
+      Math.max(0, payment.amount - payment.walletAppliedAmount) * 100 === transaction.amount
+    ));
+
+    if (exactVariableSymbolPayments.length === 1) {
+      return { payment: exactVariableSymbolPayments[0], variableSymbolAmountMismatch: false };
+    }
+    if (exactVariableSymbolPayments.length > 1) {
+      return {
+        payment: uniqueNameMatch(exactVariableSymbolPayments),
+        variableSymbolAmountMismatch: false,
+      };
+    }
+
+    const payment = uniqueNameMatch(exactAmountPayments);
+    return {
+      payment,
+      variableSymbolAmountMismatch: variableSymbolPayments.length > 0 && !payment,
+    };
+  }
+
+  return {
+    payment: uniqueNameMatch(exactAmountPayments),
+    variableSymbolAmountMismatch: false,
+  };
 }
 
 export class PaymentsStore {
@@ -138,14 +218,16 @@ export class PaymentsStore {
   }
 
   // ============ BANK TRANSACTIONS ============
-  getAllBankTransactions(limit = 50): BankTransaction[] {
+  getAllBankTransactions(limit = 50, fromDate?: string): BankTransaction[] {
     const safeLimit = Number.isInteger(limit) ? Math.min(Math.max(limit, 1), 500) : 50;
     const recent = db.select().from(bankTransactions)
+      .where(fromDate ? gte(bankTransactions.date, fromDate) : undefined)
       .orderBy(desc(bankTransactions.date))
       .limit(safeLimit)
       .all();
     const actionable = db.select().from(bankTransactions)
       .where(and(
+        fromDate ? gte(bankTransactions.date, fromDate) : undefined,
         isNull(bankTransactions.matchedPaymentId),
         isNull(bankTransactions.reconciledAt),
         gt(bankTransactions.amount, 0),
@@ -200,34 +282,14 @@ export class PaymentsStore {
       if (!syncError
         && Number.isSafeInteger(tx.amount)
         && tx.amount > 0
-        && tx.currency === "CZK"
-        && tx.variableSymbol) {
-        const matchingVariableSymbol = variableSymbolForMatching(tx.variableSymbol);
-        const pendingPayment = database.select().from(payments)
-          .where(and(
-            eq(payments.variableSymbol, matchingVariableSymbol),
-            ne(payments.status, "paid"),
-          ))
-          .get();
-
-        if (pendingPayment) {
-          const existingPaymentMatch = database.select({ id: bankTransactions.id })
-            .from(bankTransactions)
-            .where(eq(bankTransactions.matchedPaymentId, pendingPayment.id))
-            .get();
-          if (!existingPaymentMatch) {
-            const outstandingMinor = Math.max(
-              0,
-              pendingPayment.amount - pendingPayment.walletAppliedAmount,
-            ) * 100;
-            if (tx.amount === outstandingMinor) {
-              matchedPaymentId = pendingPayment.id;
-              reconciledUserId = pendingPayment.userId;
-              reconciledAt = new Date().toISOString();
-            } else {
-              syncError = "amount_mismatch";
-            }
-          }
+        && tx.currency === "CZK") {
+        const match = findAutomaticPaymentMatch(database, tx);
+        if (match.payment) {
+          matchedPaymentId = match.payment.id;
+          reconciledUserId = match.payment.userId;
+          reconciledAt = new Date().toISOString();
+        } else if (match.variableSymbolAmountMismatch) {
+          syncError = "amount_mismatch";
         }
       }
 
@@ -402,27 +464,12 @@ export class PaymentsStore {
         if (!Number.isSafeInteger(transaction.amount)
           || transaction.amount <= 0
           || transaction.currency !== "CZK"
-          || !transaction.variableSymbol
           || (transaction.syncError !== null && transaction.syncError !== "amount_mismatch")) {
           continue;
         }
 
-        const matchingVariableSymbol = variableSymbolForMatching(transaction.variableSymbol);
-        const payment = database.select().from(payments)
-          .where(and(
-            eq(payments.variableSymbol, matchingVariableSymbol),
-            ne(payments.status, "paid"),
-          ))
-          .get() as Payment | undefined;
+        const payment = findAutomaticPaymentMatch(database, transaction).payment;
         if (!payment) continue;
-
-        const existingPaymentMatch = database.select().from(bankTransactions)
-          .where(eq(bankTransactions.matchedPaymentId, payment.id))
-          .get() as BankTransaction | undefined;
-        if (existingPaymentMatch) continue;
-
-        const outstandingMinor = Math.max(0, payment.amount - payment.walletAppliedAmount) * 100;
-        if (!Number.isSafeInteger(outstandingMinor) || transaction.amount !== outstandingMinor) continue;
 
         const reconciledAt = new Date().toISOString();
         database.update(payments)

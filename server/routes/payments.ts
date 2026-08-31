@@ -8,6 +8,10 @@ import { createPaymentQrPayload, isValidIban, normalizeIban } from "../payment-q
 import { notifyUsers } from "../notifications";
 import { syncGoogleCalendarEvents } from "../google-calendar";
 
+// Older imports remain in SQLite for audit/backup purposes but are intentionally
+// excluded from the operational Bank screen.
+const BANK_TRANSACTIONS_VISIBLE_FROM = "2026-08-01T00:00:00.000Z";
+
 function formatNotificationDate(value: string) {
   return new Intl.DateTimeFormat("sk-SK", {
     dateStyle: "medium",
@@ -315,7 +319,7 @@ export function registerPaymentsRoutes(app: Express) {
   // ============ BANK (Admin) ============
   app.get("/api/bank/transactions", requireAdmin, (req, res) => {
     const limit = parseInt(req.query.limit as string) || 50;
-    const transactions = storage.getAllBankTransactions(limit);
+    const transactions = storage.getAllBankTransactions(limit, BANK_TRANSACTIONS_VISIBLE_FROM);
     res.json(transactions);
   });
 

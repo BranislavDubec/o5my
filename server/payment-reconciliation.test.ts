@@ -46,13 +46,13 @@ test("bank reconciliation is atomic, precise, idempotent, and retryable", async 
 
   const createBankTransaction = (
     amount: number,
-    options: { variableSymbol?: string | null; syncError?: string | null } = {},
+    options: { variableSymbol?: string | null; syncError?: string | null; payerName?: string } = {},
   ) => db.insert(bankTransactions).values({
     transactionId: `bank-test-${++sequence}`,
     amount,
     currency: "CZK",
     date: "2026-08-17T10:00:00.000Z",
-    payerName: "Integration test payer",
+    payerName: options.payerName ?? "Integration test payer",
     payerAccount: "1234567890",
     payerBankCode: "2010",
     payerIban: "CZ0000000000000000000000",
@@ -237,7 +237,100 @@ test("bank reconciliation is atomic, precise, idempotent, and retryable", async 
     assert.equal(duplicateAutomaticResult.transaction.matchedPaymentId, null);
     db.update(payments).set({ status: "paid" }).where(eq(payments.id, automaticPayment.id)).run();
 
-    assert.equal(db.select().from(payments).all().filter(payment => payment.status === "paid").length, 4);
+    const nameMatchUser = createUser("Name Match");
+    const nameMatchPayment = createPayment(nameMatchUser.id);
+    const nameMatchResult = store.importBankTransaction({
+      transactionId: `bank-test-${++sequence}`,
+      amount: 100_000,
+      currency: "CZK",
+      date: "2026-08-17T12:00:00.000Z",
+      payerName: "MATCH NAME",
+      payerAccount: "1234567890",
+      payerBankCode: "2010",
+      payerIban: "CZ0000000000000000000000",
+      variableSymbol: null,
+      constantSymbol: null,
+      memo: null,
+      syncError: null,
+      rawData: "{}",
+      matchedPaymentId: null,
+      syncedAt: "2026-08-17T12:01:00.000Z",
+    });
+    assert.equal(nameMatchResult.matched, true);
+    assert.equal(nameMatchResult.transaction.matchedPaymentId, nameMatchPayment.id);
+
+    const wrongSymbolUser = createUser("Wrong Symbol");
+    const wrongSymbolPayment = createPayment(wrongSymbolUser.id);
+    const wrongSymbolResult = store.importBankTransaction({
+      transactionId: `bank-test-${++sequence}`,
+      amount: 100_000,
+      currency: "CZK",
+      date: "2026-08-17T12:05:00.000Z",
+      payerName: "SYMBOL WRONG",
+      payerAccount: "1234567890",
+      payerBankCode: "2010",
+      payerIban: "CZ0000000000000000000000",
+      variableSymbol: "999999",
+      constantSymbol: null,
+      memo: null,
+      syncError: null,
+      rawData: "{}",
+      matchedPaymentId: null,
+      syncedAt: "2026-08-17T12:06:00.000Z",
+    });
+    assert.equal(wrongSymbolResult.matched, true);
+    assert.equal(wrongSymbolResult.transaction.matchedPaymentId, wrongSymbolPayment.id);
+
+    const firstSharedUser = createUser("First Shared");
+    const secondSharedUser = createUser("Second Shared");
+    const firstSharedPayment = createPayment(firstSharedUser.id);
+    const secondSharedPayment = createPayment(secondSharedUser.id);
+    db.update(payments).set({ variableSymbol: "777" }).where(eq(payments.id, firstSharedPayment.id)).run();
+    db.update(payments).set({ variableSymbol: "777" }).where(eq(payments.id, secondSharedPayment.id)).run();
+    const sharedSymbolResult = store.importBankTransaction({
+      transactionId: `bank-test-${++sequence}`,
+      amount: 100_000,
+      currency: "CZK",
+      date: "2026-08-17T12:10:00.000Z",
+      payerName: "SHARED SECOND",
+      payerAccount: "1234567890",
+      payerBankCode: "2010",
+      payerIban: "CZ0000000000000000000000",
+      variableSymbol: "777",
+      constantSymbol: null,
+      memo: null,
+      syncError: null,
+      rawData: "{}",
+      matchedPaymentId: null,
+      syncedAt: "2026-08-17T12:11:00.000Z",
+    });
+    assert.equal(sharedSymbolResult.matched, true);
+    assert.equal(sharedSymbolResult.transaction.matchedPaymentId, secondSharedPayment.id);
+
+    const ambiguousUser = createUser("Ambiguous Person");
+    createPayment(ambiguousUser.id);
+    createPayment(ambiguousUser.id);
+    const ambiguousResult = store.importBankTransaction({
+      transactionId: `bank-test-${++sequence}`,
+      amount: 100_000,
+      currency: "CZK",
+      date: "2026-08-17T12:15:00.000Z",
+      payerName: "PERSON AMBIGUOUS",
+      payerAccount: "1234567890",
+      payerBankCode: "2010",
+      payerIban: "CZ0000000000000000000000",
+      variableSymbol: null,
+      constantSymbol: null,
+      memo: null,
+      syncError: null,
+      rawData: "{}",
+      matchedPaymentId: null,
+      syncedAt: "2026-08-17T12:16:00.000Z",
+    });
+    assert.equal(ambiguousResult.matched, false);
+    assert.equal(ambiguousResult.transaction.matchedPaymentId, null);
+
+    assert.equal(db.select().from(payments).all().filter(payment => payment.status === "paid").length, 7);
   } finally {
     sqlite.close();
     delete process.env.DATABASE_PATH;
