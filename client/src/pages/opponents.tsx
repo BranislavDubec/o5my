@@ -20,6 +20,7 @@ import {
 
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/contexts/auth-context";
+import { canManageTeam } from "@shared/roles";
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/lib/i18n";
 
@@ -51,7 +52,7 @@ export default function OpponentsPage() {
   const { t, lang } = useI18n();
   const queryClient = useQueryClient();
 
-  const isAdmin = user?.role === "admin";
+  const isAdmin = canManageTeam(user?.role);
 
   const [newOpponentName, setNewOpponentName] = useState("");
   const [editingOpponentId, setEditingOpponentId] = useState<number | null>(

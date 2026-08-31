@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/contexts/auth-context";
+import { canManageTeam } from "@shared/roles";
 import { useToast } from "@/hooks/use-toast";
 import { eventEndPrecedesStart, localEventTimeToIso } from "@/lib/event-time";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -138,7 +139,7 @@ export default function EventDetailPage() {
 
   const { data: adminUsers = [], isLoading: adminUsersLoading } = useQuery<AdminUser[]>({
     queryKey: ["/api/users"],
-    enabled: user?.role === "admin",
+    enabled: canManageTeam(user?.role),
   });
 
   const getEligibleResultUserIds = () => {
@@ -377,7 +378,7 @@ export default function EventDetailPage() {
             <ArrowLeft className="w-4 h-4 mr-1" />{t("common.back")}
           </Button>
         </Link>
-        {user?.role === "admin" && (
+        {canManageTeam(user?.role) && (
           <Button variant="outline" size="sm" onClick={openEditDialog} data-testid="button-edit-event">
             <Pencil className="w-4 h-4 mr-1" />{t("common.edit")}
           </Button>
@@ -430,7 +431,7 @@ export default function EventDetailPage() {
               <CardTitle className="text-base flex items-center gap-2">
                 <Trophy className="w-4 h-4" />{t("eventDetail.resultTitle")}
               </CardTitle>
-              {user?.role === "admin" && (
+              {canManageTeam(user?.role) && (
                 <Button
                   variant="outline"
                   size="sm"
@@ -887,7 +888,7 @@ export default function EventDetailPage() {
         </DialogContent>
       </Dialog>
 
-      {user?.role === "admin" && (
+      {canManageTeam(user?.role) && (
         <Button
           variant="outline"
           size="sm"

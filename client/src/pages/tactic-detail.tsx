@@ -6,6 +6,7 @@ import { sk as skLocale, cs as csLocale, enUS as enLocale } from "date-fns/local
 import { useI18n } from "@/lib/i18n";
 import { ArrowDown, ArrowLeft, ArrowUp, FileText, FolderOpen, Pencil, Trash2 } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
+import { canManageTeam } from "@shared/roles";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -130,7 +131,7 @@ export default function TacticDetailPage() {
             <ArrowLeft className="w-4 h-4 mr-1" />{t("tacticDetail.backToFiles")}
           </Button>
         </Link>
-        {user?.role === "admin" && (
+        {canManageTeam(user?.role) && (
           <Button variant="outline" size="sm" onClick={openEdit}><Pencil className="w-4 h-4 mr-1" />{t("common.edit")}</Button>
         )}
       </div>
@@ -160,7 +161,7 @@ export default function TacticDetailPage() {
                 <span>{t("tacticDetail.fileXOfY", { index: index + 1, total: tactic.files.length })}</span>
                 <div className="flex items-center gap-2 min-w-0">
                   <span className="truncate">{file.originalName}</span>
-                  {user?.role === "admin" && (
+                  {canManageTeam(user?.role) && (
                     <Button
                       variant="ghost"
                       size="icon"

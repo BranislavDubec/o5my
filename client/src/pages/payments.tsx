@@ -25,6 +25,12 @@ interface WalletSummary {
   balance: number;
   currency: string;
   updatedAt: string | null;
+  transactions: Array<{
+    id: number;
+    amount: number;
+    description: string;
+    createdAt: string;
+  }>;
 }
 
 function formatWalletBalance(balance: number, currency: string, localeTag: string) {
@@ -90,6 +96,29 @@ export default function PaymentsPage() {
           <Badge variant="outline" className="hidden shrink-0 sm:inline-flex">{t("payments.readOnly")}</Badge>
         </CardContent>
       </Card>
+
+      {wallet && wallet.transactions.length > 0 && (
+        <Card data-testid="card-wallet-history">
+          <CardHeader>
+            <CardTitle className="text-base">{t("payments.walletHistory")}</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {wallet.transactions.slice(0, 10).map(transaction => (
+              <div key={transaction.id} className="flex items-start justify-between gap-3 rounded-lg border p-3">
+                <div className="min-w-0">
+                  <p className="break-words text-sm font-medium">{transaction.description}</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {format(parseISO(transaction.createdAt), "d. MMM yyyy HH:mm", { locale: dateLocale })}
+                  </p>
+                </div>
+                <span className={`shrink-0 text-sm font-bold tabular-nums ${transaction.amount >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
+                  {transaction.amount > 0 ? "+" : ""}{transaction.amount} {wallet.currency}
+                </span>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Summary */}
       <div className="grid grid-cols-3 gap-3">

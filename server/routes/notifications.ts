@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { storage } from "../storage";
-import { requireAuth, requireAdmin } from "../auth";
+import { requireAuth, requireManager } from "../auth";
 import { getVapidPublicKey, notifyUsers } from "../notifications";
 
 export function registerNotificationsRoutes(app: Express) {
@@ -52,7 +52,7 @@ export function registerNotificationsRoutes(app: Express) {
   });
 
   // ============ ADMIN NOTIFICATIONS ============
-  app.post("/api/admin/notifications", requireAdmin, async (req, res) => {
+  app.post("/api/admin/notifications", requireManager, async (req, res) => {
     const title = typeof req.body?.title === "string" ? req.body.title.trim() : "";
     const body = typeof req.body?.body === "string" ? req.body.body.trim() : "";
     const context = typeof req.body?.context === "string" ? req.body.context : "general";
@@ -65,17 +65,25 @@ export function registerNotificationsRoutes(app: Express) {
     if (!body || body.length > 800) {
       return res.status(400).json({ message: "Text je povinný a môže mať najviac 800 znakov" });
     }
-    if (!["general", "event", "payment"].includes(context)) {
+    if (!["general", "event", "poll", "payment"].includes(context)) {
       return res.status(400).json({ message: "Neplatný kontext notifikácie" });
     }
-    if (!["all", "user", "event_unanswered", "payment_identity", "unpaid"].includes(target)) {
+    if (!["all", "user", "event_unanswered", "poll_unanswered", "payment_identity", "unpaid"].includes(target)) {
       return res.status(400).json({ message: "Neplatný výber príjemcov" });
     }
+    if (req.user!.role === "manager" && (context === "payment" || target === "payment_identity" || target === "unpaid")) {
+      return res.status(403).json({ message: "Manažér nemá prístup k platbám" });
+    }
 
-    const eligibleUsers = storage.getAllUsers().filter(user => user.isActive && user.emailVerified);
+    const eligibleUsers = storage.getAllUsers().filter(user => (
+      user.isActive
+      && user.emailVerified
+      && (context !== "payment" || user.role !== "manager")
+    ));
     let path = "/#/";
     let recipientIds: number[] = [];
     let selectedEvent: ReturnType<typeof storage.getEvent>;
+    let selectedPoll: ReturnType<typeof storage.getPoll>;
 
     if (context === "event") {
       const eventId = Number(req.body?.eventId);
@@ -83,6 +91,12 @@ export function registerNotificationsRoutes(app: Express) {
       if (!event) return res.status(400).json({ message: "Vyber platný event" });
       selectedEvent = event;
       path = `/#/events/${event.id}`;
+    } else if (context === "poll") {
+      const pollId = Number(req.body?.pollId);
+      const poll = Number.isInteger(pollId) ? storage.getPoll(pollId) : undefined;
+      if (!poll) return res.status(400).json({ message: "Vyber platnú anketu" });
+      selectedPoll = poll;
+      path = `/#/polls/${poll.id}`;
     } else if (context === "payment") {
       path = "/#/payments";
     }
@@ -102,6 +116,13 @@ export function registerNotificationsRoutes(app: Express) {
       recipientIds = eligibleUsers
         .filter(user => selectedEvent?.type !== "match" || user.isPlayerActive)
         .filter(user => !storage.getEventResponse(eventId, user.id))
+        .map(user => user.id);
+    } else if (target === "poll_unanswered") {
+      if (context !== "poll" || !selectedPoll) {
+        return res.status(400).json({ message: "Tento výber príjemcov vyžaduje anketu" });
+      }
+      recipientIds = eligibleUsers
+        .filter(user => !storage.getUserPollVote(selectedPoll!.id, user.id))
         .map(user => user.id);
     } else if (target === "unpaid") {
       if (context !== "payment") {
@@ -140,6 +161,8 @@ export function registerNotificationsRoutes(app: Express) {
       emailHeading: title,
       emailButtonLabel: context === "event"
         ? "Otvoriť event"
+        : context === "poll"
+          ? "Otvoriť anketu a hlasovať"
         : context === "payment"
           ? "Otvoriť platby"
           : "Otvoriť aplikáciu",

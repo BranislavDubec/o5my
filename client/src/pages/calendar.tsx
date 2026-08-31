@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/contexts/auth-context";
+import { canManageTeam } from "@shared/roles";
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/lib/i18n";
 import { Card, CardContent } from "@/components/ui/card";
@@ -190,7 +191,7 @@ export default function CalendarPage() {
           <h1 className="font-serif text-xl font-bold">{t("calendar.title")}</h1>
           <p className="text-sm text-muted-foreground mt-1">{t("calendar.subtitle")}</p>
         </div>
-        {user?.role === "admin" && (
+        {canManageTeam(user?.role) && (
           <div className="flex flex-col items-end gap-2">
             <div className="flex items-center gap-2">
               <Button

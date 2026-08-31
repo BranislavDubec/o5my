@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { storage } from "../storage";
-import { requireAuth, requireAdmin } from "../auth";
+import { requireAuth, requireManager } from "../auth";
 import { insertTeamResponsibilitySchema, insertTeamInventoryItemSchema } from "@shared/schema";
 import { notifyUsers } from "../notifications";
 
@@ -123,7 +123,7 @@ export function registerOrganizationRoutes(app: Express) {
     res.json(storage.getTeamResponsibilities());
   });
 
-  app.post("/api/organization", requireAdmin, (req, res) => {
+  app.post("/api/organization", requireManager, (req, res) => {
     try {
       const { data, ownerIds } = parseTeamResponsibility(req.body);
       const responsibility = storage.createTeamResponsibility(data, ownerIds);
@@ -133,7 +133,7 @@ export function registerOrganizationRoutes(app: Express) {
     }
   });
 
-  app.put("/api/organization/order", requireAdmin, (req, res) => {
+  app.put("/api/organization/order", requireManager, (req, res) => {
     try {
       const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(Number) : [];
       if (ids.some((id: number) => !Number.isInteger(id))) {
@@ -146,7 +146,7 @@ export function registerOrganizationRoutes(app: Express) {
     }
   });
 
-  app.put("/api/organization/:id", requireAdmin, (req, res) => {
+  app.put("/api/organization/:id", requireManager, (req, res) => {
     try {
       const id = Number(req.params.id);
       if (!Number.isInteger(id)) return res.status(400).json({ message: "Neplatné ID položky" });
@@ -159,7 +159,7 @@ export function registerOrganizationRoutes(app: Express) {
     }
   });
 
-  app.delete("/api/organization/:id", requireAdmin, (req, res) => {
+  app.delete("/api/organization/:id", requireManager, (req, res) => {
     const id = Number(req.params.id);
     if (!Number.isInteger(id)) return res.status(400).json({ message: "Neplatné ID položky" });
     if (!storage.deleteTeamResponsibility(id)) {
@@ -168,7 +168,7 @@ export function registerOrganizationRoutes(app: Express) {
     res.json({ message: "Položka bola zmazaná" });
   });
 
-  app.post("/api/organization/:id/remind", requireAdmin, async (req, res) => {
+  app.post("/api/organization/:id/remind", requireManager, async (req, res) => {
     const id = Number(req.params.id);
     if (!Number.isInteger(id)) return res.status(400).json({ message: "Neplatné ID položky" });
     const responsibility = storage.getTeamResponsibility(id);
@@ -199,7 +199,7 @@ export function registerOrganizationRoutes(app: Express) {
     res.json({ message: "Pripomienka bola odoslaná", recipientCount: recipientIds.length });
   });
 
-  app.post("/api/organization/:id/inventory", requireAdmin, (req, res) => {
+  app.post("/api/organization/:id/inventory", requireManager, (req, res) => {
     try {
       const responsibilityId = Number(req.params.id);
       const responsibility = Number.isInteger(responsibilityId) ? storage.getTeamResponsibility(responsibilityId) : undefined;
@@ -213,7 +213,7 @@ export function registerOrganizationRoutes(app: Express) {
     }
   });
 
-  app.put("/api/organization/:id/inventory/order", requireAdmin, (req, res) => {
+  app.put("/api/organization/:id/inventory/order", requireManager, (req, res) => {
     try {
       const responsibilityId = Number(req.params.id);
       if (!Number.isInteger(responsibilityId) || !storage.getTeamResponsibility(responsibilityId)) {
@@ -230,7 +230,7 @@ export function registerOrganizationRoutes(app: Express) {
     }
   });
 
-  app.put("/api/organization/:id/inventory/:itemId", requireAdmin, (req, res) => {
+  app.put("/api/organization/:id/inventory/:itemId", requireManager, (req, res) => {
     try {
       const responsibilityId = Number(req.params.id);
       const itemId = Number(req.params.itemId);
@@ -246,7 +246,7 @@ export function registerOrganizationRoutes(app: Express) {
     }
   });
 
-  app.delete("/api/organization/:id/inventory/:itemId", requireAdmin, (req, res) => {
+  app.delete("/api/organization/:id/inventory/:itemId", requireManager, (req, res) => {
     const responsibilityId = Number(req.params.id);
     const itemId = Number(req.params.itemId);
     if (!Number.isInteger(responsibilityId) || !Number.isInteger(itemId)) {

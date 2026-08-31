@@ -5,6 +5,7 @@ import { format, parseISO } from "date-fns";
 import { sk as skLocale, cs as csLocale, enUS as enLocale } from "date-fns/locale";
 import { ArrowLeft, ChevronRight, FileText, FolderOpen, FolderPlus, Image, Images, Pencil, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
+import { canManageTeam } from "@shared/roles";
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/lib/i18n";
 import { apiRequest } from "@/lib/queryClient";
@@ -65,7 +66,7 @@ export default function MediaPage() {
   const { lang, t } = useI18n();
   const dateLocale = lang === "sk" ? skLocale : lang === "cz" ? csLocale : enLocale;
   const queryClient = useQueryClient();
-  const isAdmin = user?.role === "admin";
+  const isAdmin = canManageTeam(user?.role);
   const [photoUploadOpen, setPhotoUploadOpen] = useState(false);
   const [tacticUploadOpen, setTacticUploadOpen] = useState(false);
   const [photoFiles, setPhotoFiles] = useState<File[]>([]);

@@ -6,12 +6,16 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { MailCheck, Shield, Swords, User as UserIcon, UserCheck, UserX, Users, WalletCards } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { ClipboardCheck, MailCheck, Shield, Swords, User as UserIcon, UserCheck, UserX, Users, WalletCards } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 import { useState } from "react";
 import { format, parseISO } from "date-fns";
 import { sk as skLocale, cs as csLocale, enUS as enLocale } from "date-fns/locale";
 import { useI18n } from "@/lib/i18n";
+import { canManageTeam } from "@shared/roles";
 
 interface UserItem {
   id: number;
@@ -34,7 +38,9 @@ export default function AdminMembers() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [roleDialog, setRoleDialog] = useState<{ open: boolean; userId: number; role: string }>({ open: false, userId: 0, role: "" });
+  const [walletDialog, setWalletDialog] = useState({ open: false, userId: 0, amount: "", description: "" });
   const isAdmin = currentUser?.role === "admin";
+  const canManage = canManageTeam(currentUser?.role);
   const dateLocale = lang === "sk" ? skLocale : lang === "cz" ? csLocale : enLocale;
   const localeTag = lang === "cz" ? "cs-CZ" : lang === "en" ? "en-US" : "sk-SK";
   const formatWalletBalance = (balance: number, currency: string) => {
@@ -60,6 +66,20 @@ export default function AdminMembers() {
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
       toast({ title: t("adminMembers.roleUpdated") });
       setRoleDialog({ open: false, userId: 0, role: "" });
+    },
+  });
+
+  const adjustWalletMutation = useMutation({
+    mutationFn: ({ id, amount, description }: { id: number; amount: number; description: string }) =>
+      apiRequest("POST", `/api/wallet/${id}/adjustments`, { amount, description }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/wallet"] });
+      toast({ title: t("adminMembers.walletAdjusted") });
+      setWalletDialog({ open: false, userId: 0, amount: "", description: "" });
+    },
+    onError: (err: any) => {
+      toast({ title: t("adminMembers.walletAdjustmentFailed"), description: err.message, variant: "destructive" });
     },
   });
 
@@ -110,7 +130,7 @@ export default function AdminMembers() {
   });
 
   const activeUserCount = users.filter(user => user.isActive).length;
-  const activePlayerCount = users.filter(user => user.isActive && user.isPlayerActive && (!isAdmin || user.emailVerified)).length;
+  const activePlayerCount = users.filter(user => user.isActive && user.isPlayerActive && (!canManage || user.emailVerified)).length;
 
   return (
     <div className="max-w-3xl space-y-6">
@@ -143,6 +163,8 @@ export default function AdminMembers() {
                         <p className="min-w-0 basis-full break-words text-sm font-medium sm:basis-auto">{u.name}</p>
                         {u.role === "admin" ? (
                           <Badge variant="default" className="text-xs"><Shield className="mr-0.5 h-3 w-3" />{t("layout.roleAdmin")}</Badge>
+                        ) : u.role === "manager" ? (
+                          <Badge variant="outline" className="text-xs"><ClipboardCheck className="mr-0.5 h-3 w-3" />{t("layout.roleManager")}</Badge>
                         ) : (
                           <Badge variant="secondary" className="text-xs"><UserIcon className="mr-0.5 h-3 w-3" />{t("layout.rolePlayer")}</Badge>
                         )}
@@ -152,13 +174,13 @@ export default function AdminMembers() {
                           <Badge variant="outline" className="text-xs text-emerald-700 dark:text-emerald-300" data-testid={`badge-email-verified-${u.id}`}>
                             <MailCheck className="mr-1 h-3 w-3" />{t("adminMembers.emailVerifiedBadge")}
                           </Badge>
-                        ) : isAdmin ? (
+                        ) : canManage ? (
                           <Badge variant="outline" className="text-xs text-amber-700 dark:text-amber-300" data-testid={`badge-email-unverified-${u.id}`}>
                             {t("adminMembers.emailUnverifiedBadge")}
                           </Badge>
                         ) : null}
                       </div>
-                      {isAdmin && u.email && <p className="mt-1 break-all text-xs text-muted-foreground sm:truncate">{u.email}</p>}
+                      {canManage && u.email && <p className="mt-1 break-all text-xs text-muted-foreground sm:truncate">{u.email}</p>}
                       {u.nickname && <p className="break-words text-xs font-medium text-primary">@{u.nickname}</p>}
                       {isAdmin && typeof u.walletBalance === "number" && (
                         <p className="mt-1 flex flex-wrap items-center gap-1 text-xs font-semibold text-foreground" data-testid={`wallet-user-${u.id}`}>
@@ -169,9 +191,9 @@ export default function AdminMembers() {
                       <p className="text-xs text-muted-foreground">{t("adminMembers.addedOn", { date: format(parseISO(u.createdAt), "d. MMM yyyy", { locale: dateLocale }) })}</p>
                     </div>
                   </div>
-                  {isAdmin && (
+                  {canManage && (
                     <div className="grid grid-cols-1 gap-2 border-t pt-3 sm:grid-cols-2 md:min-w-[180px] md:grid-cols-1 md:border-l md:border-t-0 md:pl-3 md:pt-0">
-                    <Dialog open={roleDialog.open && roleDialog.userId === u.id} onOpenChange={open => setRoleDialog({ open, userId: u.id, role: u.role })}>
+                    {isAdmin && <Dialog open={roleDialog.open && roleDialog.userId === u.id} onOpenChange={open => setRoleDialog({ open, userId: u.id, role: u.role })}>
                       <DialogTrigger asChild>
                         <Button variant="outline" size="sm" className="w-full text-xs" disabled={!u.isActive} data-testid={`button-role-${u.id}`}>{t("adminMembers.role")}</Button>
                       </DialogTrigger>
@@ -186,6 +208,7 @@ export default function AdminMembers() {
                           <SelectTrigger><SelectValue /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="admin">{t("layout.roleAdmin")}</SelectItem>
+                            <SelectItem value="manager">{t("layout.roleManager")}</SelectItem>
                             <SelectItem value="player">{t("layout.rolePlayer")}</SelectItem>
                           </SelectContent>
                         </Select>
@@ -197,7 +220,61 @@ export default function AdminMembers() {
                           {t("common.save")}
                         </Button>
                       </DialogContent>
-                    </Dialog>
+                    </Dialog>}
+                    {isAdmin && <Dialog
+                      open={walletDialog.open && walletDialog.userId === u.id}
+                      onOpenChange={open => setWalletDialog({ open, userId: u.id, amount: "", description: "" })}
+                    >
+                      <DialogTrigger asChild>
+                        <Button variant="outline" size="sm" className="w-full text-xs" data-testid={`button-wallet-${u.id}`}>
+                          <WalletCards className="mr-1 h-3 w-3" />{t("adminMembers.adjustWallet")}
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>{t("adminMembers.adjustWalletTitle", { name: u.name })}</DialogTitle>
+                        </DialogHeader>
+                        <div className="space-y-2">
+                          <Label htmlFor={`wallet-amount-${u.id}`}>{t("adminMembers.walletAmount")}</Label>
+                          <Input
+                            id={`wallet-amount-${u.id}`}
+                            type="number"
+                            step="1"
+                            value={walletDialog.amount}
+                            onChange={event => setWalletDialog(previous => ({ ...previous, amount: event.target.value }))}
+                            placeholder="500"
+                            data-testid="input-wallet-amount"
+                          />
+                          <p className="text-xs text-muted-foreground">{t("adminMembers.walletAmountHint")}</p>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor={`wallet-description-${u.id}`}>{t("adminMembers.walletReason")}</Label>
+                          <Textarea
+                            id={`wallet-description-${u.id}`}
+                            value={walletDialog.description}
+                            onChange={event => setWalletDialog(previous => ({ ...previous, description: event.target.value }))}
+                            maxLength={200}
+                            data-testid="input-wallet-description"
+                          />
+                        </div>
+                        <Button
+                          onClick={() => adjustWalletMutation.mutate({
+                            id: u.id,
+                            amount: Number(walletDialog.amount),
+                            description: walletDialog.description.trim(),
+                          })}
+                          disabled={
+                            adjustWalletMutation.isPending
+                            || !Number.isSafeInteger(Number(walletDialog.amount))
+                            || Number(walletDialog.amount) === 0
+                            || !walletDialog.description.trim()
+                          }
+                          data-testid="button-save-wallet-adjustment"
+                        >
+                          {t("common.save")}
+                        </Button>
+                      </DialogContent>
+                    </Dialog>}
                     <Button
                       variant="outline"
                       size="sm"

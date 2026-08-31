@@ -41,10 +41,11 @@ import AdminPaymentIdentity from "@/pages/admin-payment-identity";
 import AdminBank from "@/pages/admin-bank";
 import AdminNotifications from "@/pages/admin-notifications";
 import Settings from "@/pages/settings";
+import { canAccessFinances, canManageTeam, canViewPersonalPayments } from "@shared/roles";
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  requiredRole?: "admin";
+  requiredAccess?: "management" | "finances" | "payments";
 }
 
 function FullPageSpinner() {
@@ -62,7 +63,7 @@ function useAppHashLocation(
   return [location.split("?", 1)[0], navigate];
 }
 
-function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) {
+function ProtectedRoute({ children, requiredAccess }: ProtectedRouteProps) {
   const { user, isLoading } = useAuth();
   if (isLoading) {
     return <FullPageSpinner />;
@@ -70,7 +71,11 @@ function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) {
   if (!user) {
     return <Redirect to="/login" />;
   }
-  if (requiredRole && user.role !== requiredRole) {
+  const hasRequiredAccess = !requiredAccess
+    || (requiredAccess === "management" && canManageTeam(user.role))
+    || (requiredAccess === "finances" && canAccessFinances(user.role))
+    || (requiredAccess === "payments" && canViewPersonalPayments(user.role));
+  if (!hasRequiredAccess) {
     return <Redirect to="/" />;
   }
   return <Layout>{children}</Layout>;
@@ -223,10 +228,10 @@ function AppRouter() {
         <ProtectedRoute><PollDetailPage /></ProtectedRoute>
       </Route>
       <Route path="/payments">
-        <ProtectedRoute><PaymentsPage /></ProtectedRoute>
+        <ProtectedRoute requiredAccess="payments"><PaymentsPage /></ProtectedRoute>
       </Route>
       <Route path="/payments/:id">
-        <ProtectedRoute><PaymentDetailPage /></ProtectedRoute>
+        <ProtectedRoute requiredAccess="payments"><PaymentDetailPage /></ProtectedRoute>
       </Route>
       <Route path="/files">
         <ProtectedRoute><MediaPage /></ProtectedRoute>
@@ -255,19 +260,19 @@ function AppRouter() {
         <Redirect to="/members" />
       </Route>
       <Route path="/admin/payments">
-        <ProtectedRoute requiredRole="admin"><AdminPayments /></ProtectedRoute>
+        <ProtectedRoute requiredAccess="finances"><AdminPayments /></ProtectedRoute>
       </Route>
       <Route path="/admin/payments/unassigned">
-        <ProtectedRoute requiredRole="admin"><AdminPaymentIdentity unassigned /></ProtectedRoute>
+        <ProtectedRoute requiredAccess="finances"><AdminPaymentIdentity unassigned /></ProtectedRoute>
       </Route>
       <Route path="/admin/payments/identity/:identity">
-        <ProtectedRoute requiredRole="admin"><AdminPaymentIdentity /></ProtectedRoute>
+        <ProtectedRoute requiredAccess="finances"><AdminPaymentIdentity /></ProtectedRoute>
       </Route>
       <Route path="/admin/bank">
-        <ProtectedRoute requiredRole="admin"><AdminBank /></ProtectedRoute>
+        <ProtectedRoute requiredAccess="finances"><AdminBank /></ProtectedRoute>
       </Route>
       <Route path="/admin/notifications">
-        <ProtectedRoute requiredRole="admin"><AdminNotifications /></ProtectedRoute>
+        <ProtectedRoute requiredAccess="management"><AdminNotifications /></ProtectedRoute>
       </Route>
 
       <Route component={NotFound} />

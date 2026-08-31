@@ -1,0 +1,1 @@
+ALTER TABLE `polls` ADD `is_anonymous` integer DEFAULT false NOT NULL;

@@ -1,7 +1,8 @@
 import type { Express } from "express";
 import { storage } from "../storage";
-import { requireAuth, requireAdmin } from "../auth";
+import { requireAuth, requireAdmin, requireManager } from "../auth";
 import { updateGoogleCalendarEventAttendance } from "../google-calendar";
+import { canManageTeam, isUserRole } from "@shared/roles";
 
 function refreshFutureMatchAttendance(userId: number) {
   const now = Date.now();
@@ -36,7 +37,7 @@ export function registerUsersRoutes(app: Express) {
     res.json(storage.getPlayerStatistics());
   });
 
-  app.patch("/api/statistics/:userId", requireAdmin, (req, res) => {
+  app.patch("/api/statistics/:userId", requireManager, (req, res) => {
     try {
       const userId = Number(req.params.userId);
       const goalsDelta = Number(req.body?.goalsDelta ?? 0);
@@ -66,6 +67,10 @@ export function registerUsersRoutes(app: Express) {
       })));
     }
 
+    if (canManageTeam(req.user!.role)) {
+      return res.json(allUsers.map(({ password, ...user }) => user));
+    }
+
     res.json(allUsers
       .filter(user => user.isActive && user.emailVerified)
       .map(user => ({
@@ -82,7 +87,7 @@ export function registerUsersRoutes(app: Express) {
 
   app.put("/api/users/:id/role", requireAdmin, (req, res) => {
     const { role } = req.body;
-    if (!["admin", "player"].includes(role)) {
+    if (!isUserRole(role)) {
       return res.status(400).json({ message: "Neplatná rola" });
     }
     const user = storage.updateUserRole(Number(req.params.id), role);
@@ -91,7 +96,7 @@ export function registerUsersRoutes(app: Express) {
     res.json(safe);
   });
 
-  app.put("/api/users/:id/status", requireAdmin, (req, res) => {
+  app.put("/api/users/:id/status", requireManager, (req, res) => {
     const userId = Number(req.params.id);
     if (userId === req.user!.id) {
       return res.status(400).json({ message: "Nemôžete deaktivovať vlastný účet" });
@@ -109,7 +114,7 @@ export function registerUsersRoutes(app: Express) {
     res.json(safe);
   });
 
-  app.put("/api/users/:id/player-active", requireAdmin, (req, res) => {
+  app.put("/api/users/:id/player-active", requireManager, (req, res) => {
     const userId = Number(req.params.id);
     if (!Number.isInteger(userId) || userId <= 0) {
       return res.status(400).json({ message: "Neplatné ID používateľa" });
@@ -126,7 +131,7 @@ export function registerUsersRoutes(app: Express) {
     res.json(safe);
   });
 
-  app.post("/api/users/:id/verify-email", requireAdmin, (req, res) => {
+  app.post("/api/users/:id/verify-email", requireManager, (req, res) => {
     const userId = Number(req.params.id);
     if (!Number.isInteger(userId) || userId <= 0) {
       return res.status(400).json({ message: "Neplatné ID používateľa" });

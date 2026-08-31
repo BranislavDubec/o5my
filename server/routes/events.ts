@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { storage } from "../storage";
-import { requireAuth, requireAdmin } from "../auth";
+import { requireAuth, requireManager } from "../auth";
 import { insertEventSchema } from "@shared/schema";
 import {
   createGoogleCalendarEvent,
@@ -144,7 +144,7 @@ export function registerEventsRoutes(app: Express) {
     });
   });
 
-  app.put("/api/events/:id/result", requireAdmin, (req, res) => {
+  app.put("/api/events/:id/result", requireManager, (req, res) => {
     try {
       const eventId = Number(req.params.id);
       if (!Number.isInteger(eventId)) return res.status(400).json({ message: "Neplatné ID zápasu" });
@@ -168,7 +168,7 @@ export function registerEventsRoutes(app: Express) {
     }
   });
 
-  app.delete("/api/events/:id/result", requireAdmin, (req, res) => {
+  app.delete("/api/events/:id/result", requireManager, (req, res) => {
     try {
       const eventId = Number(req.params.id);
       if (!storage.getEvent(eventId)) return res.status(404).json({ message: "Event nenájdený" });
@@ -179,7 +179,7 @@ export function registerEventsRoutes(app: Express) {
     }
   });
 
-  app.post("/api/events", requireAdmin, async (req, res) => {
+  app.post("/api/events", requireManager, async (req, res) => {
     try {
       const body = (req.body ?? {}) as Record<string, unknown>;
       const data = insertEventSchema.parse({
@@ -219,7 +219,7 @@ export function registerEventsRoutes(app: Express) {
     }
   });
 
-  app.put("/api/events/:id", requireAdmin, async (req, res) => {
+  app.put("/api/events/:id", requireManager, async (req, res) => {
     const eventId = Number(req.params.id);
     const existing = storage.getEvent(eventId);
     if (!existing) return res.status(404).json({ message: "Event nenájdený" });
@@ -283,11 +283,7 @@ export function registerEventsRoutes(app: Express) {
     });
   });
 
-  app.delete("/api/events/:id", requireAuth, async (req, res) => {
-    if (req.user?.role !== "admin") {
-      return res.status(403).json({ message: "Vyžadované admin práva" });
-    }
-
+  app.delete("/api/events/:id", requireManager, async (req, res) => {
     const eventId = Number(req.params.id);
     const event = storage.getEvent(eventId);
     if (!event) return res.status(404).json({ message: "Event nenájdený" });

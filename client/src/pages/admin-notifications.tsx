@@ -3,7 +3,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { format, parseISO } from "date-fns";
 import { sk as skLocale, cs as csLocale, enUS as enLocale } from "date-fns/locale";
 import { useI18n } from "@/lib/i18n";
-import { BellRing, CalendarClock, CreditCard, Send, Users } from "lucide-react";
+import { BellRing, CalendarClock, CreditCard, Send, Users, Vote } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,18 +12,26 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useAuth } from "@/contexts/auth-context";
 
 interface UserItem {
   id: number;
   name: string;
   isActive: boolean;
   emailVerified: boolean;
+  role: string;
 }
 
 interface EventItem {
   id: number;
   title: string;
   startTime: string;
+}
+
+interface PollItem {
+  id: number;
+  title: string;
+  closesAt: string | null;
 }
 
 interface PaymentItem {
@@ -33,24 +41,35 @@ interface PaymentItem {
   status: string;
 }
 
-type NotificationContext = "general" | "event" | "payment";
-type NotificationTarget = "all" | "user" | "event_unanswered" | "payment_identity" | "unpaid";
+type NotificationContext = "general" | "event" | "poll" | "payment";
+type NotificationTarget = "all" | "user" | "event_unanswered" | "poll_unanswered" | "payment_identity" | "unpaid";
 
 export default function AdminNotifications() {
   const { t, lang } = useI18n();
+  const { user } = useAuth();
   const { toast } = useToast();
+  const isAdmin = user?.role === "admin";
   const [context, setContext] = useState<NotificationContext>("general");
   const [target, setTarget] = useState<NotificationTarget>("all");
   const [userId, setUserId] = useState("");
   const [eventId, setEventId] = useState("");
+  const [pollId, setPollId] = useState("");
   const [paymentIdentity, setPaymentIdentity] = useState("");
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
 
   const { data: users = [] } = useQuery<UserItem[]>({ queryKey: ["/api/users"] });
   const { data: events = [] } = useQuery<EventItem[]>({ queryKey: ["/api/events"] });
-  const { data: payments = [] } = useQuery<PaymentItem[]>({ queryKey: ["/api/payments/all"] });
-  const activeUsers = users.filter(user => user.isActive && user.emailVerified);
+  const { data: polls = [] } = useQuery<PollItem[]>({ queryKey: ["/api/polls"] });
+  const { data: payments = [] } = useQuery<PaymentItem[]>({
+    queryKey: ["/api/payments/all"],
+    enabled: isAdmin,
+  });
+  const activeUsers = users.filter(user => (
+    user.isActive
+    && user.emailVerified
+    && (context !== "payment" || user.role !== "manager")
+  ));
   const sortedEvents = [...events].sort((first, second) => first.startTime.localeCompare(second.startTime));
   const paymentIdentities = Array.from(new Set(payments.map(payment => payment.identity?.trim()).filter((value): value is string => !!value)))
     .sort((first, second) => first.localeCompare(second, lang === "cz" ? "cs" : lang));
@@ -63,6 +82,7 @@ export default function AdminNotifications() {
         target,
         userId: target === "user" ? Number(userId) : undefined,
         eventId: context === "event" ? Number(eventId) : undefined,
+        pollId: context === "poll" ? Number(pollId) : undefined,
         paymentIdentity: context === "payment" ? paymentIdentity || undefined : undefined,
         title,
         body,
@@ -83,16 +103,24 @@ export default function AdminNotifications() {
     setPaymentIdentity("");
     if (value === "event") {
       setTarget("event_unanswered");
+      setPollId("");
       setTitle(t("adminNotifications.eventReminderTitle"));
       setBody(t("adminNotifications.eventReminderBody"));
+    } else if (value === "poll") {
+      setTarget("poll_unanswered");
+      setEventId("");
+      setTitle(t("adminNotifications.pollReminderTitle"));
+      setBody(t("adminNotifications.pollReminderBody"));
     } else if (value === "payment") {
       setTarget("unpaid");
       setEventId("");
+      setPollId("");
       setTitle(t("adminNotifications.paymentReminderTitle"));
       setBody(t("adminNotifications.paymentReminderBody"));
     } else {
       setTarget("all");
       setEventId("");
+      setPollId("");
       setTitle("");
       setBody("");
     }
@@ -101,6 +129,7 @@ export default function AdminNotifications() {
   const canSend = title.trim()
     && body.trim()
     && (context !== "event" || eventId)
+    && (context !== "poll" || pollId)
     && (context !== "payment" || target !== "payment_identity" || paymentIdentity.trim().length > 0)
     && (target !== "user" || userId);
 
@@ -129,7 +158,8 @@ export default function AdminNotifications() {
               <SelectContent>
                 <SelectItem value="general"><span className="flex items-center"><BellRing className="w-4 h-4 mr-2" />{t("adminNotifications.contextGeneral")}</span></SelectItem>
                 <SelectItem value="event"><span className="flex items-center"><CalendarClock className="w-4 h-4 mr-2" />{t("adminNotifications.contextEvent")}</span></SelectItem>
-                <SelectItem value="payment"><span className="flex items-center"><CreditCard className="w-4 h-4 mr-2" />{t("adminNotifications.contextPayment")}</span></SelectItem>
+                <SelectItem value="poll"><span className="flex items-center"><Vote className="w-4 h-4 mr-2" />{t("adminNotifications.contextPoll")}</span></SelectItem>
+                {isAdmin && <SelectItem value="payment"><span className="flex items-center"><CreditCard className="w-4 h-4 mr-2" />{t("adminNotifications.contextPayment")}</span></SelectItem>}
               </SelectContent>
             </Select>
           </div>
@@ -150,6 +180,20 @@ export default function AdminNotifications() {
             </div>
           )}
 
+          {context === "poll" && (
+            <div className="space-y-2">
+              <Label>{t("adminNotifications.contextPoll")}</Label>
+              <Select value={pollId} onValueChange={setPollId}>
+                <SelectTrigger data-testid="select-notification-poll"><SelectValue placeholder={t("adminNotifications.selectPoll")} /></SelectTrigger>
+                <SelectContent>
+                  {polls.map(poll => (
+                    <SelectItem key={poll.id} value={String(poll.id)}>{poll.title}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           <div className="space-y-2">
             <Label>{t("adminNotifications.recipientsLabel")}</Label>
             <Select value={target} onValueChange={value => setTarget(value as NotificationTarget)}>
@@ -158,6 +202,7 @@ export default function AdminNotifications() {
                 <SelectItem value="all">{t("adminNotifications.targetAll", { count: activeUsers.length })}</SelectItem>
                 <SelectItem value="user">{t("adminNotifications.targetUser")}</SelectItem>
                 {context === "event" && <SelectItem value="event_unanswered">{t("adminNotifications.targetEventUnanswered")}</SelectItem>}
+                {context === "poll" && <SelectItem value="poll_unanswered">{t("adminNotifications.targetPollUnanswered")}</SelectItem>}
                 {context === "payment" && (
                   <>
                     <SelectItem value="payment_identity">{t("adminNotifications.targetPaymentIdentity")}</SelectItem>

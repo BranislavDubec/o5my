@@ -24,6 +24,7 @@ interface UserItem {
   isActive: boolean;
   isPlayerActive: boolean;
   emailVerified: boolean;
+  role: string;
 }
 
 export default function AdminPayments() {
@@ -38,6 +39,7 @@ export default function AdminPayments() {
     dueDate: "",
     description: "",
     identity: "",
+    sendNotifications: true,
   });
   const [statusFilter, setStatusFilter] = useState("all");
   const [searchFilter, setSearchFilter] = useState("");
@@ -52,7 +54,7 @@ export default function AdminPayments() {
     queryKey: ["/api/users"],
   });
   const allPlayers = users
-    .filter(user => user.isActive && user.emailVerified)
+    .filter(user => user.isActive && user.emailVerified && user.role !== "manager")
     .sort((a, b) => a.name.localeCompare(b.name, sortLang));
   const activePlayers = allPlayers.filter(user => user.isPlayerActive);
   const paymentIdentities = Array.from(
@@ -100,7 +102,7 @@ export default function AdminPayments() {
         title: result.created === 1 ? t("adminPayments.paymentCreated") : t("adminPayments.paymentsCreated", { count: result.created ?? 0 }),
       });
       setDialogOpen(false);
-      setForm({ userIds: [], priceMode: "full", price: "", dueDate: "", description: "", identity: "" });
+      setForm({ userIds: [], priceMode: "full", price: "", dueDate: "", description: "", identity: "", sendNotifications: true });
     },
     onError: (err: any) => toast({ title: t("common.error"), description: err.message, variant: "destructive" }),
   });
@@ -115,6 +117,7 @@ export default function AdminPayments() {
       dueDate: form.dueDate,
       description: form.description,
       identity: form.identity,
+      sendNotifications: form.sendNotifications,
     });
   };
 
@@ -293,6 +296,20 @@ export default function AdminPayments() {
                 <Label htmlFor="desc">{t("adminPayments.description")}</Label>
                 <Textarea id="desc" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} required rows={2} placeholder={t("adminPayments.descriptionPlaceholder")} data-testid="input-description" />
                 <p className="text-xs text-muted-foreground">{t("adminPayments.nameAppendedHint")}</p>
+              </div>
+              <div className="flex items-start gap-3 rounded-md border p-3">
+                <Checkbox
+                  id="sendPaymentNotifications"
+                  checked={form.sendNotifications}
+                  onCheckedChange={checked => setForm({ ...form, sendNotifications: checked === true })}
+                  data-testid="checkbox-send-payment-notifications"
+                />
+                <div className="space-y-1">
+                  <Label htmlFor="sendPaymentNotifications" className="cursor-pointer">
+                    {t("adminPayments.sendNotifications")}
+                  </Label>
+                  <p className="text-xs text-muted-foreground">{t("adminPayments.sendNotificationsHint")}</p>
+                </div>
               </div>
               <DialogFooter>
                 <Button type="submit" disabled={createMutation.isPending || form.userIds.length === 0} data-testid="button-submit-payment">

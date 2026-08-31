@@ -186,7 +186,13 @@ export default function Settings() {
             </div>
           </div>
           <div className="pt-2">
-            <Badge variant="secondary">{user?.role === "admin" ? t("layout.roleAdmin") : t("layout.rolePlayer")}</Badge>
+            <Badge variant="secondary">
+              {user?.role === "admin"
+                ? t("layout.roleAdmin")
+                : user?.role === "manager"
+                  ? t("layout.roleManager")
+                  : t("layout.rolePlayer")}
+            </Badge>
           </div>
           <form
             className="space-y-2 border-t pt-4"

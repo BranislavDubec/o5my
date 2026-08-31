@@ -1,7 +1,7 @@
 import type { Express, Response } from "express";
 import { storage } from "../storage";
 import { BankReconciliationError } from "../storage/payments";
-import { requireAuth, requireAdmin } from "../auth";
+import { requireAdmin, requireManager, requirePaymentAccess } from "../auth";
 import { insertPaymentSchema, type Payment } from "@shared/schema";
 import { FioSyncError, syncFioTransactions } from "../fio-api";
 import { createPaymentQrPayload, isValidIban, normalizeIban } from "../payment-qr";
@@ -72,17 +72,62 @@ function sendBankReconciliationError(res: Response, error: unknown) {
 
 export function registerPaymentsRoutes(app: Express) {
   // ============ PAYMENTS ============
-  app.get("/api/payments", requireAuth, (req, res) => {
+  app.get("/api/payments", requirePaymentAccess, (req, res) => {
     const payments = storage.getPaymentsByUser(req.user!.id);
     res.json(payments);
   });
 
-  app.get("/api/wallet", requireAuth, (req, res) => {
+  app.get("/api/wallet", requirePaymentAccess, (req, res) => {
     const transactions = storage.getWalletTransactionsByUser(req.user!.id);
     res.json({
       balance: storage.getWalletBalance(req.user!.id),
       currency: storage.getAppSetting("payment_currency") || "CZK",
       updatedAt: transactions[0]?.createdAt ?? null,
+      transactions: transactions.map(transaction => ({
+        id: transaction.id,
+        amount: transaction.amount,
+        description: transaction.description,
+        createdAt: transaction.createdAt,
+      })),
+    });
+  });
+
+  app.post("/api/wallet/:userId/adjustments", requireAdmin, (req, res) => {
+    const userId = Number(req.params.userId);
+    const amount = Number(req.body?.amount);
+    const description = typeof req.body?.description === "string" ? req.body.description.trim() : "";
+
+    if (!Number.isInteger(userId) || userId <= 0 || !storage.getUser(userId)) {
+      return res.status(404).json({ message: "Používateľ nebol nájdený" });
+    }
+    if (!Number.isSafeInteger(amount) || amount === 0 || Math.abs(amount) > 10_000_000) {
+      return res.status(400).json({ message: "Suma musí byť nenulové celé číslo v CZK" });
+    }
+    if (!description || description.length > 200) {
+      return res.status(400).json({ message: "Dôvod je povinný a môže mať najviac 200 znakov" });
+    }
+
+    const currentBalance = storage.getWalletBalance(userId);
+    if (currentBalance + amount < 0) {
+      return res.status(400).json({ message: "Zostatok peňaženky nemôže byť záporný" });
+    }
+
+    const transaction = storage.createWalletTransaction({
+      userId,
+      bankTransactionId: null,
+      paymentId: null,
+      amount,
+      description: `Manuálna úprava: ${description}`,
+      createdBy: req.user!.id,
+    });
+    if (!transaction) {
+      return res.status(500).json({ message: "Úpravu peňaženky sa nepodarilo uložiť" });
+    }
+
+    res.status(201).json({
+      transaction,
+      balance: currentBalance + amount,
+      currency: storage.getAppSetting("payment_currency") || "CZK",
     });
   });
 
@@ -93,9 +138,10 @@ export function registerPaymentsRoutes(app: Express) {
 
   app.post("/api/payments", requireAdmin, (req, res) => {
     try {
+      const sendNotifications = req.body?.sendNotifications !== false;
       const data = insertPaymentSchema.parse(req.body);
       const user = storage.getUser(data.userId);
-      if (!user?.isActive || !user.emailVerified) {
+      if (!user?.isActive || !user.emailVerified || user.role === "manager") {
         return res.status(404).json({ message: "Aktívny člen nebol nájdený" });
       }
       const payment = storage.createPayment({
@@ -108,15 +154,17 @@ export function registerPaymentsRoutes(app: Express) {
       const currency = storage.getAppSetting("payment_currency") || "CZK";
       const notification = getPaymentNotificationContent(payment, currency);
       res.status(201).json(payment);
-      void notifyUsers([payment.userId], {
-        title: "Nová platba",
-        body: notification.body,
-        path: `/#/payments/${payment.id}`,
-        tag: `payment-${payment.id}`,
-        emailSubject: `💳 Nová platba | ${payment.description}`,
-        emailHeading: notification.heading,
-        emailButtonLabel: notification.buttonLabel,
-      }, { push: false });
+      if (sendNotifications) {
+        void notifyUsers([payment.userId], {
+          title: "Nová platba",
+          body: notification.body,
+          path: `/#/payments/${payment.id}`,
+          tag: `payment-${payment.id}`,
+          emailSubject: `💳 Nová platba | ${payment.description}`,
+          emailHeading: notification.heading,
+          emailButtonLabel: notification.buttonLabel,
+        }, { push: false });
+      }
     } catch (err: any) {
       res.status(400).json({ message: err.message });
     }
@@ -124,6 +172,7 @@ export function registerPaymentsRoutes(app: Express) {
 
   app.post("/api/payments/bulk", requireAdmin, (req, res) => {
     try {
+      const sendNotifications = req.body?.sendNotifications !== false;
       const priceMode = req.body?.priceMode === "perPerson" ? "perPerson" : "full";
       const enteredPrice = Number(req.body?.price ?? req.body?.fullPrice ?? req.body?.amount);
       const dueDate = typeof req.body?.dueDate === "string" ? req.body.dueDate : "";
@@ -159,7 +208,7 @@ export function registerPaymentsRoutes(app: Express) {
 
       const activeUsersById = new Map(
         storage.getAllUsers()
-          .filter(user => user.isActive && user.emailVerified)
+          .filter(user => user.isActive && user.emailVerified && user.role !== "manager")
           .map(user => [user.id, user]),
       );
       const selectedUsers = userIds.map(userId => activeUsersById.get(userId));
@@ -182,24 +231,26 @@ export function registerPaymentsRoutes(app: Express) {
       const createdPayments = storage.createPayments(paymentList);
       const currency = storage.getAppSetting("payment_currency") || "CZK";
       res.status(201).json({ created: createdPayments.length, payments: createdPayments });
-      void Promise.all(createdPayments.map(payment => {
-        const notification = getPaymentNotificationContent(payment, currency);
-        return notifyUsers([payment.userId], {
-          title: "Nová platba",
-          body: notification.body,
-          path: `/#/payments/${payment.id}`,
-          tag: `payment-${payment.id}`,
-          emailSubject: `💳 Nová platba | ${payment.description}`,
-          emailHeading: notification.heading,
-          emailButtonLabel: notification.buttonLabel,
-        }, { push: false });
-      }));
+      if (sendNotifications) {
+        void Promise.all(createdPayments.map(payment => {
+          const notification = getPaymentNotificationContent(payment, currency);
+          return notifyUsers([payment.userId], {
+            title: "Nová platba",
+            body: notification.body,
+            path: `/#/payments/${payment.id}`,
+            tag: `payment-${payment.id}`,
+            emailSubject: `💳 Nová platba | ${payment.description}`,
+            emailHeading: notification.heading,
+            emailButtonLabel: notification.buttonLabel,
+          }, { push: false });
+        }));
+      }
     } catch (err: any) {
       res.status(400).json({ message: err.message });
     }
   });
 
-  app.get("/api/payments/:id", requireAuth, (req, res) => {
+  app.get("/api/payments/:id", requirePaymentAccess, (req, res) => {
     const paymentId = Number(req.params.id);
     if (!Number.isInteger(paymentId)) {
       return res.status(400).json({ message: "Neplatné ID platby" });
@@ -360,7 +411,7 @@ export function registerPaymentsRoutes(app: Express) {
     }
   });
 
-  app.post("/api/calendar/sync", requireAdmin, async (req, res) => {
+  app.post("/api/calendar/sync", requireManager, async (req, res) => {
     try {
       const result = await syncGoogleCalendarEvents({
         calendarId: req.body?.calendarId,

@@ -3,7 +3,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import multer from "multer";
-import { requireAdmin, requireAuth } from "./auth";
+import { requireAuth, requireManager } from "./auth";
 import { storage } from "./storage";
 
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
@@ -154,7 +154,7 @@ export function registerMediaRoutes(app: Express) {
     res.json(storage.getPhotos().map(serializeFile));
   });
 
-  app.post("/api/media/photos", requireAdmin, mediaUpload, (req, res) => {
+  app.post("/api/media/photos", requireManager, mediaUpload, (req, res) => {
     const files = getUploadedFiles(req);
     if (files.length === 0) {
       return res.status(400).json({ message: "Vyber aspoň jeden obrázok" });
@@ -192,7 +192,7 @@ export function registerMediaRoutes(app: Express) {
     }
   });
 
-  app.patch("/api/media/photos/:id", requireAdmin, (req, res) => {
+  app.patch("/api/media/photos/:id", requireManager, (req, res) => {
     const photo = storage.getMediaFile(Number(req.params.id));
     if (!photo || photo.category !== "photo") {
       return res.status(404).json({ message: "Fotka nebola nájdená" });
@@ -212,7 +212,7 @@ export function registerMediaRoutes(app: Express) {
     res.json(serializeFile(moved!));
   });
 
-  app.delete("/api/media/photos/:id", requireAdmin, (req, res) => {
+  app.delete("/api/media/photos/:id", requireManager, (req, res) => {
     const file = storage.getMediaFile(Number(req.params.id));
     if (!file || file.category !== "photo") {
       return res.status(404).json({ message: "Fotka nebola nájdená" });
@@ -226,7 +226,7 @@ export function registerMediaRoutes(app: Express) {
     res.json(storage.getPhotoAlbums().map(serializeAlbum));
   });
 
-  app.post("/api/media/albums", requireAdmin, (req, res) => {
+  app.post("/api/media/albums", requireManager, (req, res) => {
     const title = typeof req.body?.name === "string" ? req.body.name.trim() : "";
     if (!title || title.length > 100) {
       return res.status(400).json({ message: "Názov priečinka je povinný a môže mať najviac 100 znakov" });
@@ -234,7 +234,7 @@ export function registerMediaRoutes(app: Express) {
     res.status(201).json(storage.createPhotoAlbum(title, req.user!.id));
   });
 
-  app.patch("/api/media/albums/:id", requireAdmin, (req, res) => {
+  app.patch("/api/media/albums/:id", requireManager, (req, res) => {
     const title = typeof req.body?.name === "string" ? req.body.name.trim() : "";
     if (!title || title.length > 100) {
       return res.status(400).json({ message: "Názov priečinka je povinný a môže mať najviac 100 znakov" });
@@ -244,7 +244,7 @@ export function registerMediaRoutes(app: Express) {
     res.json(updated);
   });
 
-  app.delete("/api/media/albums/:id", requireAdmin, (req, res) => {
+  app.delete("/api/media/albums/:id", requireManager, (req, res) => {
     const album = storage.getPhotoAlbum(Number(req.params.id));
     if (!album) return res.status(404).json({ message: "Priečinok nebol nájdený" });
     storage.deletePhotoAlbum(album.id);
@@ -261,7 +261,7 @@ export function registerMediaRoutes(app: Express) {
     res.json(serializeTactic(tactic));
   });
 
-  app.post("/api/media/tactics", requireAdmin, mediaUpload, (req, res) => {
+  app.post("/api/media/tactics", requireManager, mediaUpload, (req, res) => {
     const files = getUploadedFiles(req);
     const title = typeof req.body?.title === "string" ? req.body.title.trim() : "";
     const description = typeof req.body?.description === "string" ? req.body.description.trim() : "";
@@ -298,7 +298,7 @@ export function registerMediaRoutes(app: Express) {
     }
   });
 
-  app.put("/api/media/tactics/:id", requireAdmin, mediaUpload, (req, res) => {
+  app.put("/api/media/tactics/:id", requireManager, mediaUpload, (req, res) => {
     const files = getUploadedFiles(req);
     const tacticId = Number(req.params.id);
     const existing = storage.getTacticCollection(tacticId);
@@ -352,7 +352,7 @@ export function registerMediaRoutes(app: Express) {
     }
   });
 
-  app.delete("/api/media/tactics/:id/files/:fileId", requireAdmin, (req, res) => {
+  app.delete("/api/media/tactics/:id/files/:fileId", requireManager, (req, res) => {
     try {
       const tacticId = Number(req.params.id);
       const fileId = Number(req.params.fileId);
@@ -368,7 +368,7 @@ export function registerMediaRoutes(app: Express) {
     }
   });
 
-  app.delete("/api/media/tactics/:id", requireAdmin, (req, res) => {
+  app.delete("/api/media/tactics/:id", requireManager, (req, res) => {
     const tactic = storage.getTacticCollection(Number(req.params.id));
     if (!tactic) return res.status(404).json({ message: "Taktika nebola nájdená" });
 

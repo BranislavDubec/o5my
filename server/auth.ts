@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import bcrypt from 'bcryptjs';
 import { storage } from './storage';
+import { canManageTeam, canViewPersonalPayments } from '@shared/roles';
 
 export async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, 10);
@@ -37,6 +38,26 @@ export function requireAdmin(req: Request, res: Response, next: NextFunction) {
   requireAuth(req, res, () => {
     if (req.user?.role !== 'admin') {
       return res.status(403).json({ message: 'Vyžadované admin práva' });
+    }
+    next();
+  });
+}
+
+// Managers can administer all non-financial team features.
+export function requireManager(req: Request, res: Response, next: NextFunction) {
+  requireAuth(req, res, () => {
+    if (!canManageTeam(req.user?.role)) {
+      return res.status(403).json({ message: 'Vyžadované manažérske práva' });
+    }
+    next();
+  });
+}
+
+// Managers must not access either team finances or their personal payment view.
+export function requirePaymentAccess(req: Request, res: Response, next: NextFunction) {
+  requireAuth(req, res, () => {
+    if (!canViewPersonalPayments(req.user?.role)) {
+      return res.status(403).json({ message: 'Manažér nemá prístup k platbám' });
     }
     next();
   });

@@ -9,12 +9,13 @@ import {
   Calendar, Users, Vote, CreditCard, Settings, LogOut,
   Shield, Menu, X, Sun, Moon, Home, FolderOpen, BellRing, ClipboardList, Trophy, Swords, Flag
 } from "lucide-react";
+import { canAccessFinances, canManageTeam, canViewPersonalPayments } from "@shared/roles";
 
 interface NavItem {
   path: string;
   label: string;
   icon: ReactNode;
-  adminOnly?: boolean;
+  access?: "management" | "finances" | "payments";
 }
 
 function Logo() {
@@ -75,17 +76,27 @@ export function Layout({ children }: { children: ReactNode }) {
     { path: "/opponents", label: t("layout.opponents"), icon: <Flag className="w-5 h-5" /> },
     { path: "/polls", label: t("layout.polls"), icon: <Vote className="w-5 h-5" /> },
     { path: "/files", label: t("layout.files"), icon: <FolderOpen className="w-5 h-5" /> },
-    { path: "/payments", label: t("layout.payments"), icon: <CreditCard className="w-5 h-5" /> },
+    { path: "/payments", label: t("layout.payments"), icon: <CreditCard className="w-5 h-5" />, access: "payments" },
     { path: "/organization", label: t("layout.organization"), icon: <ClipboardList className="w-5 h-5" /> },
     { path: "/statistics", label: t("layout.statistics"), icon: <Trophy className="w-5 h-5" /> },
     { path: "/members", label: t("layout.members"), icon: <Users className="w-5 h-5" /> },
-    { path: "/admin/payments", label: t("layout.adminPayments"), icon: <CreditCard className="w-5 h-5" />, adminOnly: true },
-    { path: "/admin/bank", label: t("layout.adminBank"), icon: <Shield className="w-5 h-5" />, adminOnly: true },
-    { path: "/admin/notifications", label: t("layout.adminNotifications"), icon: <BellRing className="w-5 h-5" />, adminOnly: true },
+    { path: "/admin/payments", label: t("layout.adminPayments"), icon: <CreditCard className="w-5 h-5" />, access: "finances" },
+    { path: "/admin/bank", label: t("layout.adminBank"), icon: <Shield className="w-5 h-5" />, access: "finances" },
+    { path: "/admin/notifications", label: t("layout.adminNotifications"), icon: <BellRing className="w-5 h-5" />, access: "management" },
     { path: "/settings", label: t("layout.settings"), icon: <Settings className="w-5 h-5" /> },
   ];
 
-  const visibleNavItems = navItems.filter(item => !item.adminOnly || user?.role === "admin");
+  const visibleNavItems = navItems.filter(item => {
+    if (!item.access) return true;
+    if (item.access === "management") return canManageTeam(user?.role);
+    if (item.access === "finances") return canAccessFinances(user?.role);
+    return canViewPersonalPayments(user?.role);
+  });
+  const roleLabel = user?.role === "admin"
+    ? t("layout.roleAdmin")
+    : user?.role === "manager"
+      ? t("layout.roleManager")
+      : t("layout.rolePlayer");
   const isActive = (path: string) => path === "/" ? location === "/" : location === path || location.startsWith(`${path}/`);
 
   return (
@@ -120,7 +131,7 @@ export function Layout({ children }: { children: ReactNode }) {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium truncate">{user?.nickname || user?.name}</p>
-              <p className="text-xs text-muted-foreground truncate">{user?.nickname ? user.name : user?.role === "admin" ? t("layout.roleAdmin") : t("layout.rolePlayer")}</p>
+              <p className="text-xs text-muted-foreground truncate">{user?.nickname ? user.name : roleLabel}</p>
             </div>
           </div>
           <div className="px-3">

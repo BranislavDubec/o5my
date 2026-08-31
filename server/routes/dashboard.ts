@@ -19,9 +19,11 @@ export function registerDashboardRoutes(app: Express) {
           : storage.getEventResponse(event.id, req.user!.id)?.status ?? null,
       }));
     const activePolls = polls.filter(poll => !poll.closesAt || poll.closesAt >= now);
-    const outstandingPayments = storage
-      .getPaymentsByUser(req.user!.id)
-      .filter(payment => payment.status !== "paid");
+    const outstandingPayments = req.user!.role === "manager"
+      ? []
+      : storage
+          .getPaymentsByUser(req.user!.id)
+          .filter(payment => payment.status !== "paid");
 
     res.json({
       playerCount: users.filter(user => user.isActive && user.isPlayerActive && user.emailVerified).length,

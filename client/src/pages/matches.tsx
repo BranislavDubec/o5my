@@ -6,6 +6,7 @@ import { sk as skLocale, cs as csLocale, enUS as enLocale } from "date-fns/local
 import { CalendarDays, Clock, MapPin, Pencil, Plus, RefreshCw, Swords, Trophy } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/contexts/auth-context";
+import { canManageTeam } from "@shared/roles";
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/lib/i18n";
 import { getAttendanceBorderClass, type AttendanceStatus } from "@/lib/event-attendance";
@@ -230,7 +231,7 @@ export default function MatchesPage() {
                     {match.homeAway === "away" ? t("matches.away") : t("matches.home")}
                   </Badge>
                   {match.source === "google" && <Badge variant="outline" className="text-[10px]">Google</Badge>}
-                  {user?.role === "admin" && (
+                  {canManageTeam(user?.role) && (
                     <button
                       type="button"
                       data-testid={`edit-match-${match.id}`}
@@ -280,7 +281,7 @@ export default function MatchesPage() {
           <h1 className="font-serif text-xl font-bold">{t("matches.title")}</h1>
           <p className="mt-1 text-sm text-muted-foreground">{t("matches.subtitle")}</p>
         </div>
-        {user?.role === "admin" && (
+        {canManageTeam(user?.role) && (
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => syncMutation.mutate()} disabled={syncMutation.isPending}>
               <RefreshCw className={`mr-1 h-4 w-4 ${syncMutation.isPending ? "animate-spin" : ""}`} />

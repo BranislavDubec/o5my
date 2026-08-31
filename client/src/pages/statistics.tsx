@@ -3,6 +3,7 @@ import { Link } from "wouter";
 import { Activity, Handshake, Home, Minus, Plane, Plus, Scale, Target, TrendingDown, Trophy, Users } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/contexts/auth-context";
+import { canManageTeam } from "@shared/roles";
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/lib/i18n";
 import { Badge } from "@/components/ui/badge";
@@ -69,7 +70,7 @@ export default function StatisticsPage() {
   const { toast } = useToast();
   const { t, lang } = useI18n();
   const queryClient = useQueryClient();
-  const isAdmin = user?.role === "admin";
+  const isAdmin = canManageTeam(user?.role);
   const { data: statistics = [], isLoading } = useQuery<PlayerStatistic[]>({
     queryKey: ["/api/statistics"],
   });

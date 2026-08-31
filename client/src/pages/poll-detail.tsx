@@ -6,7 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Check } from "lucide-react";
+import { ArrowLeft, Check, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
 
@@ -15,8 +15,11 @@ interface PollDetail {
   title: string;
   description: string | null;
   closesAt: string | null;
+  isAnonymous: boolean;
   options: { id: number; label: string; pollId: number }[];
   votes: { id: number; optionId: number; userId: number; user: { id: number; name: string } }[];
+  results: { optionId: number; count: number }[];
+  totalVotes: number;
   userVote: { id: number; optionId: number } | null | undefined;
 }
 
@@ -46,11 +49,11 @@ export default function PollDetailPage() {
   }
 
   const isClosed = !!poll.closesAt && new Date(poll.closesAt) < new Date();
-  const totalVotes = poll.votes.length;
+  const totalVotes = poll.totalVotes;
   const votesByOption = poll.options.map(opt => ({
     ...opt,
-    count: poll.votes.filter(v => v.optionId === opt.id).length,
-    voters: poll.votes.filter(v => v.optionId === opt.id).map(v => v.user.name),
+    count: poll.results.find(result => result.optionId === opt.id)?.count ?? 0,
+    voters: poll.isAnonymous ? [] : poll.votes.filter(v => v.optionId === opt.id).map(v => v.user.name),
   }));
 
   return (
@@ -64,10 +67,12 @@ export default function PollDetailPage() {
       <div>
         <div className="flex items-center gap-2 mb-2">
           {isClosed ? <Badge variant="secondary">{t("polls.closed")}</Badge> : <Badge variant="default">{t("polls.active")}</Badge>}
+          {poll.isAnonymous && <Badge variant="outline"><EyeOff className="mr-1 h-3 w-3" />{t("polls.anonymousBadge")}</Badge>}
           <span className="text-xs text-muted-foreground">{totalVotes} {totalVotes === 1 ? t("pollDetail.voteOne") : t("pollDetail.voteMany")}</span>
         </div>
         <h1 className="font-serif text-xl font-bold" data-testid="text-poll-title">{poll.title}</h1>
         {poll.description && <p className="text-sm text-muted-foreground mt-2">{poll.description}</p>}
+        {poll.isAnonymous && <p className="mt-2 text-xs text-muted-foreground">{t("pollDetail.anonymousHint")}</p>}
       </div>
 
       <div className="space-y-3">

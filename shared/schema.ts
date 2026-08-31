@@ -12,7 +12,7 @@ export const users = sqliteTable("users", {
   lastName: text("last_name"),
   nickname: text("nickname"),
   phone: text("phone"),
-  role: text("role").notNull().default("player"), // admin | player
+  role: text("role").notNull().default("player"), // admin | manager | player
   isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
   isPlayerActive: integer("is_player_active", { mode: "boolean" }).notNull().default(true),
   theme: text("theme").notNull().default("light"), // light | dark
@@ -166,6 +166,7 @@ export const polls = sqliteTable("polls", {
   title: text("title").notNull(),
   description: text("description"),
   closesAt: text("closes_at"),
+  isAnonymous: integer("is_anonymous", { mode: "boolean" }).notNull().default(false),
   createdBy: integer("created_by").notNull().references(() => users.id),
   createdAt: text("created_at").notNull().$defaultFn(() => new Date().toISOString()),
 });
@@ -180,6 +181,7 @@ export const insertPollSchema = createInsertSchema(polls).pick({
   title: true,
   description: true,
   closesAt: true,
+  isAnonymous: true,
   createdBy: true,
 });
 
@@ -292,6 +294,7 @@ export const walletTransactions = sqliteTable("wallet_transactions", {
   paymentId: integer("payment_id").unique().references(() => payments.id),
   amount: integer("amount").notNull(), // in CZK; balance is the sum of all entries
   description: text("description").notNull(),
+  createdBy: integer("created_by").references(() => users.id),
   createdAt: text("created_at").notNull().$defaultFn(() => new Date().toISOString()),
 });
 
@@ -301,6 +304,7 @@ export const insertWalletTransactionSchema = createInsertSchema(walletTransactio
   paymentId: true,
   amount: true,
   description: true,
+  createdBy: true,
 });
 
 export type InsertWalletTransaction = z.infer<typeof insertWalletTransactionSchema>;
