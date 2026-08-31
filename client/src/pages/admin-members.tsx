@@ -113,7 +113,7 @@ export default function AdminMembers() {
   const activePlayerCount = users.filter(user => user.isActive && user.isPlayerActive && (!isAdmin || user.emailVerified)).length;
 
   return (
-    <div className="space-y-6 max-w-2xl">
+    <div className="max-w-3xl space-y-6">
       <div>
         <h1 className="font-serif text-xl font-bold">{t("adminMembers.title")}</h1>
         <p className="text-sm text-muted-foreground mt-1">
@@ -132,45 +132,48 @@ export default function AdminMembers() {
         <div className="space-y-2">
           {users.map(u => (
             <Card key={u.id} className={u.isActive ? undefined : "opacity-60"} data-testid={`card-user-${u.id}`}>
-              <CardContent className="p-3 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-primary/15 flex items-center justify-center text-primary font-semibold text-sm shrink-0">
-                  {u.name.charAt(0).toUpperCase()}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="font-medium text-sm truncate">{u.name}</p>
-                    {u.role === "admin" ? (
-                      <Badge variant="default" className="text-xs"><Shield className="w-3 h-3 mr-0.5" />{t("layout.roleAdmin")}</Badge>
-                    ) : (
-                      <Badge variant="secondary" className="text-xs"><UserIcon className="w-3 h-3 mr-0.5" />{t("layout.rolePlayer")}</Badge>
-                    )}
-                    {!u.isActive && <Badge variant="outline" className="text-xs">{t("adminMembers.inactiveBadge")}</Badge>}
-                    {u.isPlayerActive === false && <Badge variant="secondary" className="text-xs">{t("adminMembers.playerInactiveBadge")}</Badge>}
-                    {u.emailVerified ? (
-                      <Badge variant="outline" className="text-xs text-emerald-700 dark:text-emerald-300" data-testid={`badge-email-verified-${u.id}`}>
-                        <MailCheck className="mr-1 h-3 w-3" />{t("adminMembers.emailVerifiedBadge")}
-                      </Badge>
-                    ) : isAdmin ? (
-                      <Badge variant="outline" className="text-xs text-amber-700 dark:text-amber-300" data-testid={`badge-email-unverified-${u.id}`}>
-                        {t("adminMembers.emailUnverifiedBadge")}
-                      </Badge>
-                    ) : null}
+              <CardContent className="p-3 sm:p-4">
+                <div className="flex flex-col gap-3 md:flex-row md:items-start">
+                  <div className="flex min-w-0 flex-1 items-start gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/15 text-sm font-semibold text-primary">
+                      {u.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                        <p className="min-w-0 basis-full break-words text-sm font-medium sm:basis-auto">{u.name}</p>
+                        {u.role === "admin" ? (
+                          <Badge variant="default" className="text-xs"><Shield className="mr-0.5 h-3 w-3" />{t("layout.roleAdmin")}</Badge>
+                        ) : (
+                          <Badge variant="secondary" className="text-xs"><UserIcon className="mr-0.5 h-3 w-3" />{t("layout.rolePlayer")}</Badge>
+                        )}
+                        {!u.isActive && <Badge variant="outline" className="text-xs">{t("adminMembers.inactiveBadge")}</Badge>}
+                        {u.isPlayerActive === false && <Badge variant="secondary" className="text-xs">{t("adminMembers.playerInactiveBadge")}</Badge>}
+                        {u.emailVerified ? (
+                          <Badge variant="outline" className="text-xs text-emerald-700 dark:text-emerald-300" data-testid={`badge-email-verified-${u.id}`}>
+                            <MailCheck className="mr-1 h-3 w-3" />{t("adminMembers.emailVerifiedBadge")}
+                          </Badge>
+                        ) : isAdmin ? (
+                          <Badge variant="outline" className="text-xs text-amber-700 dark:text-amber-300" data-testid={`badge-email-unverified-${u.id}`}>
+                            {t("adminMembers.emailUnverifiedBadge")}
+                          </Badge>
+                        ) : null}
+                      </div>
+                      {isAdmin && u.email && <p className="mt-1 break-all text-xs text-muted-foreground sm:truncate">{u.email}</p>}
+                      {u.nickname && <p className="break-words text-xs font-medium text-primary">@{u.nickname}</p>}
+                      {isAdmin && typeof u.walletBalance === "number" && (
+                        <p className="mt-1 flex flex-wrap items-center gap-1 text-xs font-semibold text-foreground" data-testid={`wallet-user-${u.id}`}>
+                          <WalletCards className="h-3.5 w-3.5 shrink-0 text-primary" />
+                          {t("adminMembers.wallet", { amount: formatWalletBalance(u.walletBalance, u.walletCurrency || "CZK") })}
+                        </p>
+                      )}
+                      <p className="text-xs text-muted-foreground">{t("adminMembers.addedOn", { date: format(parseISO(u.createdAt), "d. MMM yyyy", { locale: dateLocale }) })}</p>
+                    </div>
                   </div>
-                  {isAdmin && u.email && <p className="text-xs text-muted-foreground truncate">{u.email}</p>}
-                  {u.nickname && <p className="text-xs font-medium text-primary truncate">@{u.nickname}</p>}
-                  {isAdmin && typeof u.walletBalance === "number" && (
-                    <p className="mt-1 flex items-center gap-1 text-xs font-semibold text-foreground" data-testid={`wallet-user-${u.id}`}>
-                      <WalletCards className="h-3.5 w-3.5 text-primary" />
-                      {t("adminMembers.wallet", { amount: formatWalletBalance(u.walletBalance, u.walletCurrency || "CZK") })}
-                    </p>
-                  )}
-                  <p className="text-xs text-muted-foreground">{t("adminMembers.addedOn", { date: format(parseISO(u.createdAt), "d. MMM yyyy", { locale: dateLocale }) })}</p>
-                </div>
-                {isAdmin && (
-                  <div className="flex flex-col gap-1 shrink-0">
+                  {isAdmin && (
+                    <div className="grid grid-cols-1 gap-2 border-t pt-3 sm:grid-cols-2 md:min-w-[180px] md:grid-cols-1 md:border-l md:border-t-0 md:pl-3 md:pt-0">
                     <Dialog open={roleDialog.open && roleDialog.userId === u.id} onOpenChange={open => setRoleDialog({ open, userId: u.id, role: u.role })}>
                       <DialogTrigger asChild>
-                        <Button variant="outline" size="sm" className="text-xs" disabled={!u.isActive} data-testid={`button-role-${u.id}`}>{t("adminMembers.role")}</Button>
+                        <Button variant="outline" size="sm" className="w-full text-xs" disabled={!u.isActive} data-testid={`button-role-${u.id}`}>{t("adminMembers.role")}</Button>
                       </DialogTrigger>
                       <DialogContent>
                         <DialogHeader>
@@ -198,7 +201,7 @@ export default function AdminMembers() {
                     <Button
                       variant="outline"
                       size="sm"
-                      className="text-xs"
+                      className="w-full text-xs"
                       disabled={updatePlayerStatusMutation.isPending}
                       onClick={() => updatePlayerStatusMutation.mutate({ id: u.id, isPlayerActive: !u.isPlayerActive })}
                       data-testid={`button-player-status-${u.id}`}
@@ -210,7 +213,7 @@ export default function AdminMembers() {
                       <Button
                         variant="outline"
                         size="sm"
-                        className="text-xs"
+                        className="w-full text-xs"
                         disabled={verifyEmailMutation.isPending}
                         onClick={() => {
                           if (confirm(t("adminMembers.verifyEmailConfirm", { name: u.name, email: u.email || "" }))) {
@@ -226,7 +229,7 @@ export default function AdminMembers() {
                       <Button
                         variant={u.isActive ? "ghost" : "outline"}
                         size="sm"
-                        className={u.isActive ? "text-xs text-destructive hover:text-destructive" : "text-xs"}
+                        className={u.isActive ? "w-full text-xs text-destructive hover:text-destructive" : "w-full text-xs"}
                         disabled={updateStatusMutation.isPending}
                         onClick={() => {
                           const nextIsActive = !u.isActive;
@@ -241,7 +244,8 @@ export default function AdminMembers() {
                       </Button>
                     )}
                   </div>
-                )}
+                  )}
+                </div>
               </CardContent>
             </Card>
           ))}
