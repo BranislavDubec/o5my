@@ -1,0 +1,62 @@
+erDiagram
+    USERS {
+        integer id PK
+        text email UK
+        text password
+        text name
+        text first_name
+        text last_name
+        text nickname
+        text phone
+        text role "player | manager | admin"
+        boolean is_active
+        boolean is_player_active
+        text theme
+        boolean email_verified
+        integer password_version
+        integer terms_version
+        text terms_accepted_at
+        text created_at
+    }
+    PLAYER_STATISTICS {
+        integer id PK
+        integer user_id FK,UK
+        integer goals
+        integer assists
+        text updated_at
+    }
+    EMAIL_VERIFICATION_TOKENS {
+        integer id PK
+        integer user_id FK
+        text token_hash UK
+        text expires_at
+        text created_at
+    }
+    PASSWORD_RESET_TOKENS {
+        integer id PK
+        integer user_id FK
+        text token_hash UK
+        text expires_at
+        text created_at
+    }
+    NOTIFICATION_SETTINGS {
+        integer id PK
+        integer user_id FK
+        boolean push_enabled
+        boolean email_enabled
+        text push_subscription
+    }
+    PUSH_SUBSCRIPTIONS {
+        integer id PK
+        integer user_id FK
+        text endpoint UK
+        text subscription
+        text created_at
+        text updated_at
+    }
+
+    USERS ||--o| PLAYER_STATISTICS : has
+    USERS ||--o{ EMAIL_VERIFICATION_TOKENS : receives
+    USERS ||--o{ PASSWORD_RESET_TOKENS : receives
+    USERS ||--o{ NOTIFICATION_SETTINGS : configures
+    USERS ||--o{ PUSH_SUBSCRIPTIONS : registers

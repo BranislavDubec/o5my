@@ -1,0 +1,64 @@
+erDiagram
+    USERS {
+        integer id PK
+        text name
+        boolean is_player_active
+    }
+    OPPONENTS {
+        integer id PK
+        text name
+        text description
+    }
+    EVENTS {
+        integer id PK
+        text type "match | training | teambuilding"
+        text title
+        text description
+        text location
+        text start_time
+        text end_time
+        text opponent
+        integer opponent_id FK
+        text home_away
+        text external_id
+        text source
+        integer created_by FK
+        text created_at
+    }
+    EVENT_RESPONSES {
+        integer id PK
+        integer event_id FK
+        integer user_id FK
+        text status "going | not_going | maybe"
+        text note
+        text created_at
+    }
+    MATCH_RESULTS {
+        integer id PK
+        integer event_id FK,UK
+        integer team_score
+        integer opponent_score
+        text notes
+        integer updated_by FK
+        text created_at
+        text updated_at
+    }
+    MATCH_PLAYER_STATISTICS {
+        integer id PK
+        integer event_id FK
+        integer user_id FK
+        integer goals
+        integer assists
+        boolean played
+        text created_at
+        text updated_at
+    }
+
+    USERS ||--o{ EVENTS : creates
+    OPPONENTS o|--o{ EVENTS : appears_in
+    EVENTS ||--o{ EVENT_RESPONSES : has
+    USERS ||--o{ EVENT_RESPONSES : submits
+    EVENTS ||--o| MATCH_RESULTS : has
+    USERS ||--o{ MATCH_RESULTS : updates
+    EVENTS ||--o{ MATCH_PLAYER_STATISTICS : records
+    USERS ||--o{ MATCH_PLAYER_STATISTICS : earns

@@ -1,0 +1,73 @@
+erDiagram
+    USERS {
+        integer id PK
+        text name
+        text email
+    }
+    PAYMENTS {
+        integer id PK
+        integer user_id FK
+        integer amount
+        integer full_price
+        text identity
+        integer wallet_applied_amount
+        text due_date
+        text variable_symbol
+        text description
+        text status "pending | paid | overdue"
+        text created_at
+    }
+    BANK_TRANSACTIONS {
+        integer id PK
+        text transaction_id UK
+        integer amount "halere"
+        text currency
+        text date
+        text payer_name
+        text payer_account
+        text payer_bank_code
+        text payer_iban
+        text variable_symbol
+        text constant_symbol
+        text memo
+        text sync_error
+        text raw_data
+        integer matched_payment_id FK
+        integer reconciled_user_id FK
+        integer reconciled_by FK
+        text reconciled_at
+        text synced_at
+    }
+    WALLET_TRANSACTIONS {
+        integer id PK
+        integer user_id FK
+        integer bank_transaction_id FK,UK
+        integer payment_id FK,UK
+        integer amount
+        text description
+        integer created_by FK
+        text created_at
+    }
+    CASH_TRANSACTIONS {
+        integer id PK
+        text type "income | expense"
+        integer amount
+        text description
+        integer created_by FK
+        text created_at
+    }
+    APP_SETTINGS {
+        integer id PK
+        text key UK
+        text value
+    }
+
+    USERS ||--o{ PAYMENTS : owes
+    PAYMENTS o|--o{ BANK_TRANSACTIONS : matched_by
+    USERS o|--o{ BANK_TRANSACTIONS : reconciled_to
+    USERS o|--o{ BANK_TRANSACTIONS : reconciled_by
+    USERS ||--o{ WALLET_TRANSACTIONS : owns
+    USERS o|--o{ WALLET_TRANSACTIONS : created_by
+    BANK_TRANSACTIONS o|--o| WALLET_TRANSACTIONS : funds
+    PAYMENTS o|--o| WALLET_TRANSACTIONS : consumes
+    USERS o|--o{ CASH_TRANSACTIONS : records

@@ -1,0 +1,33 @@
+erDiagram
+    USERS {
+        integer id PK
+        text name
+        text role
+    }
+    POLLS {
+        integer id PK
+        text title
+        text description
+        text closes_at
+        boolean is_anonymous
+        integer created_by FK
+        text created_at
+    }
+    POLL_OPTIONS {
+        integer id PK
+        integer poll_id FK
+        text label
+    }
+    POLL_VOTES {
+        integer id PK
+        integer poll_id FK
+        integer option_id FK
+        integer user_id FK
+        text created_at
+    }
+
+    USERS ||--o{ POLLS : creates
+    POLLS ||--o{ POLL_OPTIONS : contains
+    POLLS ||--o{ POLL_VOTES : receives
+    POLL_OPTIONS ||--o{ POLL_VOTES : selected_in
+    USERS ||--o{ POLL_VOTES : casts

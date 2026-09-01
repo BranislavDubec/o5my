@@ -1,0 +1,67 @@
+erDiagram
+    USERS {
+        integer id PK
+        text name
+        text role
+    }
+    TEAM_RESPONSIBILITIES {
+        integer id PK
+        text section
+        text title
+        text kind "responsibility | inventory"
+        text status "ok | attention | done"
+        text owner
+        text notes
+        integer quantity
+        integer usable_quantity
+        text location
+        integer sort_order
+        text created_at
+        text updated_at
+    }
+    TEAM_RESPONSIBILITY_OWNERS {
+        integer id PK
+        integer responsibility_id FK
+        integer user_id FK
+        text created_at
+    }
+    TEAM_INVENTORY_ITEMS {
+        integer id PK
+        integer responsibility_id FK
+        text name
+        text status
+        integer quantity
+        integer usable_quantity
+        text location
+        text notes
+        integer sort_order
+        text created_at
+        text updated_at
+    }
+    MEDIA_COLLECTIONS {
+        integer id PK
+        text kind
+        text title
+        text description
+        integer created_by FK
+        text created_at
+    }
+    MEDIA_FILES {
+        integer id PK
+        integer collection_id FK
+        text category "photo | tactic"
+        text stored_name UK
+        text original_name
+        text mime_type
+        integer size
+        integer sort_order
+        integer uploaded_by FK
+        text created_at
+    }
+
+    TEAM_RESPONSIBILITIES ||--o{ TEAM_RESPONSIBILITY_OWNERS : assigned_to
+    USERS ||--o{ TEAM_RESPONSIBILITY_OWNERS : owns
+    TEAM_RESPONSIBILITIES ||--o{ TEAM_INVENTORY_ITEMS : contains
+    USERS ||--o{ MEDIA_COLLECTIONS : creates
+    MEDIA_COLLECTIONS o|--o{ MEDIA_FILES : contains
+    USERS ||--o{ MEDIA_FILES : uploads

@@ -1,0 +1,24 @@
+flowchart LR
+    users[Users & authentication]
+    events[Events & matches]
+    polls[Polls]
+    finance[Finance & banking]
+    team[Team organization]
+    media[Media]
+    settings[App settings]
+
+    users -->|players and admins| events
+    users -->|voters and creators| polls
+    users -->|payers and wallets| finance
+    users -->|owners| team
+    users -->|uploaders| media
+    events -->|attendance and statistics| users
+    finance -->|payment status| users
+    settings -.-> finance
+
+    click users "users-auth.svg" "Open users and authentication"
+    click events "events-matches.svg" "Open events and matches"
+    click polls "polls.svg" "Open polls"
+    click finance "finance.svg" "Open finance and banking"
+    click team "team-media.svg" "Open team and media"
+    click media "team-media.svg" "Open team and media"
