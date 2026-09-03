@@ -342,6 +342,8 @@ export const sk = {
     voteHint: "Klikni na možnosť pre hlasovanie",
     votedHint: "Hlasoval si. Klikni na inú možnosť pre zmenu.",
     anonymousHint: "Táto anketa je anonymná. Mená hlasujúcich ani počty hlasov pri možnostiach nie sú viditeľné.",
+    showAnonymousResults: "Zobraziť výsledky",
+    hideAnonymousResults: "Skryť výsledky",
   },
   payments: {
     subtitle: "Tvoj platobný prehľad",
@@ -1212,6 +1214,8 @@ export const cz: Dict = {
     voteHint: "Klikni na možnost pro hlasování",
     votedHint: "Hlasoval jsi. Klikni na jinou možnost pro změnu.",
     anonymousHint: "Tato anketa je anonymní. Jména hlasujících ani počty hlasů u možností nejsou viditelné.",
+    showAnonymousResults: "Zobrazit výsledky",
+    hideAnonymousResults: "Skrýt výsledky",
   },
   payments: {
     subtitle: "Tvůj platební přehled",
@@ -2080,6 +2084,8 @@ export const en: Dict = {
     voteHint: "Click an option to vote",
     votedHint: "You voted. Click another option to change your vote.",
     anonymousHint: "This poll is anonymous. Voter names and per-option vote counts are hidden.",
+    showAnonymousResults: "Show results",
+    hideAnonymousResults: "Hide results",
   },
   payments: {
     subtitle: "Your payment overview",

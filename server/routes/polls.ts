@@ -50,7 +50,9 @@ export function registerPollsRoutes(app: Express) {
     const options = storage.getPollOptions(poll.id);
     const allVotes = storage.getPollVotes(poll.id);
     const userVote = storage.getUserPollVote(poll.id, req.user!.id);
-    const results = poll.isAnonymous
+    const canRevealAnonymousResults = req.user?.role === "admin" && req.query.revealResults === "1";
+    const shouldHideResults = poll.isAnonymous && !canRevealAnonymousResults;
+    const results = shouldHideResults
       ? []
       : options.map(option => ({
         optionId: option.id,

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
@@ -6,7 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Check, EyeOff } from "lucide-react";
+import { ArrowLeft, Check, Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
 
@@ -29,16 +30,18 @@ export default function PollDetailPage() {
   const { toast } = useToast();
   const { t } = useI18n();
   const queryClient = useQueryClient();
+  const [showAnonymousResults, setShowAnonymousResults] = useState(false);
+  const canRevealAnonymousResults = user?.role === "admin";
 
   const { data: poll } = useQuery<PollDetail>({
-    queryKey: ["/api/polls", id],
+    queryKey: ["/api/polls", `${id}${showAnonymousResults ? "?revealResults=1" : ""}`],
   });
 
   const voteMutation = useMutation({
     mutationFn: (optionId: number) =>
       apiRequest("POST", `/api/polls/${id}/votes`, { optionId }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/polls", id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/polls"] });
       queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
       toast({ title: t("pollDetail.voteRecorded") });
     },
@@ -50,6 +53,7 @@ export default function PollDetailPage() {
 
   const isClosed = !!poll.closesAt && new Date(poll.closesAt) < new Date();
   const totalVotes = poll.totalVotes;
+  const showResults = !poll.isAnonymous || showAnonymousResults;
   const votesByOption = poll.options.map(opt => ({
     ...opt,
     count: poll.results.find(result => result.optionId === opt.id)?.count ?? 0,
@@ -73,11 +77,23 @@ export default function PollDetailPage() {
         <h1 className="font-serif text-xl font-bold" data-testid="text-poll-title">{poll.title}</h1>
         {poll.description && <p className="text-sm text-muted-foreground mt-2">{poll.description}</p>}
         {poll.isAnonymous && <p className="mt-2 text-xs text-muted-foreground">{t("pollDetail.anonymousHint")}</p>}
+        {poll.isAnonymous && canRevealAnonymousResults && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-3"
+            onClick={() => setShowAnonymousResults(value => !value)}
+            data-testid="button-toggle-anonymous-results"
+          >
+            {showAnonymousResults ? <EyeOff className="mr-1 h-4 w-4" /> : <Eye className="mr-1 h-4 w-4" />}
+            {showAnonymousResults ? t("pollDetail.hideAnonymousResults") : t("pollDetail.showAnonymousResults")}
+          </Button>
+        )}
       </div>
 
       <div className="space-y-3">
         {votesByOption.map(opt => {
-          const pct = !poll.isAnonymous && totalVotes > 0 ? Math.round((opt.count / totalVotes) * 100) : 0;
+          const pct = showResults && totalVotes > 0 ? Math.round((opt.count / totalVotes) * 100) : 0;
           const isMyVote = poll.userVote?.optionId === opt.id;
           return (
             <Card
@@ -101,11 +117,11 @@ export default function PollDetailPage() {
                       {isMyVote && <Check className="w-4 h-4 text-primary" data-testid="icon-my-vote" />}
                       <span className="font-medium text-sm">{opt.label}</span>
                     </div>
-                    {!poll.isAnonymous && (
+                    {showResults && (
                       <span className="text-sm font-semibold" data-testid={`text-votes-${opt.id}`}>{opt.count} ({pct}%)</span>
                     )}
                   </div>
-                  {!poll.isAnonymous && (
+                  {showResults && (
                     <div className="h-2 bg-muted rounded-full overflow-hidden">
                       <div
                         className={cn("h-full rounded-full transition-all", isMyVote ? "bg-primary" : "bg-muted-foreground/30")}
