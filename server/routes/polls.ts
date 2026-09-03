@@ -50,10 +50,12 @@ export function registerPollsRoutes(app: Express) {
     const options = storage.getPollOptions(poll.id);
     const allVotes = storage.getPollVotes(poll.id);
     const userVote = storage.getUserPollVote(poll.id, req.user!.id);
-    const results = options.map(option => ({
-      optionId: option.id,
-      count: allVotes.filter(vote => vote.optionId === option.id).length,
-    }));
+    const results = poll.isAnonymous
+      ? []
+      : options.map(option => ({
+        optionId: option.id,
+        count: allVotes.filter(vote => vote.optionId === option.id).length,
+      }));
     res.json({
       ...poll,
       options,

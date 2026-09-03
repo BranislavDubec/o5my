@@ -77,7 +77,7 @@ export default function PollDetailPage() {
 
       <div className="space-y-3">
         {votesByOption.map(opt => {
-          const pct = totalVotes > 0 ? Math.round((opt.count / totalVotes) * 100) : 0;
+          const pct = !poll.isAnonymous && totalVotes > 0 ? Math.round((opt.count / totalVotes) * 100) : 0;
           const isMyVote = poll.userVote?.optionId === opt.id;
           return (
             <Card
@@ -101,14 +101,18 @@ export default function PollDetailPage() {
                       {isMyVote && <Check className="w-4 h-4 text-primary" data-testid="icon-my-vote" />}
                       <span className="font-medium text-sm">{opt.label}</span>
                     </div>
-                    <span className="text-sm font-semibold" data-testid={`text-votes-${opt.id}`}>{opt.count} ({pct}%)</span>
+                    {!poll.isAnonymous && (
+                      <span className="text-sm font-semibold" data-testid={`text-votes-${opt.id}`}>{opt.count} ({pct}%)</span>
+                    )}
                   </div>
-                  <div className="h-2 bg-muted rounded-full overflow-hidden">
-                    <div
-                      className={cn("h-full rounded-full transition-all", isMyVote ? "bg-primary" : "bg-muted-foreground/30")}
-                      style={{ width: `${pct}%` }}
-                    />
-                  </div>
+                  {!poll.isAnonymous && (
+                    <div className="h-2 bg-muted rounded-full overflow-hidden">
+                      <div
+                        className={cn("h-full rounded-full transition-all", isMyVote ? "bg-primary" : "bg-muted-foreground/30")}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  )}
                   {opt.voters.length > 0 && (
                     <div className="flex flex-wrap gap-1 mt-2">
                       {opt.voters.map(name => (
