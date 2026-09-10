@@ -6,7 +6,7 @@
   "lang": "sk",
   "start_url": "/#/",
   "scope": "/",
-  "display": "standalone",
+  "display": "browser",
   "background_color": "#ffffff",
   "theme_color": "#15803d",
   "orientation": "portrait-primary",
