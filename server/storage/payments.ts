@@ -134,6 +134,82 @@ function findAutomaticPaymentMatch(
   };
 }
 
+type WalletSettlementResult = {
+  settled: number;
+  amount: number;
+  paymentIds: number[];
+};
+
+/**
+ * Settles complete outstanding payments from wallet balances.
+ *
+ * This deliberately never creates a partial payment: a payment is touched only
+ * when the user's current wallet balance covers its entire outstanding amount.
+ * The caller supplies an existing transaction so wallet debit + payment update
+ * are committed atomically with the wallet credit that triggered the operation.
+ */
+function settleEligiblePaymentsInTransaction(
+  database: any,
+  userId: number | undefined,
+  actorId?: number,
+): WalletSettlementResult {
+  const allWalletTransactions = database.select().from(walletTransactions).all() as WalletTransaction[];
+  const balances = new Map<number, number>();
+  for (const transaction of allWalletTransactions) {
+    balances.set(transaction.userId, (balances.get(transaction.userId) ?? 0) + transaction.amount);
+  }
+
+  const candidates = (database.select().from(payments).all() as Payment[])
+    .filter(payment => (userId === undefined || payment.userId === userId)
+      && payment.status !== "paid"
+      && payment.amount - payment.walletAppliedAmount > 0)
+    .sort((a, b) => a.dueDate.localeCompare(b.dueDate) || a.id - b.id);
+
+  const paymentIds: number[] = [];
+  let amount = 0;
+  for (const payment of candidates) {
+    const balance = balances.get(payment.userId) ?? 0;
+    const outstanding = payment.amount - payment.walletAppliedAmount;
+    if (balance < outstanding) continue;
+
+    const existingDebit = database.select().from(walletTransactions)
+      .where(eq(walletTransactions.paymentId, payment.id))
+      .get() as WalletTransaction | undefined;
+    if (existingDebit) {
+      database.update(walletTransactions)
+        .set({
+          amount: existingDebit.amount - outstanding,
+          description: `Platba #${payment.id}: ${payment.description}`,
+          createdBy: actorId ?? existingDebit.createdBy,
+        })
+        .where(eq(walletTransactions.id, existingDebit.id))
+        .run();
+    } else {
+      database.insert(walletTransactions).values({
+        userId: payment.userId,
+        bankTransactionId: null,
+        paymentId: payment.id,
+        amount: -outstanding,
+        description: `Platba #${payment.id}: ${payment.description}`,
+        createdBy: actorId ?? null,
+      }).run();
+    }
+
+    database.update(payments)
+      .set({
+        walletAppliedAmount: payment.amount,
+        status: "paid",
+      })
+      .where(eq(payments.id, payment.id))
+      .run();
+    balances.set(payment.userId, balance - outstanding);
+    paymentIds.push(payment.id);
+    amount += outstanding;
+  }
+
+  return { settled: paymentIds.length, amount, paymentIds };
+}
+
 export class PaymentsStore {
   // ============ PAYMENTS ============
   getPayment(id: number): Payment | undefined {
@@ -435,6 +511,11 @@ export class PaymentsStore {
         }).run();
       }
 
+      // A bank overpayment or standalone wallet deposit may now cover older
+      // unpaid payments. Settle those complete payments in this same SQLite
+      // transaction, so a failed update cannot consume wallet credit alone.
+      settleEligiblePaymentsInTransaction(database, user.id, input.actorId);
+
       const reconciledAt = new Date().toISOString();
       const updatedTransaction = database.update(bankTransactions)
         .set({
@@ -494,6 +575,10 @@ export class PaymentsStore {
   }
 
   // ============ USER WALLETS ============
+  applyWalletToEligiblePayments(userId?: number, actorId?: number): WalletSettlementResult {
+    return db.transaction(database => settleEligiblePaymentsInTransaction(database, userId, actorId));
+  }
+
   getWalletBalance(userId: number): number {
     return db.select().from(walletTransactions)
       .where(eq(walletTransactions.userId, userId))

@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, CreditCard, Search, X, CheckCircle2, Clock, AlertCircle, ChevronRight, Users } from "lucide-react";
+import { Plus, CreditCard, Search, X, CheckCircle2, Clock, AlertCircle, ChevronRight, Users, Wallet } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { sk as skLocale, cs as csLocale, enUS as enLocale } from "date-fns/locale";
 import { useI18n } from "@/lib/i18n";
@@ -107,6 +107,25 @@ export default function AdminPayments() {
     onError: (err: any) => toast({ title: t("common.error"), description: err.message, variant: "destructive" }),
   });
 
+  const applyWalletMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/payments/apply-wallet", {});
+      return response.json() as Promise<{ settled: number; amount: number }>;
+    },
+    onSuccess: result => {
+      queryClient.invalidateQueries({ queryKey: ["/api/payments/all"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/payments"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/wallet"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      toast({
+        title: result.settled > 0
+          ? t("adminPayments.walletSettled", { count: result.settled, amount: result.amount })
+          : t("adminPayments.walletNothingToSettle"),
+      });
+    },
+    onError: (err: any) => toast({ title: t("common.error"), description: err.message, variant: "destructive" }),
+  });
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (form.userIds.length === 0) return;
@@ -151,10 +170,21 @@ export default function AdminPayments() {
           <h1 className="font-serif text-xl font-bold">{t("adminPayments.title")}</h1>
           <p className="text-sm text-muted-foreground mt-1">{t("adminPayments.subtitle")}</p>
         </div>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button size="sm" data-testid="button-add-payment"><Plus className="w-4 h-4 mr-1" />{t("adminPayments.add")}</Button>
-          </DialogTrigger>
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => applyWalletMutation.mutate()}
+            disabled={applyWalletMutation.isPending}
+            data-testid="button-apply-wallet"
+          >
+            <Wallet className="w-4 h-4 mr-1" />
+            {applyWalletMutation.isPending ? t("common.loading") : t("adminPayments.applyWallet")}
+          </Button>
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm" data-testid="button-add-payment"><Plus className="w-4 h-4 mr-1" />{t("adminPayments.add")}</Button>
+            </DialogTrigger>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>{t("adminPayments.newPayment")}</DialogTitle>
@@ -322,7 +352,8 @@ export default function AdminPayments() {
               </DialogFooter>
             </form>
           </DialogContent>
-        </Dialog>
+          </Dialog>
+        </div>
       </div>
 
       <Card data-testid="payment-filters">

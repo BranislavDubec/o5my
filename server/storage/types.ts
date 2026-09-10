@@ -225,6 +225,11 @@ export interface IStorage {
   getWalletBalances(): Map<number, number>;
   getWalletTransactionsByUser(userId: number): WalletTransaction[];
   createWalletTransaction(transaction: InsertWalletTransaction): WalletTransaction | undefined;
+  applyWalletToEligiblePayments(userId?: number, actorId?: number): {
+    settled: number;
+    amount: number;
+    paymentIds: number[];
+  };
 
   // Cashbox
   getAllCashTransactions(): CashTransaction[];

@@ -83,6 +83,71 @@ test("bank reconciliation is atomic, precise, idempotent, and retryable", async 
       emailVerified: true,
     }).returning().get();
 
+    const walletPaymentUser = createUser("Wallet payment");
+    db.insert(walletTransactions).values({
+      userId: walletPaymentUser.id,
+      bankTransactionId: null,
+      paymentId: null,
+      amount: 400,
+      description: "Wallet test credit",
+    }).run();
+    const unaffordableWalletPayment = createPayment(walletPaymentUser.id, 500);
+    assert.equal(unaffordableWalletPayment.status, "pending");
+    assert.equal(unaffordableWalletPayment.walletAppliedAmount, 0);
+    assert.equal(store.getWalletBalance(walletPaymentUser.id), 400);
+    const affordableWalletPayment = createPayment(walletPaymentUser.id, 300);
+    assert.equal(affordableWalletPayment.status, "paid");
+    assert.equal(affordableWalletPayment.walletAppliedAmount, 300);
+    assert.equal(store.getWalletBalance(walletPaymentUser.id), 100);
+    const laterWalletPayment = createPayment(walletPaymentUser.id, 300);
+    assert.equal(laterWalletPayment.status, "pending");
+    assert.deepEqual(store.applyWalletToEligiblePayments(walletPaymentUser.id, actor.id), {
+      settled: 0,
+      amount: 0,
+      paymentIds: [],
+    });
+    store.createWalletTransaction({
+      userId: walletPaymentUser.id,
+      bankTransactionId: null,
+      paymentId: null,
+      amount: 200,
+      description: "Wallet top-up",
+      createdBy: actor.id,
+    });
+    assert.equal(store.getWalletBalance(walletPaymentUser.id), 300);
+    const settlement = store.applyWalletToEligiblePayments(walletPaymentUser.id, actor.id);
+    assert.deepEqual(settlement, { settled: 1, amount: 300, paymentIds: [laterWalletPayment.id] });
+    assert.equal(store.getPayment(laterWalletPayment.id)?.status, "paid");
+    assert.equal(store.getWalletBalance(walletPaymentUser.id), 0);
+
+    const walletSyncUser = createUser("Wallet sync");
+    store.createWalletTransaction({
+      userId: walletSyncUser.id,
+      bankTransactionId: null,
+      paymentId: null,
+      amount: 1_000,
+      description: "Wallet sync credit",
+      createdBy: actor.id,
+    });
+    const walletSyncPayments = [300, 400].map((amount, index) => db.insert(payments).values({
+      userId: walletSyncUser.id,
+      amount,
+      fullPrice: amount,
+      identity: "Wallet sync",
+      walletAppliedAmount: 0,
+      dueDate: `2026-12-${30 + index}`,
+      variableSymbol: `wallet-sync-${index}`,
+      description: "Existing wallet-sync payment",
+      status: "pending",
+    }).returning().get());
+    assert.deepEqual(store.applyWalletToEligiblePayments(undefined, actor.id), {
+      settled: 2,
+      amount: 700,
+      paymentIds: walletSyncPayments.map(payment => payment.id),
+    });
+    assert.deepEqual(walletSyncPayments.map(payment => store.getPayment(payment.id)?.status), ["paid", "paid"]);
+    assert.equal(store.getWalletBalance(walletSyncUser.id), 300);
+
     const exactUser = createUser("Exact");
     const exactPayment = createPayment(exactUser.id);
     const exactBankTransaction = createBankTransaction(100_000);
@@ -330,7 +395,7 @@ test("bank reconciliation is atomic, precise, idempotent, and retryable", async 
     assert.equal(ambiguousResult.matched, false);
     assert.equal(ambiguousResult.transaction.matchedPaymentId, null);
 
-    assert.equal(db.select().from(payments).all().filter(payment => payment.status === "paid").length, 7);
+    assert.equal(db.select().from(payments).all().filter(payment => payment.status === "paid").length, 11);
   } finally {
     sqlite.close();
     delete process.env.DATABASE_PATH;

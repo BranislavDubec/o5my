@@ -199,6 +199,22 @@ export default function AdminBank() {
     onError: (err: any) => toast({ title: t("adminBank.retryFailed"), description: err.message, variant: "destructive" }),
   });
 
+  const applyWalletMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/payments/apply-wallet", {});
+      return response.json() as Promise<{ settled: number; amount: number }>;
+    },
+    onSuccess: result => {
+      invalidateReconciliationQueries();
+      toast({
+        title: result.settled > 0
+          ? t("adminPayments.walletSettled", { count: result.settled, amount: result.amount })
+          : t("adminPayments.walletNothingToSettle"),
+      });
+    },
+    onError: (err: any) => toast({ title: t("common.error"), description: err.message, variant: "destructive" }),
+  });
+
   const cashMutation = useMutation({
     mutationFn: () => apiRequest("POST", "/api/cashbox/transactions", {
       type: cashForm.type,
@@ -518,6 +534,16 @@ export default function AdminBank() {
             >
               <Link2 className={`w-4 h-4 mr-1 ${retryMatchingMutation.isPending ? "animate-pulse" : ""}`} />
               {retryMatchingMutation.isPending ? t("adminBank.retrying") : t("adminBank.retryMatching")}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => applyWalletMutation.mutate()}
+              disabled={applyWalletMutation.isPending}
+              data-testid="button-apply-wallets"
+            >
+              <WalletCards className={`w-4 h-4 mr-1 ${applyWalletMutation.isPending ? "animate-pulse" : ""}`} />
+              {applyWalletMutation.isPending ? t("adminBank.syncing") : t("adminPayments.applyWallet")}
             </Button>
             <Button
               size="sm"

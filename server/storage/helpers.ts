@@ -91,7 +91,10 @@ function createPaymentWithWalletInTransaction(tx: any, payment: InsertPayment): 
     .where(eq(walletTransactions.userId, payment.userId))
     .all() as WalletTransaction[])
     .reduce((balance, transaction) => balance + transaction.amount, 0);
-  const walletAppliedAmount = Math.min(Math.max(walletBalance, 0), payment.amount);
+  // Wallet credit is only used when it can settle the entire payment.  Keeping an
+  // insufficient balance intact avoids creating a partially paid invoice that
+  // still requires a bank transfer for the remainder.
+  const walletAppliedAmount = walletBalance >= payment.amount ? payment.amount : 0;
   const status = walletAppliedAmount === payment.amount ? "paid" : "pending";
 
   const created = tx.insert(payments)

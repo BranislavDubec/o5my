@@ -128,11 +128,32 @@ export function registerPaymentsRoutes(app: Express) {
       return res.status(500).json({ message: "Úpravu peňaženky sa nepodarilo uložiť" });
     }
 
+    const settlement = amount > 0
+      ? storage.applyWalletToEligiblePayments(userId, req.user!.id)
+      : { settled: 0, amount: 0, paymentIds: [] };
+
     res.status(201).json({
       transaction,
-      balance: currentBalance + amount,
+      balance: storage.getWalletBalance(userId),
+      settlement,
       currency: storage.getAppSetting("payment_currency") || "CZK",
     });
+  });
+
+  app.post("/api/payments/apply-wallet", requireAdmin, (req, res) => {
+    const rawUserId = req.body?.userId;
+    const userId = rawUserId === undefined || rawUserId === null || rawUserId === ""
+      ? undefined
+      : Number(rawUserId);
+    if (userId !== undefined && (!Number.isInteger(userId) || userId <= 0 || !storage.getUser(userId))) {
+      return res.status(404).json({ message: "Používateľ nebol nájdený" });
+    }
+    try {
+      res.json(storage.applyWalletToEligiblePayments(userId, req.user!.id));
+    } catch (error) {
+      console.error("Applying wallet to payments failed", error);
+      res.status(500).json({ message: "Platby z peňaženky sa nepodarilo spracovať" });
+    }
   });
 
   app.get("/api/payments/all", requireAdmin, (_req, res) => {

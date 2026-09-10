@@ -142,6 +142,7 @@ export class DatabaseStorage implements IStorage {
   getWalletBalances = this.payments.getWalletBalances;
   getWalletTransactionsByUser = this.payments.getWalletTransactionsByUser;
   createWalletTransaction = this.payments.createWalletTransaction;
+  applyWalletToEligiblePayments = this.payments.applyWalletToEligiblePayments;
 
   // Cashbox
   getAllCashTransactions = this.payments.getAllCashTransactions;
