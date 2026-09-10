@@ -85,6 +85,7 @@ export default function AdminBank() {
   const [cashDialogOpen, setCashDialogOpen] = useState(false);
   const [cashForm, setCashForm] = useState({ type: "income" as "income" | "expense", amount: "", description: "" });
   const [transactionFilter, setTransactionFilter] = useState<TransactionFilter>("processing");
+  const [transactionMonth, setTransactionMonth] = useState("all");
   const [resolvingTransaction, setResolvingTransaction] = useState<BankTransaction | null>(null);
   const [resolutionUserId, setResolutionUserId] = useState("");
   const [resolutionTarget, setResolutionTarget] = useState("wallet");
@@ -108,7 +109,7 @@ export default function AdminBank() {
   }, [settings]);
 
   const { data: transactions = [] } = useQuery<BankTransaction[]>({
-    queryKey: ["/api/bank/transactions"],
+    queryKey: ["/api/bank/transactions?limit=500"],
   });
 
   const { data: users = [] } = useQuery<BankUser[]>({
@@ -146,7 +147,7 @@ export default function AdminBank() {
     mutationFn: () => apiRequest("POST", "/api/bank/sync", {}),
     onSuccess: async (res) => {
       const data = await res.json();
-      queryClient.invalidateQueries({ queryKey: ["/api/bank/transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/bank/transactions?limit=500"] });
       queryClient.invalidateQueries({ queryKey: ["/api/bank/settings"] });
       queryClient.invalidateQueries({ queryKey: ["/api/payments/all"] });
       queryClient.invalidateQueries({ queryKey: ["/api/payments"] });
@@ -154,14 +155,14 @@ export default function AdminBank() {
       toast({ title: t("adminBank.syncResult", { synced: data.synced, matched: data.matched }) });
     },
     onError: (err: any) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/bank/transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/bank/transactions?limit=500"] });
       queryClient.invalidateQueries({ queryKey: ["/api/bank/settings"] });
       toast({ title: t("adminBank.syncFailed"), description: err.message, variant: "destructive" });
     },
   });
 
   const invalidateReconciliationQueries = () => {
-    queryClient.invalidateQueries({ queryKey: ["/api/bank/transactions"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/bank/transactions?limit=500"] });
     queryClient.invalidateQueries({ queryKey: ["/api/payments/all"] });
     queryClient.invalidateQueries({ queryKey: ["/api/payments"] });
     queryClient.invalidateQueries({ queryKey: ["/api/users"] });
@@ -285,7 +286,14 @@ export default function AdminBank() {
     && !isReconciledTransaction(transaction)
     && (!transaction.syncError || transaction.syncError === "amount_mismatch")
   );
+  const availableTransactionMonths = Array.from(new Set(
+    transactions
+      .map(transaction => transaction.date.slice(0, 7))
+      .filter(month => /^\d{4}-\d{2}$/.test(month)),
+  )).sort((a, b) => b.localeCompare(a));
   const filteredTransactions = transactions.filter(transaction => {
+    const matchesMonth = transactionMonth === "all" || transaction.date.startsWith(transactionMonth);
+    if (!matchesMonth) return false;
     switch (transactionFilter) {
       case "processing": return isActionableTransaction(transaction);
       case "matched": return !!transaction.matchedPaymentId;
@@ -294,7 +302,7 @@ export default function AdminBank() {
       default: return true;
     }
   });
-  const visibleTransactions = transactionFilter === "processing"
+  const visibleTransactions = transactionFilter === "processing" || transactionMonth !== "all"
     ? filteredTransactions
     : filteredTransactions.slice(0, 20);
   const sortedUsers = users
@@ -572,18 +580,33 @@ export default function AdminBank() {
               <Banknote className="w-4 h-4" />
               {t("adminBank.latestTransactions", { count: filteredTransactions.length })}
             </CardTitle>
-            <Select value={transactionFilter} onValueChange={value => setTransactionFilter(value as TransactionFilter)}>
-              <SelectTrigger className="w-full sm:w-44" data-testid="select-transaction-filter">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="processing">{t("adminBank.filterProcessing")}</SelectItem>
-                <SelectItem value="matched">{t("adminBank.filterMatched")}</SelectItem>
-                <SelectItem value="wallet">{t("adminBank.filterWallet")}</SelectItem>
-                <SelectItem value="errors">{t("adminBank.filterErrors")}</SelectItem>
-                <SelectItem value="all">{t("adminBank.filterAll")}</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="flex w-full gap-2 sm:w-auto">
+              <Select value={transactionMonth} onValueChange={setTransactionMonth}>
+                <SelectTrigger className="flex-1 sm:w-44" data-testid="select-transaction-month">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t("adminBank.allMonths")}</SelectItem>
+                  {availableTransactionMonths.map(month => (
+                    <SelectItem key={month} value={month}>
+                      {format(new Date(`${month}-01T12:00:00`), "LLLL yyyy", { locale: dateLocale })}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={transactionFilter} onValueChange={value => setTransactionFilter(value as TransactionFilter)}>
+                <SelectTrigger className="flex-1 sm:w-44" data-testid="select-transaction-filter">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="processing">{t("adminBank.filterProcessing")}</SelectItem>
+                  <SelectItem value="matched">{t("adminBank.filterMatched")}</SelectItem>
+                  <SelectItem value="wallet">{t("adminBank.filterWallet")}</SelectItem>
+                  <SelectItem value="errors">{t("adminBank.filterErrors")}</SelectItem>
+                  <SelectItem value="all">{t("adminBank.filterAll")}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-2">
