@@ -181,6 +181,9 @@ export default function Settings() {
             <div>
               <p className="font-medium">{user?.name}</p>
               {user?.nickname && <p className="text-sm font-medium text-primary">@{user.nickname}</p>}
+              <p className="text-sm text-muted-foreground">
+                {t("settings.kitNumber")}: {user?.kitNumber == null ? t("settings.sharedKitNumber") : `#${user.kitNumber}`}
+              </p>
               <p className="text-sm text-muted-foreground">{user?.email}</p>
               {user?.phone && <p className="text-sm text-muted-foreground">{user.phone}</p>}
             </div>

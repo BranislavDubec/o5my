@@ -8,6 +8,7 @@ interface AuthUser {
   firstName: string | null;
   lastName: string | null;
   nickname: string | null;
+  kitNumber: number | null;
   phone: string | null;
   role: string;
   isActive: boolean;
