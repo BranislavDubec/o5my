@@ -46,6 +46,12 @@ export type InsertUser = z.infer<typeof insertUserSchema>;
 export type LoginUser = z.infer<typeof loginUserSchema>;
 export type User = typeof users.$inferSelect;
 
+export const sharedKitNumbers = sqliteTable("shared_kit_numbers", {
+  kitNumber: integer("kit_number").primaryKey(),
+});
+
+export type SharedKitNumber = typeof sharedKitNumbers.$inferSelect;
+
 // ============ PLAYER STATISTICS ============
 export const playerStatistics = sqliteTable("player_statistics", {
   id: integer("id").primaryKey({ autoIncrement: true }),

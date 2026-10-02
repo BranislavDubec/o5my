@@ -135,6 +135,9 @@ export interface IStorage {
   updateUserActiveStatus(id: number, isActive: boolean): User | undefined;
   updateUserPlayerStatus(id: number, isPlayerActive: boolean): User | undefined;
   updateUserKitNumber(id: number, kitNumber: number | null): User | undefined;
+  getSharedKitNumbers(): number[];
+  addSharedKitNumber(kitNumber: number): number;
+  deleteSharedKitNumber(kitNumber: number): boolean;
   updateUserTheme(id: number, theme: "light" | "dark"): User | undefined;
   updateUserProfile(id: number, firstName: string, lastName: string, nickname: string): User | undefined;
   updateUserPassword(id: number, password: string): User | undefined;

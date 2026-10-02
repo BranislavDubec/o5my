@@ -32,6 +32,36 @@ function refreshFutureMatchAttendance(userId: number) {
 }
 
 export function registerUsersRoutes(app: Express) {
+  app.get("/api/shared-kit-numbers", requireManager, (_req, res) => {
+    res.json(storage.getSharedKitNumbers());
+  });
+
+  app.post("/api/shared-kit-numbers", requireManager, (req, res) => {
+    const kitNumber = req.body?.kitNumber;
+    if (!Number.isSafeInteger(kitNumber) || kitNumber < 0) {
+      return res.status(400).json({ message: "Číslo dresu musí byť celé nezáporné číslo" });
+    }
+    try {
+      res.status(201).json(storage.addSharedKitNumber(kitNumber));
+    } catch (error: any) {
+      if (String(error?.message || "").includes("UNIQUE constraint failed")) {
+        return res.status(409).json({ message: "Toto zdieľané číslo už existuje" });
+      }
+      res.status(400).json({ message: error.message || "Zdieľané číslo sa nepodarilo pridať" });
+    }
+  });
+
+  app.delete("/api/shared-kit-numbers/:kitNumber", requireManager, (req, res) => {
+    const kitNumber = Number(req.params.kitNumber);
+    if (!Number.isSafeInteger(kitNumber) || kitNumber < 0) {
+      return res.status(400).json({ message: "Neplatné číslo dresu" });
+    }
+    if (!storage.deleteSharedKitNumber(kitNumber)) {
+      return res.status(404).json({ message: "Zdieľané číslo nebolo nájdené" });
+    }
+    res.status(204).end();
+  });
+
   // ============ PLAYER STATISTICS ============
   app.get("/api/statistics", requireAuth, (_req, res) => {
     res.json(storage.getPlayerStatistics());

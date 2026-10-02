@@ -1,6 +1,7 @@
 import { eq, and, asc, count } from "drizzle-orm";
 import {
   users,
+  sharedKitNumbers,
   playerStatistics,
   matchPlayerStatistics,
 } from '@shared/schema';
@@ -44,6 +45,24 @@ export class UsersStore {
 
   updateUserKitNumber(id: number, kitNumber: number | null): User | undefined {
     return db.update(users).set({ kitNumber }).where(eq(users.id, id)).returning().get();
+  }
+
+  getSharedKitNumbers(): number[] {
+    return db.select().from(sharedKitNumbers)
+      .orderBy(asc(sharedKitNumbers.kitNumber))
+      .all()
+      .map(({ kitNumber }) => kitNumber);
+  }
+
+  addSharedKitNumber(kitNumber: number): number {
+    return db.insert(sharedKitNumbers).values({ kitNumber }).returning().get().kitNumber;
+  }
+
+  deleteSharedKitNumber(kitNumber: number): boolean {
+    return db.delete(sharedKitNumbers)
+      .where(eq(sharedKitNumbers.kitNumber, kitNumber))
+      .run()
+      .changes > 0;
   }
 
   updateUserTheme(id: number, theme: "light" | "dark"): User | undefined {
