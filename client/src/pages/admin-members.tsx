@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Link } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
@@ -9,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ClipboardCheck, MailCheck, Shield, Swords, User as UserIcon, UserCheck, UserX, Users, WalletCards } from "lucide-react";
+import { ClipboardCheck, MailCheck, Shield, Shirt, Swords, User as UserIcon, UserCheck, UserX, Users, WalletCards } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 import { useState } from "react";
 import { format, parseISO } from "date-fns";
@@ -23,6 +24,7 @@ interface UserItem {
   nickname: string | null;
   email?: string;
   phone?: string | null;
+  kitNumber: number | null;
   role: string;
   isActive: boolean;
   isPlayerActive: boolean;
@@ -139,6 +141,11 @@ export default function AdminMembers() {
         <p className="text-sm text-muted-foreground mt-1">
           {t("adminMembers.statusSummary", { players: activePlayerCount, accounts: activeUserCount, total: users.length })}
         </p>
+        {canManage && (
+          <Button asChild variant="outline" size="sm" className="mt-3">
+            <Link href="/members/kits"><Shirt className="mr-2 h-4 w-4" />{t("adminMembers.kitNumbersLink")}</Link>
+          </Button>
+        )}
       </div>
 
       {users.length === 0 ? (
@@ -182,6 +189,9 @@ export default function AdminMembers() {
                       </div>
                       {canManage && u.email && <p className="mt-1 break-all text-xs text-muted-foreground sm:truncate">{u.email}</p>}
                       {u.nickname && <p className="break-words text-xs font-medium text-primary">@{u.nickname}</p>}
+                      <p className="text-xs text-muted-foreground">
+                        {t("adminMembers.kitNumber")}: {u.kitNumber === null ? t("adminMembers.sharedKitNumber") : `#${u.kitNumber}`}
+                      </p>
                       {isAdmin && typeof u.walletBalance === "number" && (
                         <p className="mt-1 flex flex-wrap items-center gap-1 text-xs font-semibold text-foreground" data-testid={`wallet-user-${u.id}`}>
                           <WalletCards className="h-3.5 w-3.5 shrink-0 text-primary" />

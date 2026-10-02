@@ -42,6 +42,10 @@ export class UsersStore {
     return db.update(users).set({ isPlayerActive }).where(eq(users.id, id)).returning().get();
   }
 
+  updateUserKitNumber(id: number, kitNumber: number | null): User | undefined {
+    return db.update(users).set({ kitNumber }).where(eq(users.id, id)).returning().get();
+  }
+
   updateUserTheme(id: number, theme: "light" | "dark"): User | undefined {
     return db.update(users).set({ theme }).where(eq(users.id, id)).returning().get();
   }

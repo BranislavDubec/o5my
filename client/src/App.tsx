@@ -36,6 +36,7 @@ import TacticPdfPage from "@/pages/tactic-pdf";
 import OrganizationPage from "@/pages/organization";
 import StatisticsPage from "@/pages/statistics";
 import AdminMembers from "@/pages/admin-members";
+import MemberKitNumbers from "@/pages/member-kit-numbers";
 import AdminPayments from "@/pages/admin-payments";
 import AdminPaymentIdentity from "@/pages/admin-payment-identity";
 import AdminBank from "@/pages/admin-bank";
@@ -250,6 +251,9 @@ function AppRouter() {
       </Route>
       <Route path="/members">
         <ProtectedRoute><AdminMembers /></ProtectedRoute>
+      </Route>
+      <Route path="/members/kits">
+        <ProtectedRoute requiredAccess="management"><MemberKitNumbers /></ProtectedRoute>
       </Route>
       <Route path="/settings">
         <ProtectedRoute><Settings /></ProtectedRoute>

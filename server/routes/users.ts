@@ -77,12 +77,36 @@ export function registerUsersRoutes(app: Express) {
         id: user.id,
         name: user.name,
         nickname: user.nickname,
+        kitNumber: user.kitNumber,
         role: user.role,
         isActive: user.isActive,
         isPlayerActive: user.isPlayerActive,
         emailVerified: user.emailVerified,
         createdAt: user.createdAt,
       })));
+  });
+
+  app.put("/api/users/:id/kit-number", requireManager, (req, res) => {
+    const userId = Number(req.params.id);
+    const kitNumber = req.body?.kitNumber;
+    if (!Number.isSafeInteger(userId) || userId <= 0) {
+      return res.status(400).json({ message: "Neplatné ID používateľa" });
+    }
+    if (kitNumber !== null && (!Number.isSafeInteger(kitNumber) || kitNumber < 0)) {
+      return res.status(400).json({ message: "Číslo dresu musí byť celé nezáporné číslo alebo prázdne" });
+    }
+
+    try {
+      const user = storage.updateUserKitNumber(userId, kitNumber);
+      if (!user) return res.status(404).json({ message: "Používateľ nenájdený" });
+      const { password, ...safe } = user;
+      res.json(safe);
+    } catch (error: any) {
+      if (String(error?.message || "").includes("UNIQUE constraint failed")) {
+        return res.status(409).json({ message: "Číslo dresu už používa iný člen" });
+      }
+      res.status(400).json({ message: error.message || "Číslo dresu sa nepodarilo uložiť" });
+    }
   });
 
   app.put("/api/users/:id/role", requireAdmin, (req, res) => {

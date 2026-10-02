@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { LanguageToggle, useI18n } from "@/lib/i18n";
 import {
   Calendar, Users, Vote, CreditCard, Settings, LogOut,
-  Shield, Menu, X, Sun, Moon, Home, FolderOpen, BellRing, ClipboardList, Trophy, Swords, Flag
+  Shield, Menu, X, Sun, Moon, Home, FolderOpen, BellRing, ClipboardList, Trophy, Swords, Flag, Shirt
 } from "lucide-react";
 import { canAccessFinances, canManageTeam, canViewPersonalPayments } from "@shared/roles";
 
@@ -80,6 +80,7 @@ export function Layout({ children }: { children: ReactNode }) {
     { path: "/organization", label: t("layout.organization"), icon: <ClipboardList className="w-5 h-5" /> },
     { path: "/statistics", label: t("layout.statistics"), icon: <Trophy className="w-5 h-5" /> },
     { path: "/members", label: t("layout.members"), icon: <Users className="w-5 h-5" /> },
+    { path: "/members/kits", label: t("adminMembers.kitNumbersLink"), icon: <Shirt className="w-5 h-5" />, access: "management" },
     { path: "/admin/payments", label: t("layout.adminPayments"), icon: <CreditCard className="w-5 h-5" />, access: "finances" },
     { path: "/admin/bank", label: t("layout.adminBank"), icon: <Shield className="w-5 h-5" />, access: "finances" },
     { path: "/admin/notifications", label: t("layout.adminNotifications"), icon: <BellRing className="w-5 h-5" />, access: "management" },

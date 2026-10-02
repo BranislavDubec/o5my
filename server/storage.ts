@@ -62,6 +62,7 @@ export class DatabaseStorage implements IStorage {
   updateUserRole = this.users.updateUserRole;
   updateUserActiveStatus = this.users.updateUserActiveStatus;
   updateUserPlayerStatus = this.users.updateUserPlayerStatus;
+  updateUserKitNumber = this.users.updateUserKitNumber;
   updateUserTheme = this.users.updateUserTheme;
   updateUserProfile = this.users.updateUserProfile;
   updateUserPassword = this.users.updateUserPassword;
