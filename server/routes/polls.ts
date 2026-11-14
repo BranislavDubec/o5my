@@ -107,6 +107,22 @@ export function registerPollsRoutes(app: Express) {
     res.json(poll);
   });
 
+  app.post("/api/polls/:id/options", requireManager, (req, res) => {
+    const pollId = Number(req.params.id);
+    const label = typeof req.body?.label === "string" ? req.body.label.trim() : "";
+    if (!Number.isInteger(pollId) || !storage.getPoll(pollId)) {
+      return res.status(404).json({ message: "Anketa nenájdená" });
+    }
+    if (!label || label.length > 150) {
+      return res.status(400).json({ message: "Možnosť musí mať 1 až 150 znakov" });
+    }
+    if (storage.getPollOptions(pollId).some(option => option.label.toLocaleLowerCase() === label.toLocaleLowerCase())) {
+      return res.status(400).json({ message: "Táto možnosť už v ankete existuje" });
+    }
+    const option = storage.createPollOption({ pollId, label });
+    res.status(201).json(option);
+  });
+
   // ============ POLL VOTES ============
   app.post("/api/polls/:id/votes", requireAuth, (req, res) => {
     const pollId = Number(req.params.id);

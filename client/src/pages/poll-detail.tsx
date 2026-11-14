@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import { ArrowLeft, Check, Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
@@ -35,6 +36,7 @@ export default function PollDetailPage() {
   const { t } = useI18n();
   const queryClient = useQueryClient();
   const [showAnonymousResults, setShowAnonymousResults] = useState(false);
+  const [newOptionLabel, setNewOptionLabel] = useState("");
   const canRevealAnonymousResults = user?.role === "admin";
   const canManagePoll = canManageTeam(user?.role);
 
@@ -45,11 +47,20 @@ export default function PollDetailPage() {
   const voteMutation = useMutation({
     mutationFn: (optionId: number) =>
       apiRequest("POST", `/api/polls/${id}/votes`, { optionId }),
-    onSuccess: () => {
+    onSuccess: async () => {
       queryClient.invalidateQueries({ queryKey: ["/api/polls"] });
       queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
+      await queryClient.refetchQueries({
+        queryKey: ["/api/polls", `${id}${showAnonymousResults ? "?revealResults=1" : ""}`],
+        exact: true,
+      });
       toast({ title: t("pollDetail.voteRecorded") });
     },
+    onError: (error: Error) => toast({
+      title: t("common.error"),
+      description: error.message,
+      variant: "destructive",
+    }),
   });
 
   const settingsMutation = useMutation({
@@ -59,6 +70,20 @@ export default function PollDetailPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/polls"] });
       toast({ title: t("pollDetail.settingsSaved") });
     },
+  });
+
+  const addOptionMutation = useMutation({
+    mutationFn: (label: string) => apiRequest("POST", `/api/polls/${id}/options`, { label }),
+    onSuccess: async () => {
+      setNewOptionLabel("");
+      queryClient.invalidateQueries({ queryKey: ["/api/polls"] });
+      await queryClient.refetchQueries({
+        queryKey: ["/api/polls", `${id}${showAnonymousResults ? "?revealResults=1" : ""}`],
+        exact: true,
+      });
+      toast({ title: t("pollDetail.optionAdded") });
+    },
+    onError: (error: Error) => toast({ title: t("common.error"), description: error.message, variant: "destructive" }),
   });
 
   if (!poll) {
@@ -106,17 +131,37 @@ export default function PollDetailPage() {
           </Button>
         )}
         {canManagePoll && (
-          <div className="mt-3 flex items-start gap-3 rounded-md border p-3">
-            <Checkbox
-              id="poll-multiple-responses-setting"
-              checked={poll.allowMultipleResponses}
-              disabled={settingsMutation.isPending}
-              onCheckedChange={checked => settingsMutation.mutate(checked === true)}
-              data-testid="checkbox-poll-multiple-responses-setting"
-            />
-            <div className="space-y-1">
-              <label htmlFor="poll-multiple-responses-setting" className="cursor-pointer text-sm font-medium">{t("pollDetail.multipleResponses")}</label>
-              <p className="text-xs text-muted-foreground">{t("polls.multipleResponsesDescription")}</p>
+          <div className="mt-3 space-y-3 rounded-md border p-3">
+            <div className="flex items-start gap-3">
+              <Checkbox
+                id="poll-multiple-responses-setting"
+                checked={poll.allowMultipleResponses}
+                disabled={settingsMutation.isPending}
+                onCheckedChange={checked => settingsMutation.mutate(checked === true)}
+                data-testid="checkbox-poll-multiple-responses-setting"
+              />
+              <div className="space-y-1">
+                <label htmlFor="poll-multiple-responses-setting" className="cursor-pointer text-sm font-medium">{t("pollDetail.multipleResponses")}</label>
+                <p className="text-xs text-muted-foreground">{t("polls.multipleResponsesDescription")}</p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Input
+                value={newOptionLabel}
+                onChange={event => setNewOptionLabel(event.target.value)}
+                placeholder={t("pollDetail.newOptionPlaceholder")}
+                maxLength={150}
+                data-testid="input-add-poll-option"
+              />
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => addOptionMutation.mutate(newOptionLabel)}
+                disabled={!newOptionLabel.trim() || addOptionMutation.isPending}
+                data-testid="button-add-poll-option"
+              >
+                {t("pollDetail.addOption")}
+              </Button>
             </div>
           </div>
         )}
