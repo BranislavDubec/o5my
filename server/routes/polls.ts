@@ -49,7 +49,7 @@ export function registerPollsRoutes(app: Express) {
     if (!poll) return res.status(404).json({ message: "Anketa nenájdená" });
     const options = storage.getPollOptions(poll.id);
     const allVotes = storage.getPollVotes(poll.id);
-    const userVote = storage.getUserPollVote(poll.id, req.user!.id);
+    const userVotes = storage.getUserPollVotes(poll.id, req.user!.id);
     const canRevealAnonymousResults = req.user?.role === "admin" && req.query.revealResults === "1";
     const shouldHideResults = poll.isAnonymous && !canRevealAnonymousResults;
     const results = shouldHideResults
@@ -63,8 +63,9 @@ export function registerPollsRoutes(app: Express) {
       options,
       votes: poll.isAnonymous ? [] : allVotes,
       results,
-      totalVotes: allVotes.length,
-      userVote: userVote ? { id: userVote.id, optionId: userVote.optionId } : null,
+      totalVotes: new Set(allVotes.map(vote => vote.userId)).size,
+      userVote: userVotes[0] ? { id: userVotes[0].id, optionId: userVotes[0].optionId } : null,
+      userVotes: userVotes.map(vote => ({ id: vote.id, optionId: vote.optionId })),
     });
   });
 
@@ -77,6 +78,7 @@ export function registerPollsRoutes(app: Express) {
       const data = insertPollSchema.parse({
         ...pollData,
         isAnonymous: req.body?.isAnonymous === true,
+        allowMultipleResponses: req.body?.allowMultipleResponses === true,
         createdBy: req.user!.id,
       });
       const poll = storage.createPoll(data);
@@ -94,11 +96,23 @@ export function registerPollsRoutes(app: Express) {
     res.json({ message: "Anketa zmazaná" });
   });
 
+  app.put("/api/polls/:id", requireManager, (req, res) => {
+    const pollId = Number(req.params.id);
+    if (!Number.isInteger(pollId)) return res.status(400).json({ message: "Neplatné ID ankety" });
+    if (typeof req.body?.allowMultipleResponses !== "boolean") {
+      return res.status(400).json({ message: "Neplatné nastavenie ankety" });
+    }
+    const poll = storage.updatePoll(pollId, { allowMultipleResponses: req.body.allowMultipleResponses });
+    if (!poll) return res.status(404).json({ message: "Anketa nenájdená" });
+    res.json(poll);
+  });
+
   // ============ POLL VOTES ============
   app.post("/api/polls/:id/votes", requireAuth, (req, res) => {
     const pollId = Number(req.params.id);
-    const optionId = Number(req.body?.optionId);
-    if (!Number.isInteger(pollId) || !Number.isInteger(optionId)) {
+    const rawOptionIds: unknown[] = Array.isArray(req.body?.optionIds) ? req.body.optionIds : [req.body?.optionId];
+    const optionIds: number[] = Array.from(new Set(rawOptionIds.map(value => Number(value))));
+    if (!Number.isInteger(pollId) || optionIds.length === 0 || optionIds.some(id => !Number.isInteger(id))) {
       return res.status(400).json({ message: "Neplatná anketa alebo možnosť" });
     }
     const poll = storage.getPoll(pollId);
@@ -106,14 +120,14 @@ export function registerPollsRoutes(app: Express) {
     if (poll.closesAt && new Date(poll.closesAt).getTime() < Date.now()) {
       return res.status(409).json({ message: "Anketa je už uzavretá" });
     }
-    if (!storage.getPollOptions(pollId).some(option => option.id === optionId)) {
+    const pollOptionIds = new Set(storage.getPollOptions(pollId).map(option => option.id));
+    if (optionIds.some(optionId => !pollOptionIds.has(optionId))) {
       return res.status(400).json({ message: "Možnosť nepatrí do tejto ankety" });
     }
-    storage.upsertPollVote({
-      pollId,
-      optionId,
-      userId: req.user!.id,
-    });
+    if (!poll.allowMultipleResponses && optionIds.length !== 1) {
+      return res.status(400).json({ message: "Táto anketa umožňuje iba jednu odpoveď" });
+    }
+    storage.setPollVotes(pollId, req.user!.id, optionIds);
     res.json({ message: "Hlas zaznamenaný" });
   });
 }

@@ -30,6 +30,10 @@ export class PollsStore {
     return db.insert(polls).values(poll).returning().get();
   }
 
+  updatePoll(id: number, poll: Partial<Pick<Poll, "allowMultipleResponses">>): Poll | undefined {
+    return db.update(polls).set(poll).where(eq(polls.id, id)).returning().get();
+  }
+
   deletePoll(id: number): void {
     db.delete(pollVotes).where(eq(pollVotes.pollId, id)).run();
     db.delete(pollOptions).where(eq(pollOptions.pollId, id)).run();
@@ -68,6 +72,12 @@ export class PollsStore {
       .get();
   }
 
+  getUserPollVotes(pollId: number, userId: number): PollVote[] {
+    return db.select().from(pollVotes)
+      .where(and(eq(pollVotes.pollId, pollId), eq(pollVotes.userId, userId)))
+      .all();
+  }
+
   upsertPollVote(vote: InsertPollVote): void {
     const existing = this.getUserPollVote(vote.pollId, vote.userId);
     if (existing) {
@@ -78,5 +88,14 @@ export class PollsStore {
     } else {
       db.insert(pollVotes).values(vote).run();
     }
+  }
+
+  setPollVotes(pollId: number, userId: number, optionIds: number[]): void {
+    db.transaction(database => {
+      database.delete(pollVotes)
+        .where(and(eq(pollVotes.pollId, pollId), eq(pollVotes.userId, userId)))
+        .run();
+      database.insert(pollVotes).values(optionIds.map(optionId => ({ pollId, optionId, userId }))).run();
+    });
   }
 }

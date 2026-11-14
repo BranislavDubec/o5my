@@ -174,6 +174,7 @@ export const polls = sqliteTable("polls", {
   description: text("description"),
   closesAt: text("closes_at"),
   isAnonymous: integer("is_anonymous", { mode: "boolean" }).notNull().default(false),
+  allowMultipleResponses: integer("allow_multiple_responses", { mode: "boolean" }).notNull().default(false),
   createdBy: integer("created_by").notNull().references(() => users.id),
   createdAt: text("created_at").notNull().$defaultFn(() => new Date().toISOString()),
 });
@@ -189,6 +190,7 @@ export const insertPollSchema = createInsertSchema(polls).pick({
   description: true,
   closesAt: true,
   isAnonymous: true,
+  allowMultipleResponses: true,
   createdBy: true,
 });
 

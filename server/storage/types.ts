@@ -191,6 +191,7 @@ export interface IStorage {
   getPoll(id: number): Poll | undefined;
   getAllPolls(): Poll[];
   createPoll(poll: InsertPoll): Poll;
+  updatePoll(id: number, poll: Partial<Pick<Poll, "allowMultipleResponses">>): Poll | undefined;
   deletePoll(id: number): void;
 
   // Poll Options
@@ -201,7 +202,9 @@ export interface IStorage {
   // Poll Votes
   getPollVotes(pollId: number): (PollVote & { user: Pick<User, 'id' | 'name'> })[];
   getUserPollVote(pollId: number, userId: number): PollVote | undefined;
+  getUserPollVotes(pollId: number, userId: number): PollVote[];
   upsertPollVote(vote: InsertPollVote): void;
+  setPollVotes(pollId: number, userId: number, optionIds: number[]): void;
 
   // Payments
   getPayment(id: number): Payment | undefined;

@@ -12,7 +12,8 @@
     "test:reconciliation": "tsx --test server/payment-reconciliation.test.ts",
     "db:push": "drizzle-kit push",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate"
+    "db:migrate": "drizzle-kit migrate",
+    "db:schema:render": "node script/render-db-schema.cjs"
   },
   "dependencies": {
     "@radix-ui/react-accordion": "^1.2.4",

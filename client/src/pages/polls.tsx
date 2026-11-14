@@ -41,6 +41,7 @@ const createEmptyForm = () => ({
   optionMode: "custom" as "custom" | "members",
   memberIds: [] as number[],
   isAnonymous: false,
+  allowMultipleResponses: false,
 });
 
 export default function PollsPage() {
@@ -103,6 +104,7 @@ export default function PollsPage() {
       options: form.optionMode === "custom" ? options : undefined,
       memberIds: form.optionMode === "members" ? form.memberIds : undefined,
       isAnonymous: form.isAnonymous,
+      allowMultipleResponses: form.allowMultipleResponses,
     });
   };
 
@@ -251,6 +253,20 @@ export default function PollsPage() {
                       <EyeOff className="h-4 w-4" />{t("polls.anonymousPoll")}
                     </Label>
                     <p className="text-xs text-muted-foreground">{t("polls.anonymousDescription")}</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3 rounded-md border p-3">
+                  <Checkbox
+                    id="poll-multiple-responses"
+                    checked={form.allowMultipleResponses}
+                    onCheckedChange={checked => setForm(previous => ({ ...previous, allowMultipleResponses: checked === true }))}
+                    data-testid="checkbox-poll-multiple-responses"
+                  />
+                  <div className="space-y-1">
+                    <Label htmlFor="poll-multiple-responses" className="cursor-pointer">
+                      {t("polls.multipleResponses")}
+                    </Label>
+                    <p className="text-xs text-muted-foreground">{t("polls.multipleResponsesDescription")}</p>
                   </div>
                 </div>
                 <DialogFooter>

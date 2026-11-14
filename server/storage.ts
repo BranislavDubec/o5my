@@ -112,6 +112,7 @@ export class DatabaseStorage implements IStorage {
   getPoll = this.polls.getPoll;
   getAllPolls = this.polls.getAllPolls;
   createPoll = this.polls.createPoll;
+  updatePoll = this.polls.updatePoll;
   deletePoll = this.polls.deletePoll;
 
   // Poll Options
@@ -122,7 +123,9 @@ export class DatabaseStorage implements IStorage {
   // Poll Votes
   getPollVotes = this.polls.getPollVotes;
   getUserPollVote = this.polls.getUserPollVote;
+  getUserPollVotes = this.polls.getUserPollVotes;
   upsertPollVote = this.polls.upsertPollVote;
+  setPollVotes = this.polls.setPollVotes;
 
   // Payments
   getPayment = this.payments.getPayment;

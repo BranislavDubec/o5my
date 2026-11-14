@@ -3,10 +3,12 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/contexts/auth-context";
+import { canManageTeam } from "@shared/roles";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { ArrowLeft, Check, Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
@@ -17,11 +19,13 @@ interface PollDetail {
   description: string | null;
   closesAt: string | null;
   isAnonymous: boolean;
+  allowMultipleResponses: boolean;
   options: { id: number; label: string; pollId: number }[];
   votes: { id: number; optionId: number; userId: number; user: { id: number; name: string } }[];
   results: { optionId: number; count: number }[];
   totalVotes: number;
   userVote: { id: number; optionId: number } | null | undefined;
+  userVotes: { id: number; optionId: number }[];
 }
 
 export default function PollDetailPage() {
@@ -32,18 +36,28 @@ export default function PollDetailPage() {
   const queryClient = useQueryClient();
   const [showAnonymousResults, setShowAnonymousResults] = useState(false);
   const canRevealAnonymousResults = user?.role === "admin";
+  const canManagePoll = canManageTeam(user?.role);
 
   const { data: poll } = useQuery<PollDetail>({
     queryKey: ["/api/polls", `${id}${showAnonymousResults ? "?revealResults=1" : ""}`],
   });
 
   const voteMutation = useMutation({
-    mutationFn: (optionId: number) =>
-      apiRequest("POST", `/api/polls/${id}/votes`, { optionId }),
+    mutationFn: (optionIds: number[]) =>
+      apiRequest("POST", `/api/polls/${id}/votes`, { optionIds }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/polls"] });
       queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
       toast({ title: t("pollDetail.voteRecorded") });
+    },
+  });
+
+  const settingsMutation = useMutation({
+    mutationFn: (allowMultipleResponses: boolean) =>
+      apiRequest("PUT", `/api/polls/${id}`, { allowMultipleResponses }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/polls"] });
+      toast({ title: t("pollDetail.settingsSaved") });
     },
   });
 
@@ -52,6 +66,15 @@ export default function PollDetailPage() {
   }
 
   const isClosed = !!poll.closesAt && new Date(poll.closesAt) < new Date();
+  const myOptionIds = poll.userVotes.map(vote => vote.optionId);
+  const submitVote = (optionId: number) => {
+    const optionIds = poll.allowMultipleResponses
+      ? myOptionIds.includes(optionId)
+        ? myOptionIds.filter(id => id !== optionId)
+        : [...myOptionIds, optionId]
+      : [optionId];
+    if (optionIds.length > 0) voteMutation.mutate(optionIds);
+  };
   const totalVotes = poll.totalVotes;
   const showResults = !poll.isAnonymous || showAnonymousResults;
   const votesByOption = poll.options.map(opt => ({
@@ -89,12 +112,27 @@ export default function PollDetailPage() {
             {showAnonymousResults ? t("pollDetail.hideAnonymousResults") : t("pollDetail.showAnonymousResults")}
           </Button>
         )}
+        {canManagePoll && (
+          <div className="mt-3 flex items-start gap-3 rounded-md border p-3">
+            <Checkbox
+              id="poll-multiple-responses-setting"
+              checked={poll.allowMultipleResponses}
+              disabled={settingsMutation.isPending}
+              onCheckedChange={checked => settingsMutation.mutate(checked === true)}
+              data-testid="checkbox-poll-multiple-responses-setting"
+            />
+            <div className="space-y-1">
+              <label htmlFor="poll-multiple-responses-setting" className="cursor-pointer text-sm font-medium">{t("pollDetail.multipleResponses")}</label>
+              <p className="text-xs text-muted-foreground">{t("polls.multipleResponsesDescription")}</p>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="space-y-3">
         {votesByOption.map(opt => {
           const pct = showResults && totalVotes > 0 ? Math.round((opt.count / totalVotes) * 100) : 0;
-          const isMyVote = poll.userVote?.optionId === opt.id;
+          const isMyVote = myOptionIds.includes(opt.id);
           return (
             <Card
               key={opt.id}
@@ -103,7 +141,7 @@ export default function PollDetailPage() {
             >
               <CardContent className="p-0">
                 <button
-                  onClick={() => !isClosed && voteMutation.mutate(opt.id)}
+                  onClick={() => !isClosed && submitVote(opt.id)}
                   disabled={isClosed}
                   className={cn(
                     "w-full text-left p-4 transition-colors",
@@ -143,11 +181,15 @@ export default function PollDetailPage() {
         })}
       </div>
 
-      {!isClosed && !poll.userVote && (
-        <p className="text-sm text-muted-foreground text-center">{t("pollDetail.voteHint")}</p>
+      {!isClosed && myOptionIds.length === 0 && (
+        <p className="text-sm text-muted-foreground text-center">
+          {poll.allowMultipleResponses ? t("pollDetail.multipleVoteHint") : t("pollDetail.voteHint")}
+        </p>
       )}
-      {poll.userVote && !isClosed && (
-        <p className="text-sm text-muted-foreground text-center">{t("pollDetail.votedHint")}</p>
+      {myOptionIds.length > 0 && !isClosed && (
+        <p className="text-sm text-muted-foreground text-center">
+          {poll.allowMultipleResponses ? t("pollDetail.multipleVotedHint") : t("pollDetail.votedHint")}
+        </p>
       )}
     </div>
   );
