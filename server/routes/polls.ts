@@ -127,7 +127,11 @@ export function registerPollsRoutes(app: Express) {
     if (!poll.allowMultipleResponses && optionIds.length !== 1) {
       return res.status(400).json({ message: "Táto anketa umožňuje iba jednu odpoveď" });
     }
-    storage.setPollVotes(pollId, req.user!.id, optionIds);
+    if (poll.allowMultipleResponses && optionIds.length === 1) {
+      storage.togglePollVote(pollId, req.user!.id, optionIds[0]);
+    } else {
+      storage.setPollVotes(pollId, req.user!.id, optionIds);
+    }
     res.json({ message: "Hlas zaznamenaný" });
   });
 }

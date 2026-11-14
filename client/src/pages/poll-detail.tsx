@@ -43,8 +43,8 @@ export default function PollDetailPage() {
   });
 
   const voteMutation = useMutation({
-    mutationFn: (optionIds: number[]) =>
-      apiRequest("POST", `/api/polls/${id}/votes`, { optionIds }),
+    mutationFn: (optionId: number) =>
+      apiRequest("POST", `/api/polls/${id}/votes`, { optionId }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/polls"] });
       queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
@@ -67,14 +67,7 @@ export default function PollDetailPage() {
 
   const isClosed = !!poll.closesAt && new Date(poll.closesAt) < new Date();
   const myOptionIds = poll.userVotes.map(vote => vote.optionId);
-  const submitVote = (optionId: number) => {
-    const optionIds = poll.allowMultipleResponses
-      ? myOptionIds.includes(optionId)
-        ? myOptionIds.filter(id => id !== optionId)
-        : [...myOptionIds, optionId]
-      : [optionId];
-    if (optionIds.length > 0) voteMutation.mutate(optionIds);
-  };
+  const submitVote = (optionId: number) => voteMutation.mutate(optionId);
   const totalVotes = poll.totalVotes;
   const showResults = !poll.isAnonymous || showAnonymousResults;
   const votesByOption = poll.options.map(opt => ({

@@ -205,6 +205,7 @@ export interface IStorage {
   getUserPollVotes(pollId: number, userId: number): PollVote[];
   upsertPollVote(vote: InsertPollVote): void;
   setPollVotes(pollId: number, userId: number, optionIds: number[]): void;
+  togglePollVote(pollId: number, userId: number, optionId: number): void;
 
   // Payments
   getPayment(id: number): Payment | undefined;

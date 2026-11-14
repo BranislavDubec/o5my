@@ -126,6 +126,7 @@ export class DatabaseStorage implements IStorage {
   getUserPollVotes = this.polls.getUserPollVotes;
   upsertPollVote = this.polls.upsertPollVote;
   setPollVotes = this.polls.setPollVotes;
+  togglePollVote = this.polls.togglePollVote;
 
   // Payments
   getPayment = this.payments.getPayment;

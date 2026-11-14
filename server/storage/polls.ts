@@ -98,4 +98,23 @@ export class PollsStore {
       database.insert(pollVotes).values(optionIds.map(optionId => ({ pollId, optionId, userId }))).run();
     });
   }
+
+  togglePollVote(pollId: number, userId: number, optionId: number): void {
+    db.transaction(database => {
+      const existing = database.select().from(pollVotes)
+        .where(and(eq(pollVotes.pollId, pollId), eq(pollVotes.userId, userId)))
+        .all() as PollVote[];
+      const existingOptionIds = existing.map(vote => vote.optionId);
+      // Keep one selected option at minimum: poll responses cannot be empty.
+      const optionIds = existingOptionIds.includes(optionId) && existingOptionIds.length > 1
+        ? existingOptionIds.filter(id => id !== optionId)
+        : existingOptionIds.includes(optionId)
+          ? existingOptionIds
+          : [...existingOptionIds, optionId];
+      database.delete(pollVotes)
+        .where(and(eq(pollVotes.pollId, pollId), eq(pollVotes.userId, userId)))
+        .run();
+      database.insert(pollVotes).values(optionIds.map(id => ({ pollId, optionId: id, userId }))).run();
+    });
+  }
 }
